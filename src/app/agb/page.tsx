@@ -1,219 +1,181 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "AGB",
+  title: "Terms of Service",
 };
 
-export default function AgbPage() {
+export default function TermsOfServicePage() {
   return (
     <main className="min-h-screen bg-black/[0.96] text-neutral-100 relative overflow-hidden">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <h1 className="text-4xl font-bold mb-6">Allgemeine Geschäftsbedingungen (AGB)</h1>
+        <h1 className="text-4xl font-bold mb-6">Terms of Service</h1>
 
         <div className="space-y-6 text-neutral-200">
-          <p className="text-sm text-neutral-400">Stand: 06.01.2026</p>
+          <p className="text-sm text-neutral-400">Last Updated: January 6, 2026</p>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">1. Geltungsbereich</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">1. Scope of Application</h2>
             <p>
-              Diese Allgemeinen Geschäftsbedingungen (nachfolgend „AGB“) gelten für sämtliche Verträge über die Nutzung
-              der Online-Plattform / Webanwendung „Open Hallucination Index“ (nachfolgend „Dienst“), einschließlich des
-              Erwerbs von Token-Paketen („OHI-Tokens“) als digitale Nutzungs-/Verbrauchseinheiten innerhalb des Dienstes.
+              These Terms of Service (hereinafter &quot;Terms&quot;) apply to all contracts regarding the use of the online platform/web application &quot;Open Hallucination Index&quot; (hereinafter &quot;Service&quot;), including the purchase of token packages (&quot;OHI Tokens&quot;) as digital usage/consumption units within the Service.
             </p>
             <p>
-              Abweichende, entgegenstehende oder ergänzende Bedingungen von Kund:innen werden nur Vertragsbestandteil, wenn
-              ich ihrer Geltung ausdrücklich schriftlich zugestimmt habe.
+              Deviating, conflicting, or supplementary terms from customers shall only become part of the contract if we have expressly agreed to their validity in writing.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">2. Anbieter / Vertragspartner</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">2. Provider / Contracting Party</h2>
             <p>
-              Vertragspartner und Anbieter des Dienstes ist:
+              The contracting party and provider of the Service is:
               <br />
               shiftbloom studio.<br />
               Fabian Zimber<br />
               Up de Worth 6a<br />
               22927 Großhansdorf<br />
-              Deutschland<br />
-              E-Mail: hi@shiftbloom.studio
+              Germany<br />
+              Email: hi@shiftbloom.studio
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">3. Leistungsbeschreibung</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">3. Service Description</h2>
             <p>
-              Der Dienst stellt Funktionen bereit, mit denen registrierte Nutzer:innen Inhalte prüfen/analysieren und
-              Ergebnisse in ihrem Account verwalten können. Bestimmte Funktionen setzen den Verbrauch von OHI-Tokens
-              voraus.
+              The Service provides features that allow registered users to verify/analyze content and manage results in their account. Certain features require the consumption of OHI Tokens.
             </p>
             <p>
-              OHI-Tokens sind keine gesetzliche Währung und keine Kryptowährung. Sie dienen ausschließlich der Nutzung
-              von Funktionen innerhalb des Dienstes.
+              OHI Tokens are not legal currency and are not cryptocurrency. They serve exclusively for using features within the Service.
             </p>
             <p>
-              Ich schulde die Bereitstellung des Dienstes im Rahmen des aktuellen technischen Stands. Ein bestimmter Erfolg
-              (z.B. bestimmte Analyseergebnisse, „Fehlerfreiheit“ oder Eignung für einen bestimmten Zweck) wird nicht
-              geschuldet.
+              We owe the provision of the Service within the current state of technology. A specific success (e.g., certain analysis results, &quot;error-free operation,&quot; or suitability for a specific purpose) is not owed.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">4. Registrierung und Nutzerkonto</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">4. Registration and User Account</h2>
             <p>
-              Für die Nutzung bestimmter Funktionen ist die Erstellung eines Nutzerkontos erforderlich. Bei der
-              Registrierung sind wahrheitsgemäße Angaben zu machen. Zugangsdaten sind vertraulich zu behandeln; eine
-              Weitergabe an Dritte ist untersagt.
+              The creation of a user account is required to use certain features. Truthful information must be provided during registration. Access credentials must be kept confidential; sharing with third parties is prohibited.
             </p>
             <p>
-              Ich behalte mir vor, Nutzerkonten zu sperren oder zu löschen, wenn konkrete Anhaltspunkte für Missbrauch,
-              Sicherheitsrisiken oder erhebliche Verstöße gegen diese AGB bestehen.
+              We reserve the right to suspend or delete user accounts if there is concrete evidence of misuse, security risks, or significant violations of these Terms.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">5. Vertragsschluss (Token-Kauf)</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">5. Contract Conclusion (Token Purchase)</h2>
             <p>
-              Die Darstellung von Token-Paketen im Dienst stellt kein rechtlich bindendes Angebot dar, sondern eine
-              Aufforderung zur Abgabe einer Bestellung.
+              The display of token packages in the Service does not constitute a legally binding offer but an invitation to place an order.
             </p>
             <p>
-              Der Vertrag über den Erwerb eines Token-Pakets kommt zustande, wenn der Zahlungsprozess abgeschlossen wird
-              und die Zahlungsbestätigung/der Checkout erfolgreich ist.
+              The contract for the acquisition of a token package is concluded when the payment process is completed and the payment confirmation/checkout is successful.
             </p>
             <p>
-              Die Abwicklung der Zahlung erfolgt über einen externen Zahlungsdienstleister (derzeit: Stripe). Es gelten
-              ergänzend die Bedingungen des Zahlungsdienstleisters.
+              Payment processing is handled by an external payment service provider (currently: Stripe). The terms of the payment service provider also apply.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">6. Preise, Steuern, Zahlung</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">6. Prices, Taxes, Payment</h2>
             <p>
-              Es gelten die zum Zeitpunkt der Bestellung im Checkout angezeigten Preise. Sofern Umsatzsteuer anfällt und
-              auszuweisen ist, wird diese im Checkout entsprechend ausgewiesen. (Hinweis: Bitte steuerliche Angaben/Status
-              prüfen und ggf. anpassen.)
+              The prices displayed in the checkout at the time of the order apply. If VAT is applicable and must be shown, it will be displayed accordingly in the checkout. (Note: Please verify tax details/status and adjust if necessary.)
             </p>
             <p>
-              Die Zahlung ist sofort fällig. Akzeptierte Zahlungsmethoden ergeben sich aus dem Checkout.
+              Payment is due immediately. Accepted payment methods are shown in the checkout.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">7. Bereitstellung, Gutschrift der Tokens</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">7. Delivery, Token Crediting</h2>
             <p>
-              Nach erfolgreichem Zahlungseingang werden die erworbenen OHI-Tokens dem Nutzerkonto gutgeschrieben.
-              Die Gutschrift erfolgt in der Regel automatisiert; im Ausnahmefall kann es zu Verzögerungen kommen.
+              After successful payment receipt, the purchased OHI Tokens will be credited to the user account. Crediting typically occurs automatically; in exceptional cases, delays may occur.
             </p>
             <p>
-              Bei technischen Problemen bitte ich um Kontaktaufnahme unter hi@shiftbloom.studio unter Angabe der
-              Bestell-/Zahlungsinformationen.
+              In case of technical problems, please contact us at hi@shiftbloom.studio with your order/payment information.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">8. Widerrufsrecht (Verbraucher:innen)</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">8. Right of Withdrawal (Consumers)</h2>
             <p>
-              Verbraucher:innen steht grundsätzlich ein gesetzliches Widerrufsrecht zu. Dieses kann bei digitalen Inhalten
-              unter bestimmten Voraussetzungen erlöschen.
+              Consumers are generally entitled to a statutory right of withdrawal. This right may expire for digital content under certain conditions.
             </p>
             <p>
-              Erlöschen des Widerrufsrechts: Das Widerrufsrecht kann erlöschen, wenn (1) ich mit der Ausführung des
-              Vertrags begonnen habe, nachdem Sie (2) ausdrücklich zugestimmt haben, dass ich vor Ablauf der Widerrufsfrist
-              mit der Ausführung beginne, und (3) Sie Ihre Kenntnis davon bestätigt haben, dass Sie durch Ihre Zustimmung
-              mit Beginn der Ausführung Ihr Widerrufsrecht verlieren.
+              Expiration of the Right of Withdrawal: The right of withdrawal may expire if (1) we have begun performance of the contract after you (2) have expressly consented to us beginning performance before the expiration of the withdrawal period, and (3) you have confirmed your knowledge that by giving your consent with the beginning of performance you lose your right of withdrawal.
             </p>
             <p>
-              Hinweis: Ob und wie diese Zustimmung technisch im Checkout eingeholt wird, sollte überprüft und ggf.
-              ergänzt werden, um rechtlich sauber zu sein.
+              Note: Whether and how this consent is technically obtained in the checkout should be reviewed and supplemented if necessary for legal compliance.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">9. Nutzungsrechte und erlaubte Nutzung</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">9. Usage Rights and Permitted Use</h2>
             <p>
-              Sofern der Dienst Ausgaben/Ergebnisse erzeugt, erhalten Nutzer:innen hieran ein einfaches, nicht exklusives,
-              nicht übertragbares Nutzungsrecht für eigene Zwecke. Eine Weitergabe, Veröffentlichung oder kommerzielle
-              Verwertung kann je nach Inhalt/Quelle eingeschränkt sein.
+              To the extent the Service generates outputs/results, users receive a simple, non-exclusive, non-transferable right of use for their own purposes. Sharing, publication, or commercial exploitation may be restricted depending on the content/source.
             </p>
             <p>
-              Untersagt sind insbesondere: (a) rechtswidrige Inhalte, (b) Umgehung von Sicherheitsmaßnahmen,
-              (c) automatisierte Massennutzung, die den Dienst beeinträchtigt, (d) Reverse Engineering, soweit gesetzlich
-              nicht ausdrücklich erlaubt.
+              The following are specifically prohibited: (a) illegal content, (b) circumvention of security measures, (c) automated mass usage that impairs the Service, (d) reverse engineering, unless expressly permitted by law.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">10. Verfügbarkeit, Wartung</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">10. Availability, Maintenance</h2>
             <p>
-              Ich bemühe mich um eine hohe Verfügbarkeit, schulde jedoch keine ununterbrochene Verfügbarkeit. Wartungen,
-              Sicherheitsupdates und technische Störungen können zu temporären Einschränkungen führen.
+              We strive for high availability but do not guarantee uninterrupted availability. Maintenance, security updates, and technical disruptions may lead to temporary restrictions.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">11. Gewährleistung</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">11. Warranty</h2>
             <p>
-              Es gelten die gesetzlichen Gewährleistungsrechte. Bei digitalen Leistungen können Fehler auftreten; ich
-              werde berechtigte Mängelrügen im Rahmen der gesetzlichen Vorgaben bearbeiten.
+              Statutory warranty rights apply. Digital services may have errors; we will process legitimate defect complaints in accordance with legal requirements.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">12. Haftung</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">12. Liability</h2>
             <p>
-              Ich hafte unbeschränkt bei Vorsatz und grober Fahrlässigkeit sowie bei Verletzung des Lebens, des Körpers
-              oder der Gesundheit.
+              We are liable without limitation for intent and gross negligence, as well as for injury to life, body, or health.
             </p>
             <p>
-              Bei einfacher Fahrlässigkeit hafte ich nur bei Verletzung wesentlicher Vertragspflichten (Kardinalpflichten)
-              und beschränkt auf den vertragstypischen, vorhersehbaren Schaden.
+              In case of simple negligence, we are only liable for breach of essential contractual obligations (cardinal obligations) and limited to the typical, foreseeable damage.
             </p>
             <p>
-              Die Haftung nach dem Produkthaftungsgesetz bleibt unberührt.
+              Liability under the Product Liability Act remains unaffected.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">13. Laufzeit, Kündigung</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">13. Term, Termination</h2>
             <p>
-              Nutzerkonten können von Nutzer:innen jederzeit beendet werden (z.B. per E-Mail). Bereits erworbene Tokens
-              können abhängig von der technischen Ausgestaltung ggf. verfallen; hierzu bitte konkrete Regeln festlegen.
-              (Platzhalter: bitte an eure Token-Logik anpassen.)
+              User accounts can be terminated by users at any time (e.g., via email). Already purchased tokens may expire depending on the technical implementation; please establish specific rules accordingly. (Placeholder: please adapt to your token logic.)
             </p>
             <p>
-              Das Recht zur außerordentlichen Kündigung aus wichtigem Grund bleibt unberührt.
+              The right to extraordinary termination for good cause remains unaffected.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">14. Datenschutz</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">14. Data Protection</h2>
             <p>
-              Informationen zur Verarbeitung personenbezogener Daten finden sich in der Datenschutzerklärung.
+              Information about the processing of personal data can be found in our Privacy Policy.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">15. Schlussbestimmungen</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">15. Final Provisions</h2>
             <p>
-              Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts. Sind Sie Verbraucher:in,
-              gilt diese Rechtswahl nur, soweit dadurch nicht der Schutz zwingender Bestimmungen des Rechts des Staates,
-              in dem Sie Ihren gewöhnlichen Aufenthalt haben, entzogen wird.
+              The law of the Federal Republic of Germany applies, excluding the UN Convention on Contracts for the International Sale of Goods. If you are a consumer, this choice of law only applies to the extent that the protection afforded by mandatory provisions of the law of your country of habitual residence is not withdrawn.
             </p>
             <p>
-              Sofern Sie Kaufmann/Kauffrau, juristische Person des öffentlichen Rechts oder öffentlich-rechtliches
-              Sondervermögen sind, ist Gerichtsstand – soweit zulässig – der Sitz des Anbieters.
+              If you are a merchant, legal entity under public law, or special fund under public law, the place of jurisdiction – as far as permissible – is the provider&apos;s registered office.
             </p>
             <p>
-              Sollten einzelne Bestimmungen dieser AGB ganz oder teilweise unwirksam sein, bleibt die Wirksamkeit der
-              übrigen Bestimmungen unberührt.
+              Should individual provisions of these Terms be wholly or partially invalid, the validity of the remaining provisions shall remain unaffected.
             </p>
           </section>
 
           <hr className="border-white/10 my-8" />
           <p className="text-xs text-neutral-500">
-            Hinweis: Diese AGB wurden als Vorlage/Entwurf erstellt und ersetzen keine individuelle Rechtsberatung.
-            Bitte insbesondere Widerruf/Steuern/Token-Verfall an eure tatsächlichen Abläufe anpassen.
+            Note: These Terms of Service were created as a template/draft and do not replace individual legal advice. Please adjust withdrawal/taxes/token expiration to your actual processes.
           </p>
         </div>
       </div>

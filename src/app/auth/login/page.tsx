@@ -45,7 +45,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Login</CardTitle>
+          <CardTitle className="font-heading tracking-tight">Login</CardTitle>
           <CardDescription>
             Enter your credentials to access your account
           </CardDescription>

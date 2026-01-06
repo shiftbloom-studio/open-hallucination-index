@@ -1,163 +1,303 @@
 "use client";
 
-import { motion, useInView } from "framer-motion";
-import { useMemo, useRef } from "react";
+import { motion, useInView, useAnimationFrame } from "framer-motion";
+import { useRef, useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 const steps = [
   {
-    title: "Input Text",
-    description: "User or system prompt enters the pipeline.",
+    title: "Input",
+    description: "Prompt enters pipeline",
+    icon: "📝",
+    color: "from-violet-500 to-purple-600",
   },
   {
-    title: "Claim Decomposition",
-    description: "Atomize output into discrete, verifiable statements.",
+    title: "Decompose",
+    description: "Atomize into claims",
+    icon: "🔬",
+    color: "from-blue-500 to-cyan-500",
   },
   {
-    title: "Verification Oracle",
-    description: "Graph + vector search retrieve evidence and check claims.",
+    title: "Verify",
+    description: "Check against sources",
+    icon: "✓",
+    color: "from-emerald-500 to-teal-500",
   },
   {
-    title: "Trust Score",
-    description: "Surface confidence you can route, log, and enforce.",
+    title: "Score",
+    description: "Output trust metric",
+    icon: "📊",
+    color: "from-amber-500 to-orange-500",
   },
 ] as const;
 
-function wrapSvgText(text: string, maxCharsPerLine: number) {
-  const words = text.trim().split(/\s+/);
-  const lines: string[] = [];
-  let current = "";
+function DataPulse({ delay, duration }: { delay: number; duration: number }) {
+  return (
+    <motion.div
+      className="absolute top-1/2 -translate-y-1/2 h-1.5 w-6 rounded-full bg-gradient-to-r from-violet-500 via-cyan-400 to-emerald-400 shadow-[0_0_12px_rgba(139,92,246,0.8)]"
+      initial={{ left: "0%", opacity: 0 }}
+      animate={{
+        left: ["0%", "100%"],
+        opacity: [0, 1, 1, 0],
+      }}
+      transition={{
+        duration,
+        delay,
+        repeat: Infinity,
+        ease: "linear",
+      }}
+    />
+  );
+}
 
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (candidate.length <= maxCharsPerLine) {
-      current = candidate;
-      continue;
+function ConnectionLine({ isActive }: { isActive: boolean }) {
+  return (
+    <div className="relative flex-1 h-0.5 mx-1 overflow-hidden">
+      {/* Base line */}
+      <div className="absolute inset-0 bg-white/10 rounded-full" />
+      
+      {/* Glowing active line */}
+      <motion.div
+        className="absolute inset-0 bg-gradient-to-r from-violet-500/50 via-cyan-400/50 to-emerald-400/50 rounded-full"
+        initial={{ scaleX: 0, originX: 0 }}
+        animate={{ scaleX: isActive ? 1 : 0 }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+      />
+
+      {/* Data pulses */}
+      {isActive && (
+        <>
+          <DataPulse delay={0} duration={2} />
+          <DataPulse delay={0.7} duration={2} />
+          <DataPulse delay={1.4} duration={2} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function StepCard({
+  step,
+  index,
+  isActive,
+  isCompleted,
+  onClick,
+}: {
+  step: (typeof steps)[number];
+  index: number;
+  isActive: boolean;
+  isCompleted: boolean;
+  onClick: () => void;
+}) {
+  const pathRef = useRef<SVGRectElement>(null);
+  const progress = useRef(0);
+  const [borderPosition, setBorderPosition] = useState({ x: 0, y: 0 });
+
+  useAnimationFrame((time) => {
+    if (!isActive || !pathRef.current) return;
+    const rect = pathRef.current;
+    const w = rect.width.baseVal.value;
+    const h = rect.height.baseVal.value;
+    const perimeter = 2 * (w + h);
+    const speed = 0.05;
+    progress.current = (progress.current + speed) % perimeter;
+
+    let x = 0,
+      y = 0;
+    const p = progress.current;
+    if (p < w) {
+      x = p;
+      y = 0;
+    } else if (p < w + h) {
+      x = w;
+      y = p - w;
+    } else if (p < 2 * w + h) {
+      x = w - (p - w - h);
+      y = h;
+    } else {
+      x = 0;
+      y = h - (p - 2 * w - h);
     }
+    setBorderPosition({ x, y });
+  });
 
-    if (current) lines.push(current);
-    current = word;
-  }
+  return (
+    <motion.button
+      onClick={onClick}
+      className={cn(
+        "relative group flex flex-col items-center p-3 rounded-xl transition-all duration-300 cursor-pointer",
+        "bg-white/[0.03] border border-white/10 backdrop-blur-sm",
+        isActive && "border-white/20 bg-white/[0.06]",
+        isCompleted && "border-emerald-500/30 bg-emerald-500/[0.05]"
+      )}
+      initial={{ opacity: 0, y: 20, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.5, delay: index * 0.1 }}
+      whileHover={{ scale: 1.02, y: -2 }}
+      whileTap={{ scale: 0.98 }}
+    >
+      {/* Moving border glow for active state */}
+      {isActive && (
+        <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+          <rect
+            ref={pathRef}
+            x="0"
+            y="0"
+            width="100%"
+            height="100%"
+            rx="12"
+            fill="none"
+            className="opacity-0"
+          />
+          <circle
+            cx={borderPosition.x}
+            cy={borderPosition.y}
+            r="20"
+            fill="url(#glowGradient)"
+            className="blur-sm"
+          />
+          <defs>
+            <radialGradient id="glowGradient">
+              <stop offset="0%" stopColor="rgba(139,92,246,0.8)" />
+              <stop offset="100%" stopColor="transparent" />
+            </radialGradient>
+          </defs>
+        </svg>
+      )}
 
-  if (current) lines.push(current);
-  return lines;
+      {/* Step number badge */}
+      <div
+        className={cn(
+          "absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center",
+          "bg-neutral-800 border border-white/20 text-white/70",
+          isActive && "bg-violet-600 border-violet-400 text-white",
+          isCompleted && "bg-emerald-600 border-emerald-400 text-white"
+        )}
+      >
+        {isCompleted ? "✓" : index + 1}
+      </div>
+
+      {/* Icon */}
+      <motion.div
+        className={cn(
+          "w-10 h-10 rounded-lg flex items-center justify-center text-lg mb-2",
+          "bg-gradient-to-br",
+          step.color,
+          "shadow-lg",
+          isActive && "shadow-violet-500/30"
+        )}
+        animate={isActive ? { scale: [1, 1.1, 1] } : {}}
+        transition={{ duration: 1.5, repeat: isActive ? Infinity : 0 }}
+      >
+        {step.icon}
+      </motion.div>
+
+      {/* Title */}
+      <span className="text-xs font-semibold text-white/90 mb-0.5">
+        {step.title}
+      </span>
+
+      {/* Description */}
+      <span className="text-[10px] text-white/50 text-center leading-tight">
+        {step.description}
+      </span>
+
+      {/* Active indicator pulse */}
+      {isActive && (
+        <motion.div
+          className="absolute inset-0 rounded-xl border-2 border-violet-500/50"
+          animate={{ opacity: [0.5, 0, 0.5] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        />
+      )}
+    </motion.button>
+  );
 }
 
 export function ArchitectureFlow() {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const isInView = useInView(ref, { once: true, margin: "-15% 0px" });
+  const ref = useRef<HTMLDivElement>(null);
+  const isInView = useInView(ref, { once: true, margin: "-10% 0px" });
+  const [activeStep, setActiveStep] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
 
-  const dash = useMemo(() => 220, []);
+  // Auto-advance through steps
+  useEffect(() => {
+    if (!isInView || isHovered) return;
+    const interval = setInterval(() => {
+      setActiveStep((prev) => (prev + 1) % steps.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isInView, isHovered]);
 
   return (
-    <section className="relative w-full">
-      <div className="mx-auto max-w-7xl px-4 py-20 md:py-28">
-        <div ref={ref} className="grid gap-10 lg:grid-cols-2 lg:items-center">
-          <div>
-            <motion.p
-              initial={{ opacity: 0, y: 10 }}
-              animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
-              transition={{ duration: 0.6 }}
-              className="text-sm font-medium tracking-wide text-neutral-300"
-            >
-              Architecture
-            </motion.p>
-            <motion.h2
-              initial={{ opacity: 0, y: 14 }}
-              animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
-              transition={{ duration: 0.75, delay: 0.05 }}
-              className="mt-4 text-3xl font-bold tracking-tight text-neutral-50 md:text-5xl"
-            >
-              Verification, step by step.
-            </motion.h2>
-            <motion.p
-              initial={{ opacity: 0, y: 14 }}
-              animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
-              transition={{ duration: 0.75, delay: 0.12 }}
-              className="mt-6 max-w-xl text-base leading-relaxed text-neutral-300 md:text-lg"
-            >
-              OHI treats generations like software: break them into units, check them against sources, and expose a score that can gate downstream actions.
-            </motion.p>
-          </div>
+    <section ref={ref} className="relative w-full py-12 md:py-16">
+      <div className="mx-auto max-w-5xl px-4">
+        {/* Header */}
+        <motion.div
+          className="text-center mb-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.6 }}
+        >
+          <span className="text-xs font-medium tracking-widest text-violet-400 uppercase">
+            Architecture
+          </span>
+          <h2 className="mt-2 text-2xl md:text-4xl font-bold bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">
+            Verification Pipeline
+          </h2>
+          <p className="mt-2 text-sm text-neutral-400 max-w-md mx-auto">
+            Every generation flows through four stages of verification
+          </p>
+        </motion.div>
 
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/40 p-6 backdrop-blur md:p-10">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-transparent" />
+        {/* Pipeline visualization */}
+        <motion.div
+          className="relative flex items-center justify-between gap-1 p-4 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={isInView ? { opacity: 1, scale: 1 } : {}}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          {/* Background gradient */}
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-violet-600/5 via-transparent to-emerald-600/5 pointer-events-none" />
 
-            <motion.svg
-              viewBox="0 0 820 340"
-              className="relative z-10 h-auto w-full text-neutral-100"
-              initial={false}
-            >
-              <motion.path
-                d="M 130 170 C 240 50, 330 50, 440 170 S 640 290, 710 170"
-                fill="none"
-                stroke="currentColor"
-                strokeOpacity="0.35"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeDasharray={dash}
-                strokeDashoffset={isInView ? 0 : dash}
-                transition={{ duration: 1.15, ease: "easeOut" }}
+          {steps.map((step, index) => (
+            <div key={step.title} className="contents">
+              <StepCard
+                step={step}
+                index={index}
+                isActive={activeStep === index}
+                isCompleted={activeStep > index}
+                onClick={() => setActiveStep(index)}
               />
+              {index < steps.length - 1 && (
+                <ConnectionLine isActive={isInView && activeStep > index} />
+              )}
+            </div>
+          ))}
+        </motion.div>
 
-              {steps.map((step, index) => {
-                const x = 110 + index * 200;
-                const y = 170;
-                const delay = 0.12 + index * 0.12;
-                const descriptionLines = wrapSvgText(step.description, 28);
-
-                return (
-                  <motion.g
-                    key={step.title}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
-                    transition={{ duration: 0.7, delay }}
-                  >
-                    <rect
-                      x={x - 90}
-                      y={y - 55}
-                      width="180"
-                      height="110"
-                      rx="20"
-                      fill="rgba(255,255,255,0.04)"
-                      stroke="rgba(255,255,255,0.14)"
-                    />
-                    <circle
-                      cx={x - 62}
-                      cy={y - 22}
-                      r="10"
-                      fill="rgba(255,255,255,0.18)"
-                    />
-                    <text
-                      x={x - 45}
-                      y={y - 18}
-                      fontSize="14"
-                      fontWeight="600"
-                      fill="rgba(255,255,255,0.92)"
-                    >
-                      {step.title}
-                    </text>
-                    <text
-                      x={x - 62}
-                      y={y + 12}
-                      fontSize="12"
-                      fill="rgba(255,255,255,0.7)"
-                    >
-                      {descriptionLines.map((line, lineIndex) => (
-                        <tspan
-                          key={`${step.title}-line-${lineIndex}`}
-                          x={x - 62}
-                          dy={lineIndex === 0 ? 0 : 14}
-                        >
-                          {line}
-                        </tspan>
-                      ))}
-                    </text>
-                  </motion.g>
-                );
-              })}
-            </motion.svg>
-          </div>
-        </div>
+        {/* Auto-advance indicator */}
+        <motion.div
+          className="flex justify-center gap-1.5 mt-4"
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 0.5 }}
+        >
+          {steps.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setActiveStep(index)}
+              className={cn(
+                "w-1.5 h-1.5 rounded-full transition-all duration-300",
+                activeStep === index
+                  ? "w-4 bg-violet-500"
+                  : "bg-white/20 hover:bg-white/40"
+              )}
+            />
+          ))}
+        </motion.div>
       </div>
     </section>
   );

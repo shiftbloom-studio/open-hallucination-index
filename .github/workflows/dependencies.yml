@@ -1,0 +1,28 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Every Monday at 9:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  update-dependencies:
+    name: 📦 Check for Updates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Check outdated packages
+        run: npm outdated || true
+
+      - name: Update Playwright
+        run: npx playwright install --with-deps
+        continue-on-error: true

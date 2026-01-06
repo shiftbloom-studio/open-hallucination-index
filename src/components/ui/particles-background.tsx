@@ -39,13 +39,13 @@ export function ParticlesBackground() {
         },
         particles: {
           color: {
-            value: "#6366f1", // Indigo-500
+            value: "#818cf8", // Indigo-400 - heller
           },
           links: {
-            color: "#6366f1",
+            color: "#a5b4fc", // Indigo-300 - heller
             distance: 150,
             enable: true,
-            opacity: 0.2, // Subtle
+            opacity: 0.35, // Sichtbarer
             width: 1,
           },
           move: {
@@ -55,17 +55,17 @@ export function ParticlesBackground() {
               default: "bounce",
             },
             random: false,
-            speed: 1, // Slow, ambient
+            speed: 1.2, // Etwas schneller
             straight: false,
           },
           number: {
             density: {
               enable: true,
             },
-            value: 60, // Not too crowded
+            value: 80, // Mehr Partikel
           },
           opacity: {
-            value: 0.3,
+            value: 0.5, // Sichtbarer
           },
           shape: {
             type: "circle",

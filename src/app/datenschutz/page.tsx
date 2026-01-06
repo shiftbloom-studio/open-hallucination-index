@@ -1,219 +1,230 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Datenschutzerklärung",
+  title: "Privacy Policy",
 };
 
-export default function DatenschutzPage() {
+export default function PrivacyPolicyPage() {
   return (
     <main className="min-h-screen bg-black/[0.96] text-neutral-100 relative overflow-hidden">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <h1 className="text-4xl font-bold mb-6">Datenschutzerklärung</h1>
+        <h1 className="text-4xl font-bold mb-6">Privacy Policy</h1>
 
         <div className="space-y-6 text-neutral-200">
-          <p className="text-sm text-neutral-400">Stand: 06.01.2026</p>
+          <p className="text-sm text-neutral-400">Last Updated: January 6, 2026</p>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">1. Verantwortlicher</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">1. Data Controller</h2>
             <p>
-              Verantwortlich im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:
+              The data controller within the meaning of the General Data Protection Regulation (GDPR) is:
               <br />
               shiftbloom studio.<br />
               Fabian Zimber<br />
-              Up de Worth 6a, 22927 Großhansdorf, Deutschland<br />
-              E-Mail: hi@shiftbloom.studio
+              Up de Worth 6a, 22927 Großhansdorf, Germany<br />
+              Email: hi@shiftbloom.studio
             </p>
             <p>
-              (Hinweis: Falls ein Datenschutzbeauftragter benannt ist, bitte die Kontaktdaten ergänzen.)
+              (Note: If a Data Protection Officer has been appointed, please add the contact details.)
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">2. Überblick: Welche Daten verarbeiten wir?</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">2. Overview: What Data Do We Process?</h2>
             <p>
-              Je nach Nutzung des Dienstes verarbeiten wir insbesondere:
+              Depending on the use of the Service, we process in particular:
             </p>
             <ul className="list-disc pl-6 space-y-1">
-              <li>Bestandsdaten (z.B. E-Mail, Konto-ID)</li>
-              <li>Nutzungs-/Metadaten (z.B. Login-Status, Token-Stand, technisch erforderliche Kennungen)</li>
-              <li>Inhaltsdaten, die Sie im Dienst eingeben/hochladen (z.B. Texte zur Analyse)</li>
-              <li>Zahlungs-/Transaktionsdaten (im Zusammenhang mit Stripe-Checkout)</li>
-              <li>Protokolldaten (z.B. IP-Adresse, Zeitpunkt, Request-Informationen in Server-Logs)</li>
-              <li>Kommunikationsdaten (z.B. E-Mail-Inhalte bei Support-Anfragen)</li>
+              <li>Inventory data (e.g., email, account ID)</li>
+              <li>Usage/metadata (e.g., login status, token balance, technically required identifiers)</li>
+              <li>Content data that you enter/upload in the Service (e.g., texts for analysis)</li>
+              <li>Payment/transaction data (in connection with Stripe checkout)</li>
+              <li>Log data (e.g., IP address, timestamp, request information in server logs)</li>
+              <li>Communication data (e.g., email content for support inquiries)</li>
             </ul>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">3. Zwecke und Rechtsgrundlagen</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">3. Purposes and Legal Bases</h2>
             <p>
-              Wir verarbeiten personenbezogene Daten nur, soweit dies erlaubt ist. Typische Zwecke und Rechtsgrundlagen
-              sind:
+              We process personal data only to the extent permitted. Typical purposes and legal bases are:
             </p>
             <ul className="list-disc pl-6 space-y-1">
               <li>
-                Vertragserfüllung und Durchführung vorvertraglicher Maßnahmen (Art. 6 Abs. 1 lit. b DSGVO), z.B.
-                Registrierung, Login, Bereitstellung des Dienstes, Token-Gutschrift.
+                Contract performance and pre-contractual measures (Art. 6(1)(b) GDPR), e.g., registration, login, provision of the Service, token crediting.
               </li>
               <li>
-                Rechtliche Verpflichtungen (Art. 6 Abs. 1 lit. c DSGVO), z.B. handels-/steuerrechtliche Aufbewahrung.
+                Legal obligations (Art. 6(1)(c) GDPR), e.g., commercial/tax law retention requirements.
               </li>
               <li>
-                Berechtigte Interessen (Art. 6 Abs. 1 lit. f DSGVO), z.B. IT-Sicherheit, Missbrauchsprävention,
-                Fehleranalyse, Betrieb und Optimierung.
+                Legitimate interests (Art. 6(1)(f) GDPR), e.g., IT security, fraud prevention, error analysis, operation and optimization.
               </li>
               <li>
-                Einwilligung (Art. 6 Abs. 1 lit. a DSGVO), sofern wir optionale Cookies/Tracking einsetzen.
-                (Derzeit sind im Code keine typischen Tracking-Tools ersichtlich; bitte prüfen, ob tatsächlich welche
-                eingesetzt werden.)
+                Consent (Art. 6(1)(a) GDPR), for analytics cookies and optional tracking. We use Vercel Analytics with your consent to understand how visitors use our website.
               </li>
             </ul>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">4. Hosting und Server-Logs</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">4. Hosting (Vercel) and Server Logs</h2>
             <p>
-              Beim Besuch der Website werden durch den Hosting-Provider bzw. durch die Server-Infrastruktur technisch
-              notwendige Daten verarbeitet und in Logfiles gespeichert (z.B. IP-Adresse, Datum/Uhrzeit, aufgerufene Seite,
-              Referrer-URL, User-Agent, Statuscodes). Die Verarbeitung erfolgt zur Auslieferung der Website, zur
-              Gewährleistung der IT-Sicherheit und zur Fehleranalyse.
+              Our website is hosted on Vercel Inc., 440 N Barranca Ave #4133, Covina, CA 91723, USA. When visiting the website, Vercel processes technically necessary data and stores it in log files (e.g., IP address, date/time, page accessed, referrer URL, user agent, status codes). Processing occurs for website delivery, IT security, and error analysis.
             </p>
             <p>
-              Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an sicherem und stabilem Betrieb).
-              (Hinweis: Bitte den konkreten Hosting-Anbieter und ggf. Auftragsverarbeitungsvertrag/Datenstandort ergänzen.)
-            </p>
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">5. Authentifizierung und Nutzerkonto (Supabase)</h2>
-            <p>
-              Für Registrierung/Login nutzen wir Supabase. Dabei werden u.a. Ihre E-Mail-Adresse, technische Kennungen und
-              Session-Informationen verarbeitet. Zur Aufrechterhaltung Ihrer Anmeldung setzt Supabase technisch erforderliche
-              Cookies/Token (Session-Cookies).
-            </p>
-            <p>
-              Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung) sowie Art. 6 Abs. 1 lit. f DSGVO
-              (Sicherheit und Missbrauchsprävention).
-            </p>
-            <p>
-              Empfänger: Supabase (je nach Konfiguration ggf. auch in Drittländern). Sofern eine Übermittlung in ein
-              Drittland erfolgt, stützt sich diese – soweit erforderlich – auf geeignete Garantien (z.B.
-              Standardvertragsklauseln). Details entnehmen Sie bitte den Datenschutzhinweisen von Supabase.
+              Legal basis is Art. 6(1)(f) GDPR (legitimate interest in secure and stable operation). Vercel may transfer data to the USA. Transfer occurs under appropriate safeguards (e.g., Standard Contractual Clauses and the EU-U.S. Data Privacy Framework). For details, please refer to Vercel&apos;s privacy policy at{" "}
+              <a href="https://vercel.com/legal/privacy-policy" className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                https://vercel.com/legal/privacy-policy
+              </a>.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">6. Zahlungsabwicklung (Stripe)</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">5. Authentication and User Account (Supabase)</h2>
             <p>
-              Für den Erwerb von Token-Paketen nutzen wir Stripe als Zahlungsdienstleister. Wenn Sie einen Kauf tätigen,
-              werden Sie zum Stripe-Checkout weitergeleitet. Dabei verarbeitet Stripe Zahlungsdaten (z.B. Kartendaten), die
-              wir nicht vollständig einsehen.
+              For registration/login, we use Supabase. This involves processing your email address, technical identifiers, and session information. To maintain your login, Supabase sets technically necessary cookies/tokens (session cookies).
             </p>
             <p>
-              Wir übermitteln an Stripe insbesondere:
+              Legal basis is Art. 6(1)(b) GDPR (contract performance) and Art. 6(1)(f) GDPR (security and fraud prevention).
+            </p>
+            <p>
+              Recipients: Supabase (depending on configuration, potentially in third countries). If transfer to a third country occurs, it is based – where required – on appropriate safeguards (e.g., Standard Contractual Clauses). For details, please refer to Supabase&apos;s privacy notices.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-2xl font-semibold text-neutral-100">6. Payment Processing (Stripe)</h2>
+            <p>
+              For the purchase of token packages, we use Stripe as payment service provider. When you make a purchase, you will be redirected to Stripe checkout. Stripe processes payment data (e.g., card details) that we do not fully access.
+            </p>
+            <p>
+              We transmit to Stripe in particular:
             </p>
             <ul className="list-disc pl-6 space-y-1">
-              <li>E-Mail-Adresse (zur Zuordnung/Belegkommunikation)</li>
-              <li>technische Kennungen (z.B. Session/Transaktionsdaten)</li>
-              <li>Metadaten zur Zuordnung im Dienst (z.B. Nutzer-ID, Paket-ID)</li>
+              <li>Email address (for assignment/receipt communication)</li>
+              <li>Technical identifiers (e.g., session/transaction data)</li>
+              <li>Metadata for assignment in the Service (e.g., user ID, package ID)</li>
             </ul>
             <p>
-              Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Zahlungsabwicklung/Vertragserfüllung) sowie ggf.
-              Art. 6 Abs. 1 lit. c DSGVO (Aufbewahrungspflichten).
+              Legal basis is Art. 6(1)(b) GDPR (payment processing/contract performance) and, where applicable, Art. 6(1)(c) GDPR (retention requirements).
             </p>
             <p>
-              Stripe kann Daten in Drittländer (z.B. USA) übermitteln. Soweit erforderlich, erfolgt die Übermittlung unter
-              geeigneten Garantien (z.B. Standardvertragsklauseln). Details finden Sie in den Datenschutzhinweisen von Stripe.
+              Stripe may transfer data to third countries (e.g., USA). Where required, transfer occurs under appropriate safeguards (e.g., Standard Contractual Clauses). For details, please refer to Stripe&apos;s privacy notices.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">7. Datenbank / Speicherung</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">7. Database / Storage</h2>
             <p>
-              Zur Bereitstellung des Dienstes speichern wir Daten in einer Datenbank (z.B. Nutzerkonto, Token-Stand,
-              Einstellungen). Die Speicherung erfolgt so lange, wie dies für die Vertragserfüllung erforderlich ist oder
-              gesetzliche Aufbewahrungspflichten bestehen.
+              To provide the Service, we store data in a database (e.g., user account, token balance, settings). Storage occurs as long as required for contract performance or as long as statutory retention obligations exist.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-2xl font-semibold text-neutral-100">8. Cookies</h2>
             <p>
-              Wir setzen Cookies ein, soweit diese technisch erforderlich sind (z.B. für Login/Sitzung). Technisch
-              erforderliche Cookies sind notwendig, damit der Dienst funktioniert.
+              We use cookies to the extent they are technically necessary (e.g., for login/session). Technically necessary cookies are required for the Service to function.
             </p>
             <p>
-              Soweit wir darüber hinaus optionale Cookies (z.B. für Statistik/Marketing) einsetzen, erfolgt dies nur mit
-              Ihrer Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). (Hinweis: Im aktuellen Code sind keine typischen
-              Analytics/Tracking-Integrationen ersichtlich; falls doch, bitte konkret ergänzen.)
+              For analytics cookies (Vercel Analytics), we obtain your consent before setting them. You can manage your cookie preferences at any time using our cookie consent banner. For detailed information about the cookies we use, please see our{" "}
+              <a href="/cookies" className="text-blue-400 hover:underline">
+                Cookie Policy
+              </a>.
             </p>
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">9. Kontaktaufnahme</h2>
             <p>
-              Wenn Sie uns per E-Mail kontaktieren, verarbeiten wir Ihre Angaben zur Bearbeitung der Anfrage.
-              Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Anbahnung/Erfüllung) oder Art. 6 Abs. 1 lit. f DSGVO
-              (berechtigtes Interesse an effizienter Kommunikation).
+              Legal basis for necessary cookies is Art. 6(1)(f) GDPR (legitimate interest). For optional/analytics cookies, the legal basis is Art. 6(1)(a) GDPR (consent).
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">10. Empfänger, Auftragsverarbeiter</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">8a. Web Analytics (Vercel Analytics)</h2>
             <p>
-              Wir setzen Dienstleister ein (z.B. Hosting, Supabase, Stripe), die personenbezogene Daten in unserem Auftrag
-              verarbeiten. Mit diesen Dienstleistern schließen wir – soweit erforderlich – Verträge zur
-              Auftragsverarbeitung (Art. 28 DSGVO).
+              With your consent, we use Vercel Analytics to analyze website usage. Vercel Analytics is a privacy-focused analytics service that collects anonymous, aggregated data about page views, user flows, and website performance.
+            </p>
+            <p>
+              <strong>Data collected:</strong> Page URL, referrer, browser type, device type, country (derived from IP, but IP is not stored), screen size, and interaction events. No personal data such as IP addresses or user identifiers are stored.
+            </p>
+            <p>
+              <strong>Purpose:</strong> Understanding how visitors use our website, improving user experience, and optimizing our services.
+            </p>
+            <p>
+              <strong>Legal basis:</strong> Art. 6(1)(a) GDPR (your consent). You can withdraw your consent at any time by adjusting your cookie preferences.
+            </p>
+            <p>
+              <strong>Recipient:</strong> Vercel Inc., USA. Data transfer to the USA occurs under appropriate safeguards (EU-U.S. Data Privacy Framework, Standard Contractual Clauses).
+            </p>
+            <p>
+              For more information, see Vercel&apos;s privacy policy at{" "}
+              <a href="https://vercel.com/legal/privacy-policy" className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                https://vercel.com/legal/privacy-policy
+              </a>.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">11. Speicherdauer</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">9. Contact</h2>
             <p>
-              Wir speichern personenbezogene Daten nur so lange, wie es für die jeweiligen Zwecke erforderlich ist.
-              Darüber hinaus speichern wir Daten, soweit gesetzliche Aufbewahrungspflichten bestehen (z.B. steuer-/handelsrechtlich).
+              When you contact us by email, we process your information to handle the inquiry. Legal basis is Art. 6(1)(b) GDPR (initiation/performance) or Art. 6(1)(f) GDPR (legitimate interest in efficient communication).
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">12. Ihre Rechte</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">10. Recipients, Processors</h2>
             <p>
-              Ihnen stehen – je nach gesetzlichen Voraussetzungen – folgende Rechte zu:
+              We use service providers who process personal data on our behalf. With these service providers, we conclude – where required – data processing agreements (Art. 28 GDPR).
             </p>
             <ul className="list-disc pl-6 space-y-1">
-              <li>Auskunft (Art. 15 DSGVO)</li>
-              <li>Berichtigung (Art. 16 DSGVO)</li>
-              <li>Löschung (Art. 17 DSGVO)</li>
-              <li>Einschränkung der Verarbeitung (Art. 18 DSGVO)</li>
-              <li>Datenübertragbarkeit (Art. 20 DSGVO)</li>
-              <li>Widerspruch gegen Verarbeitungen (Art. 21 DSGVO)</li>
-              <li>Widerruf erteilter Einwilligungen (Art. 7 Abs. 3 DSGVO) mit Wirkung für die Zukunft</li>
-              <li>Beschwerde bei einer Aufsichtsbehörde (Art. 77 DSGVO)</li>
+              <li><strong>Vercel Inc.</strong> (USA) – Hosting and analytics</li>
+              <li><strong>Supabase Inc.</strong> – Authentication and database</li>
+              <li><strong>Stripe Inc.</strong> (USA) – Payment processing</li>
             </ul>
             <p>
-              Zur Geltendmachung Ihrer Rechte genügt eine Nachricht an hi@shiftbloom.studio.
+              For transfers to third countries (e.g., USA), we rely on appropriate safeguards such as Standard Contractual Clauses and the EU-U.S. Data Privacy Framework.
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">13. Pflicht zur Bereitstellung von Daten</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">11. Retention Period</h2>
             <p>
-              Für die Registrierung und Nutzung des Dienstes ist die Bereitstellung bestimmter Daten (z.B. E-Mail) erforderlich.
-              Ohne diese Daten kann der Dienst nicht oder nur eingeschränkt genutzt werden.
+              We store personal data only as long as required for the respective purposes. Beyond this, we store data to the extent statutory retention obligations exist (e.g., tax/commercial law).
             </p>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">14. Änderungen dieser Datenschutzerklärung</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">12. Your Rights</h2>
             <p>
-              Wir können diese Datenschutzerklärung anpassen, wenn sich Rechtslage, Dienste oder Datenverarbeitungen ändern.
-              Es gilt die jeweils aktuelle Fassung.
+              Depending on legal requirements, you are entitled to the following rights:
+            </p>
+            <ul className="list-disc pl-6 space-y-1">
+              <li>Access (Art. 15 GDPR)</li>
+              <li>Rectification (Art. 16 GDPR)</li>
+              <li>Erasure (Art. 17 GDPR)</li>
+              <li>Restriction of processing (Art. 18 GDPR)</li>
+              <li>Data portability (Art. 20 GDPR)</li>
+              <li>Objection to processing (Art. 21 GDPR)</li>
+              <li>Withdrawal of consent (Art. 7(3) GDPR) with effect for the future</li>
+              <li>Complaint to a supervisory authority (Art. 77 GDPR)</li>
+            </ul>
+            <p>
+              To exercise your rights, a message to hi@shiftbloom.studio is sufficient.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-2xl font-semibold text-neutral-100">13. Obligation to Provide Data</h2>
+            <p>
+              For registration and use of the Service, the provision of certain data (e.g., email) is required. Without this data, the Service cannot be used or can only be used to a limited extent.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-2xl font-semibold text-neutral-100">14. Changes to This Privacy Policy</h2>
+            <p>
+              We may update this Privacy Policy if legal requirements, services, or data processing change. The current version applies.
             </p>
           </section>
 
           <hr className="border-white/10 my-8" />
           <p className="text-xs text-neutral-500">
-            Hinweis: Diese Datenschutzerklärung wurde als Vorlage/Entwurf erstellt und ersetzt keine individuelle Rechtsberatung.
-            Bitte insbesondere Hosting-Anbieter, konkrete Cookies/Tracking und Datenstandorte final prüfen und eintragen.
+            This Privacy Policy complies with the EU General Data Protection Regulation (GDPR), the German BDSG, and the TTDSG. Note: This document serves as a template and does not replace individual legal advice.
           </p>
         </div>
       </div>

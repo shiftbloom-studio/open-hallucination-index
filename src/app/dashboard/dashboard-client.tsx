@@ -92,7 +92,7 @@ export default function DashboardClient({ user }: DashboardClientProps) {
     <div className="min-h-screen flex flex-col">
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <h1 className="text-2xl font-heading font-bold tracking-tight">Dashboard</h1>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">{user.email}</span>
             <Button variant="outline" size="sm" onClick={handleLogout}>
@@ -106,7 +106,7 @@ export default function DashboardClient({ user }: DashboardClientProps) {
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold mb-2">Welcome Back</h2>
+            <h2 className="text-3xl font-heading font-bold tracking-tight mb-2">Welcome Back</h2>
             <p className="text-muted-foreground">
               Track and manage AI hallucinations
             </p>

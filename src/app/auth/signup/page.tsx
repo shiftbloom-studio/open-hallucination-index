@@ -59,7 +59,7 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Sign Up</CardTitle>
+          <CardTitle className="font-heading tracking-tight">Sign Up</CardTitle>
           <CardDescription>
             Create an account to get started
           </CardDescription>
