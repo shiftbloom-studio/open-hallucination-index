@@ -8,7 +8,7 @@ import { ParticlesBackground } from "@/components/ui/particles-background";
 import { Navbar } from "@/components/layout/navbar";
 import { CookieConsent } from "@/components/layout/cookie-consent";
 import { ConsentAwareAnalytics } from "@/components/analytics/consent-aware-analytics";
-import Link from "next/link";
+import { Footer } from "@/components/layout/footer";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -51,20 +51,7 @@ export default function RootLayout({
              <ParticlesBackground />
              <Navbar />
              {children}
-             <footer className="border-t border-white/10 py-10 relative z-10 bg-black">
-               <div className="container mx-auto px-4 text-center text-neutral-500 space-y-4">
-                 <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
-                   <Link className="hover:text-neutral-200" href="/impressum">Legal Notice</Link>
-                   <Link className="hover:text-neutral-200" href="/agb">Terms of Service</Link>
-                   <Link className="hover:text-neutral-200" href="/datenschutz">Privacy Policy</Link>
-                   <Link className="hover:text-neutral-200" href="/cookies">Cookie Policy</Link>
-                   <Link className="hover:text-neutral-200" href="/eula">EULA</Link>
-                   <Link className="hover:text-neutral-200" href="/disclaimer">Disclaimer</Link>
-                   <Link className="hover:text-neutral-200" href="/accessibility">Accessibility</Link>
-                 </nav>
-                 <p className="text-xs">&copy; {new Date().getFullYear()} Open Hallucination Index.</p>
-               </div>
-             </footer>
+             <Footer />
              <CookieConsent />
              <ConsentAwareAnalytics />
              <Toaster />

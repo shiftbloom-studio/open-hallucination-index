@@ -26,20 +26,54 @@ function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: strin
 }
 
 // Hallucinated vs Verified claims for the animation
+// wrongWord marks the incorrect part in the hallucinated text (only for false claims)
 const claims = [
   { 
     hallucinated: "The Eiffel Tower was built in 1920",
     verified: "The Eiffel Tower was built in 1889",
+    wrongWord: "1920",
     isTrue: false 
   },
   { 
     hallucinated: "Water boils at 100°C at sea level",
     verified: "Water boils at 100°C at sea level",
+    wrongWord: null,
     isTrue: true 
   },
   { 
     hallucinated: "Shakespeare wrote 47 plays",
     verified: "Shakespeare wrote ~37 plays",
+    wrongWord: "47",
+    isTrue: false 
+  },
+  { 
+    hallucinated: "The human body has 206 bones",
+    verified: "The human body has 206 bones",
+    wrongWord: null,
+    isTrue: true 
+  },
+  { 
+    hallucinated: "Einstein discovered gravity in 1687",
+    verified: "Newton discovered gravity in 1687",
+    wrongWord: "Einstein",
+    isTrue: false 
+  },
+  { 
+    hallucinated: "Mars has 3 moons orbiting it",
+    verified: "Mars has 2 moons orbiting it",
+    wrongWord: "3",
+    isTrue: false 
+  },
+  { 
+    hallucinated: "The speed of light is ~300,000 km/s",
+    verified: "The speed of light is ~300,000 km/s",
+    wrongWord: null,
+    isTrue: true 
+  },
+  { 
+    hallucinated: "The Amazon is 8,000 km long",
+    verified: "The Amazon is ~6,400 km long",
+    wrongWord: "8,000",
     isTrue: false 
   },
 ];
@@ -77,6 +111,52 @@ function GlitchText({ text, isGlitching }: { text: string; isGlitching: boolean 
   return <span>{displayText}</span>;
 }
 
+// Component to highlight the wrong word in a claim
+function HighlightedClaimText({ 
+  text, 
+  wrongWord, 
+  showHighlight 
+}: { 
+  text: string; 
+  wrongWord: string | null; 
+  showHighlight: boolean;
+}) {
+  if (!wrongWord || !showHighlight) {
+    return <span>{text}</span>;
+  }
+  
+  const parts = text.split(wrongWord);
+  if (parts.length === 1) {
+    // wrongWord not found in text
+    return <span>{text}</span>;
+  }
+  
+  return (
+    <span>
+      {parts[0]}
+      <motion.span
+        className="relative inline-block"
+        initial={{ backgroundColor: "transparent" }}
+        animate={{ 
+          backgroundColor: "rgba(239, 68, 68, 0.3)",
+        }}
+        transition={{ duration: 0.3 }}
+      >
+        <span className="text-red-400 font-semibold relative">
+          {wrongWord}
+          <motion.span
+            className="absolute -bottom-0.5 left-0 right-0 h-0.5 bg-red-500"
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+          />
+        </span>
+      </motion.span>
+      {parts.slice(1).join(wrongWord)}
+    </span>
+  );
+}
+
 // Verification scanner beam
 function ScannerBeam({ isActive }: { isActive: boolean }) {
   return (
@@ -96,22 +176,25 @@ function ScannerBeam({ isActive }: { isActive: boolean }) {
   );
 }
 
+// Deterministic positions for particles to avoid hydration mismatch
+const PARTICLE_POSITIONS = [12, 28, 45, 62, 78, 88, 35, 55];
+
 // Floating verification particles
-function VerificationParticle({ delay, verified }: { delay: number; verified: boolean }) {
+function VerificationParticle({ delay, verified, index }: { delay: number; verified: boolean; index: number }) {
   return (
     <motion.div
       className={`absolute w-1.5 h-1.5 rounded-full ${verified ? "bg-emerald-400" : "bg-red-400"}`}
       style={{
-        left: `${Math.random() * 100}%`,
-        boxShadow: verified 
-          ? "0 0 8px rgba(52,211,153,0.8)" 
-          : "0 0 8px rgba(248,113,113,0.8)",
+        left: `${PARTICLE_POSITIONS[index % PARTICLE_POSITIONS.length]}%`,
       }}
       initial={{ top: "50%", opacity: 0, scale: 0 }}
       animate={{
         top: verified ? "-20%" : "120%",
         opacity: [0, 1, 1, 0],
         scale: [0, 1, 1, 0],
+        boxShadow: verified 
+          ? ["0 0 8px rgba(52,211,153,0.8)", "0 0 12px rgba(52,211,153,0.9)", "0 0 8px rgba(52,211,153,0.8)"]
+          : ["0 0 8px rgba(248,113,113,0.8)", "0 0 12px rgba(248,113,113,0.9)", "0 0 8px rgba(248,113,113,0.8)"],
       }}
       transition={{
         duration: 2,
@@ -149,40 +232,91 @@ function NeuralConnection({ startX, startY, endX, endY, delay }: {
   );
 }
 
-// Main hallucination visualization component
-function HallucinationVisualizer({ isInView }: { isInView: boolean }) {
-  const [currentClaim, setCurrentClaim] = useState(0);
-  const [phase, setPhase] = useState<"hallucinating" | "scanning" | "verified">("hallucinating");
+// Animation state type for synchronized state management
+// Phases: analyzing -> scanning -> detected (only for false claims) -> verified -> (wait) -> next claim
+type AnimationPhase = "analyzing" | "scanning" | "detected" | "verified";
+
+interface AnimationState {
+  claimIndex: number;
+  phase: AnimationPhase;
+}
+
+// Custom hook for synchronized animation state management
+function useAnimationState(isInView: boolean) {
+  const [state, setState] = useState<AnimationState>({
+    claimIndex: 0,
+    phase: "analyzing",
+  });
+  
+  const animationRef = useRef<{
+    timeoutId: NodeJS.Timeout | null;
+  }>({ timeoutId: null });
   
   useEffect(() => {
     if (!isInView) return;
     
-    const cycle = () => {
-      // Phase 1: Show hallucinated text with glitch
-      setPhase("hallucinating");
-      
-      setTimeout(() => {
-        // Phase 2: Scanning
-        setPhase("scanning");
-      }, 2000);
-      
-      setTimeout(() => {
-        // Phase 3: Show verified result
-        setPhase("verified");
-      }, 4000);
-      
-      setTimeout(() => {
-        // Move to next claim
-        setCurrentClaim((prev) => (prev + 1) % claims.length);
-      }, 6000);
+    // Phase durations in ms
+    const PHASE_DURATIONS = {
+      analyzing: 1500,
+      scanning: 1800,
+      detected: 1500,  // Only used for false claims
+      verified: 2000,
     };
     
-    cycle();
-    const interval = setInterval(cycle, 6000);
-    return () => clearInterval(interval);
+    const scheduleNextPhase = (currentPhase: AnimationPhase, claimIndex: number) => {
+      if (animationRef.current.timeoutId) {
+        clearTimeout(animationRef.current.timeoutId);
+      }
+      
+      const currentClaim = claims[claimIndex];
+      
+      const getNextPhaseData = (): { phase: AnimationPhase; claimIndex: number; delay: number } => {
+        switch (currentPhase) {
+          case "analyzing":
+            return { phase: "scanning", claimIndex, delay: PHASE_DURATIONS.analyzing };
+          case "scanning":
+            // For true claims, skip detected phase and go directly to verified
+            if (currentClaim.isTrue) {
+              return { phase: "verified", claimIndex, delay: PHASE_DURATIONS.scanning };
+            }
+            return { phase: "detected", claimIndex, delay: PHASE_DURATIONS.scanning };
+          case "detected":
+            return { phase: "verified", claimIndex, delay: PHASE_DURATIONS.detected };
+          case "verified":
+            return { phase: "analyzing", claimIndex: (claimIndex + 1) % claims.length, delay: PHASE_DURATIONS.verified };
+        }
+      };
+      
+      const { phase: nextPhase, claimIndex: nextClaimIndex, delay } = getNextPhaseData();
+      
+      animationRef.current.timeoutId = setTimeout(() => {
+        // Atomic state update - both phase and claim index update together
+        setState({ phase: nextPhase, claimIndex: nextClaimIndex });
+        scheduleNextPhase(nextPhase, nextClaimIndex);
+      }, delay);
+    };
+    
+    // Start with analyzing phase
+    setState({ phase: "analyzing", claimIndex: 0 });
+    scheduleNextPhase("analyzing", 0);
+    
+    return () => {
+      if (animationRef.current.timeoutId) {
+        clearTimeout(animationRef.current.timeoutId);
+      }
+    };
   }, [isInView]);
   
-  const claim = claims[currentClaim];
+  return state;
+}
+
+// Main hallucination visualization component
+function HallucinationVisualizer({ isInView }: { isInView: boolean }) {
+  // Use synchronized state manager
+  const { claimIndex, phase } = useAnimationState(isInView);
+  
+  // Derived state - claim is always in sync with the animation state
+  const claim = claims[claimIndex];
   
   return (
     <div className="relative w-full h-full min-h-[200px] overflow-hidden rounded-xl bg-black/40 border border-white/10 p-4">
@@ -203,7 +337,8 @@ function HallucinationVisualizer({ isInView }: { isInView: boolean }) {
         <VerificationParticle 
           key={i} 
           delay={i * 0.3} 
-          verified={i % 2 === 0} 
+          verified={i % 2 === 0}
+          index={i}
         />
       ))}
       
@@ -215,18 +350,19 @@ function HallucinationVisualizer({ isInView }: { isInView: boolean }) {
       <ScannerBeam isActive={phase === "scanning"} />
       
       {/* Main content area */}
-      <div className="relative z-10 flex flex-col items-center justify-center h-full">
+      <div className="relative z-10 flex flex-col items-center justify-center h-full px-2 sm:px-4">
         {/* Status indicator */}
         <motion.div 
-          className="flex items-center gap-2 mb-4"
+          className="flex items-center gap-2 mb-3 sm:mb-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
           <motion.div
             className={`w-2 h-2 rounded-full ${
-              phase === "hallucinating" ? "bg-red-500" :
+              phase === "analyzing" ? "bg-violet-500" :
               phase === "scanning" ? "bg-cyan-400" :
-              claim.isTrue ? "bg-emerald-500" : "bg-orange-500"
+              phase === "detected" ? "bg-red-500" :
+              claim.isTrue ? "bg-emerald-500" : "bg-emerald-500"
             }`}
             animate={{ 
               scale: phase === "scanning" ? [1, 1.5, 1] : 1,
@@ -236,54 +372,51 @@ function HallucinationVisualizer({ isInView }: { isInView: boolean }) {
             }}
             transition={{ duration: 0.5, repeat: phase === "scanning" ? Infinity : 0 }}
           />
-          <span className={`text-xs font-medium uppercase tracking-wider ${
-            phase === "hallucinating" ? "text-red-400" :
+          <span className={`text-[10px] sm:text-xs font-medium uppercase tracking-wider ${
+            phase === "analyzing" ? "text-violet-400" :
             phase === "scanning" ? "text-cyan-400" :
-            claim.isTrue ? "text-emerald-400" : "text-orange-400"
+            phase === "detected" ? "text-red-400" :
+            "text-emerald-400"
           }`}>
-            {phase === "hallucinating" ? "Analyzing Output..." :
-             phase === "scanning" ? "Verifying Claims..." :
-             claim.isTrue ? "Verified ✓" : "Hallucination Detected"}
+            {phase === "analyzing" ? "Analyzing Claim..." :
+             phase === "scanning" ? "Verifying..." :
+             phase === "detected" ? "Hallucination Detected!" :
+             claim.isTrue ? "Verified ✓" : "Corrected ✓"}
           </span>
         </motion.div>
         
         {/* Claim text box */}
         <motion.div
-          className={`relative px-6 py-4 rounded-lg border backdrop-blur-sm transition-all duration-500 ${
-            phase === "hallucinating" 
-              ? "bg-red-500/10 border-red-500/30" 
+          className={`relative px-3 sm:px-6 py-3 sm:py-4 rounded-lg border backdrop-blur-sm transition-all duration-500 max-w-full ${
+            phase === "analyzing" 
+              ? "bg-violet-500/10 border-violet-500/30" 
               : phase === "scanning"
               ? "bg-cyan-500/10 border-cyan-500/30"
-              : claim.isTrue 
-              ? "bg-emerald-500/10 border-emerald-500/30"
-              : "bg-orange-500/10 border-orange-500/30"
+              : phase === "detected"
+              ? "bg-red-500/10 border-red-500/30"
+              : "bg-emerald-500/10 border-emerald-500/30"
           }`}
           animate={{
-            x: phase === "hallucinating" ? [0, -2, 2, -1, 1, 0] : 0,
+            x: phase === "detected" ? [0, -2, 2, -1, 1, 0] : 0,
           }}
           transition={{ 
             duration: 0.3, 
-            repeat: phase === "hallucinating" ? Infinity : 0,
+            repeat: phase === "detected" ? 3 : 0,
             repeatDelay: 0.1,
           }}
         >
-          {/* Glitch lines overlay */}
-          {phase === "hallucinating" && (
+          {/* Glitch lines overlay for detected phase */}
+          {phase === "detected" && (
             <>
               <motion.div
-                className="absolute inset-0 bg-red-500/5 rounded-lg"
-                animate={{ opacity: [0, 0.3, 0] }}
-                transition={{ duration: 0.15, repeat: Infinity }}
-              />
-              <motion.div
-                className="absolute left-0 right-0 h-px bg-red-400/50"
-                animate={{ top: ["0%", "100%"] }}
-                transition={{ duration: 0.8, repeat: Infinity }}
+                className="absolute inset-0 bg-red-500/10 rounded-lg"
+                animate={{ opacity: [0, 0.4, 0] }}
+                transition={{ duration: 0.2, repeat: 3 }}
               />
             </>
           )}
           
-          <p className="text-sm md:text-base text-white/90 text-center font-mono">
+          <p className="text-xs sm:text-sm md:text-base text-white/90 text-center font-mono leading-relaxed">
             <AnimatePresence mode="wait">
               {phase === "verified" ? (
                 <motion.span
@@ -291,19 +424,33 @@ function HallucinationVisualizer({ isInView }: { isInView: boolean }) {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
+                  className="text-emerald-300"
                 >
                   {claim.verified}
                 </motion.span>
+              ) : phase === "detected" ? (
+                <motion.span
+                  key="detected"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <HighlightedClaimText 
+                    text={claim.hallucinated} 
+                    wrongWord={claim.wrongWord} 
+                    showHighlight={true}
+                  />
+                </motion.span>
               ) : (
                 <motion.span
-                  key="hallucinated"
+                  key="analyzing"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                 >
                   <GlitchText 
                     text={claim.hallucinated} 
-                    isGlitching={phase === "hallucinating"} 
+                    isGlitching={phase === "analyzing"} 
                   />
                 </motion.span>
               )}
@@ -313,45 +460,46 @@ function HallucinationVisualizer({ isInView }: { isInView: boolean }) {
         
         {/* Trust score meter */}
         <motion.div 
-          className="mt-6 w-full max-w-[200px]"
+          className="mt-4 sm:mt-6 w-full max-w-[180px] sm:max-w-[200px]"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <div className="flex justify-between text-[10px] text-white/50 mb-1">
+          <div className="flex justify-between text-[9px] sm:text-[10px] text-white/50 mb-1">
             <span>0%</span>
             <span className="text-white/70 font-medium">Trust Score</span>
             <span>100%</span>
           </div>
-          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+          <div className="h-1 sm:h-1.5 bg-white/10 rounded-full overflow-hidden">
             <motion.div
               className={`h-full rounded-full ${
-                phase === "verified" && claim.isTrue 
+                phase === "verified"
                   ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
-                  : phase === "verified"
-                  ? "bg-gradient-to-r from-orange-500 to-red-500"
+                  : phase === "detected"
+                  ? "bg-gradient-to-r from-red-600 to-red-500"
                   : "bg-gradient-to-r from-violet-500 to-cyan-400"
               }`}
               initial={{ width: "0%" }}
               animate={{ 
-                width: phase === "hallucinating" ? "30%" :
-                       phase === "scanning" ? "60%" :
-                       claim.isTrue ? "98%" : "23%"
+                width: phase === "analyzing" ? "50%" :
+                       phase === "scanning" ? "50%" :
+                       phase === "detected" ? "5%" :
+                       "100%"
               }}
-              transition={{ duration: 1, ease: "easeOut" }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
             />
           </div>
         </motion.div>
         
         {/* Claim counter */}
-        <div className="absolute bottom-2 right-3 flex gap-1">
+        <div className="absolute bottom-2 right-2 sm:right-3 flex gap-0.5 sm:gap-1">
           {claims.map((_, i) => (
             <motion.div
               key={i}
               className={`w-1 h-1 rounded-full ${
-                i === currentClaim ? "bg-violet-400" : "bg-white/20"
+                i === claimIndex ? "bg-violet-400" : "bg-white/20"
               }`}
-              animate={i === currentClaim ? { scale: [1, 1.3, 1] } : {}}
+              animate={i === claimIndex ? { scale: [1, 1.3, 1] } : {}}
               transition={{ duration: 1, repeat: Infinity }}
             />
           ))}

@@ -44,6 +44,7 @@ export async function updateSession(request: NextRequest) {
     pathname === '/' ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/pricing') ||
+    pathname.startsWith('/about') ||
     pathname === '/api/auth/callback' ||
     pathname === '/api/checkout' ||
     pathname.startsWith('/api/webhooks/stripe');

@@ -40,6 +40,19 @@ export function CookieConsent() {
     }
   }, []);
 
+  // Listen for event to open cookie settings
+  useEffect(() => {
+    const handleOpenSettings = () => {
+      setShowBanner(true);
+      setShowSettings(true);
+    };
+
+    window.addEventListener("openCookieSettings", handleOpenSettings);
+    return () => {
+      window.removeEventListener("openCookieSettings", handleOpenSettings);
+    };
+  }, []);
+
   const saveConsent = (acceptAll: boolean = false) => {
     const finalPreferences = acceptAll
       ? { necessary: true, analytics: true, functional: true }
@@ -255,6 +268,13 @@ export function CookieConsent() {
       )}
     </AnimatePresence>
   );
+}
+
+// Function to open cookie settings from anywhere in the app
+export function openCookieSettings() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("openCookieSettings"));
+  }
 }
 
 // Hook to check if analytics consent was granted

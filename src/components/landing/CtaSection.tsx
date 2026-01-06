@@ -56,11 +56,11 @@ export function CtaSection() {
           <motion.div
             className="absolute inset-0 rounded-3xl"
             style={{
-              background: "linear-gradient(90deg, transparent, rgba(167,139,250,0.4), rgba(34,211,238,0.4), transparent)",
+              background: "linear-gradient(90deg, transparent, rgba(167,139,250,0.12), rgba(34,211,238,0.12), transparent)",
               backgroundSize: "300% 100%",
             }}
             animate={{ backgroundPosition: ["-100% 0%", "200% 0%"] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
           />
 
           <div className="relative z-10 flex flex-col items-center text-center">
@@ -72,14 +72,32 @@ export function CtaSection() {
             >
               Make hallucinations{" "}
               <motion.span
-                className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-cyan-400 to-emerald-400"
-                animate={{
-                  backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"],
+                className="relative inline-block text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-cyan-400 to-emerald-400"
+                initial={{ opacity: 0, filter: "blur(8px)" }}
+                animate={isInView ? { 
+                  opacity: 1, 
+                  filter: "blur(0px)",
+                } : {}}
+                transition={{ 
+                  duration: 1.2, 
+                  delay: 0.5,
+                  ease: [0.25, 0.46, 0.45, 0.94]
                 }}
-                transition={{ duration: 4, repeat: Infinity }}
-                style={{ backgroundSize: "200% 200%" }}
               >
                 measurable.
+                <motion.span
+                  className="absolute -inset-1 bg-gradient-to-r from-violet-400/20 via-cyan-400/20 to-emerald-400/20 blur-xl rounded-lg -z-10"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={isInView ? { 
+                    opacity: [0, 0.6, 0.3],
+                    scale: [0.8, 1.1, 1]
+                  } : {}}
+                  transition={{ 
+                    duration: 2,
+                    delay: 0.6,
+                    ease: "easeOut"
+                  }}
+                />
               </motion.span>
             </motion.h2>
 
@@ -102,25 +120,21 @@ export function CtaSection() {
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                   <ButtonMovingBorder
                     borderRadius="1.75rem"
-                    className="bg-slate-900 text-white border-slate-800"
+                    className="bg-slate-900 text-white border-slate-800 h-12 px-8"
                   >
                     Get Started
                   </ButtonMovingBorder>
                 </motion.div>
               </Link>
 
-              <Link
-                href="https://github.com/shiftbloom-studio/open-hallucination-index"
-                target="_blank"
-                rel="noreferrer"
-              >
+              <Link href="/pricing">
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                   <Button
                     size="lg"
                     variant="ghost"
                     className="h-12 rounded-full border border-white/10 bg-white/5 px-8 text-neutral-200 hover:bg-white/10"
                   >
-                    View on GitHub
+                    See Pricing
                   </Button>
                 </motion.div>
               </Link>

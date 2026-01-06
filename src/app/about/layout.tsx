@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Über uns – Open Hallucination Index",
-  description: "Erfahren Sie mehr über den Open Hallucination Index: Die erste unabhängige, quelloffene Plattform zur Erkennung und Verifikation von KI-Halluzinationen.",
+  title: "About Us – Open Hallucination Index",
+  description: "Learn more about the Open Hallucination Index: The first independent, open-source platform for detecting and verifying AI hallucinations.",
   openGraph: {
-    title: "Über uns – Open Hallucination Index",
-    description: "Die Zukunft der KI-Verifikation. Vertrauen durch Transparenz.",
+    title: "About Us – Open Hallucination Index",
+    description: "The future of AI verification. Trust through transparency.",
   },
 };
 

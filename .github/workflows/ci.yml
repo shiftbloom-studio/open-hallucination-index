@@ -179,6 +179,41 @@ jobs:
         continue-on-error: true
 
   # ─────────────────────────────────────────────────────────────
+  # Semgrep SAST Scan
+  # ─────────────────────────────────────────────────────────────
+  semgrep:
+    name: 🛡️ Semgrep SAST
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep scan
+        run: semgrep scan --config auto --error --json --output semgrep-results.json .
+        continue-on-error: true
+
+      - name: Upload Semgrep results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
+          retention-days: 7
+
+      - name: Run Semgrep (SARIF for GitHub Security)
+        run: semgrep scan --config auto --sarif --output semgrep.sarif .
+        continue-on-error: true
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+        continue-on-error: true
+
+  # ─────────────────────────────────────────────────────────────
   # Deploy Preview (Vercel)
   # ─────────────────────────────────────────────────────────────
   deploy-preview:
