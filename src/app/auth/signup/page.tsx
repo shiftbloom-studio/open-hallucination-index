@@ -46,7 +46,7 @@ export default function SignupPage() {
         toast.error(error.message);
       } else {
         toast.success("Check your email to confirm your account!");
-        router.push("/auth/login");
+        router.push("/auth/signin");
       }
     } catch (error) {
       toast.error("An error occurred during signup");
@@ -56,12 +56,12 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Sign Up</CardTitle>
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="space-y-2">
+          <CardTitle>Create your account</CardTitle>
           <CardDescription>
-            Create an account to get started
+            Start tracking hallucination risk across AI outputs.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSignup}>
@@ -72,6 +72,7 @@ export default function SignupPage() {
                 id="email"
                 type="email"
                 placeholder="you@example.com"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -82,6 +83,7 @@ export default function SignupPage() {
               <Input
                 id="password"
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -92,20 +94,21 @@ export default function SignupPage() {
               <Input
                 id="confirmPassword"
                 type="password"
+                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
               />
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
+          <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Loading..." : "Sign Up"}
+              {loading ? "Creating account..." : "Create account"}
             </Button>
             <p className="text-sm text-muted-foreground text-center">
               Already have an account?{" "}
-              <Link href="/auth/login" className="text-primary hover:underline">
-                Login
+              <Link href="/auth/signin" className="text-primary hover:underline">
+                Sign in
               </Link>
             </p>
           </CardFooter>
