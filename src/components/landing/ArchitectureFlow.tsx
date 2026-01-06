@@ -22,6 +22,26 @@ const steps = [
   },
 ] as const;
 
+function wrapSvgText(text: string, maxCharsPerLine: number) {
+  const words = text.trim().split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxCharsPerLine) {
+      current = candidate;
+      continue;
+    }
+
+    if (current) lines.push(current);
+    current = word;
+  }
+
+  if (current) lines.push(current);
+  return lines;
+}
+
 export function ArchitectureFlow() {
   const ref = useRef<HTMLDivElement | null>(null);
   const isInView = useInView(ref, { once: true, margin: "-15% 0px" });
@@ -83,6 +103,7 @@ export function ArchitectureFlow() {
                 const x = 110 + index * 200;
                 const y = 170;
                 const delay = 0.12 + index * 0.12;
+                const descriptionLines = wrapSvgText(step.description, 28);
 
                 return (
                   <motion.g
@@ -121,7 +142,15 @@ export function ArchitectureFlow() {
                       fontSize="12"
                       fill="rgba(255,255,255,0.7)"
                     >
-                      {step.description}
+                      {descriptionLines.map((line, lineIndex) => (
+                        <tspan
+                          key={`${step.title}-line-${lineIndex}`}
+                          x={x - 62}
+                          dy={lineIndex === 0 ? 0 : 14}
+                        >
+                          {line}
+                        </tspan>
+                      ))}
                     </text>
                   </motion.g>
                 );

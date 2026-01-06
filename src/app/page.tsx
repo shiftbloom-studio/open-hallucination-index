@@ -32,12 +32,6 @@ export default function Home() {
         <FeatureGrid />
         <CtaSection />
       </main>
-
-      <footer className="border-t border-white/10 py-10 relative z-10 bg-black">
-        <div className="container mx-auto px-4 text-center text-neutral-500">
-          <p>&copy; 2024 Open Hallucination Index. Open source and community-driven.</p>
-        </div>
-      </footer>
     </div>
   );
 }

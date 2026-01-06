@@ -4,6 +4,7 @@ import { Providers } from "./providers";
 import { Toaster } from "sonner";
 import { SmoothScroll } from "@/components/ui/smooth-scroll";
 import { ParticlesBackground } from "@/components/ui/particles-background";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Open Hallucination Index",
@@ -22,6 +23,16 @@ export default function RootLayout({
           <SmoothScroll>
              <ParticlesBackground />
              {children}
+             <footer className="border-t border-white/10 py-10 relative z-10 bg-black">
+               <div className="container mx-auto px-4 text-center text-neutral-500 space-y-4">
+                 <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm">
+                   <Link className="hover:text-neutral-200" href="/impressum">Impressum</Link>
+                   <Link className="hover:text-neutral-200" href="/agb">AGB</Link>
+                   <Link className="hover:text-neutral-200" href="/datenschutz">Datenschutz</Link>
+                 </nav>
+                 <p className="text-xs">&copy; {new Date().getFullYear()} Open Hallucination Index.</p>
+               </div>
+             </footer>
              <Toaster />
           </SmoothScroll>
         </Providers>
