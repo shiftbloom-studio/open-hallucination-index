@@ -4,7 +4,7 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: text('email').notNull().unique(),
   name: text('name'),
-  ohiTokens: integer('ohi_tokens').default(0).notNull(),
+  ohiTokens: integer('ohi_tokens').default(5).notNull(), // New users get 5 free tokens
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

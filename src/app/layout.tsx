@@ -9,6 +9,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { CookieConsent } from "@/components/layout/cookie-consent";
 import { ConsentAwareAnalytics } from "@/components/analytics/consent-aware-analytics";
 import { Footer } from "@/components/layout/footer";
+import { Analytics } from "@vercel/analytics/react";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -57,6 +58,7 @@ export default function RootLayout({
              <Toaster />
           </SmoothScroll>
         </Providers>
+        <Analytics />
       </body>
     </html>
   );

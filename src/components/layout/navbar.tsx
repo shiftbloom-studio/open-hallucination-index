@@ -1,16 +1,73 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
+import { User } from "@supabase/supabase-js";
+import { Coins, LogOut, LayoutDashboard, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
+  
+  const [user, setUser] = useState<User | null>(null);
+  const [tokens, setTokens] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
   
   const isAuthPage = pathname?.startsWith("/auth");
   const isDashboard = pathname?.startsWith("/dashboard");
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      setLoading(false);
+
+      if (user) {
+        // Fetch tokens
+        try {
+          const res = await fetch("/api/tokens");
+          if (res.ok) {
+            const data = await res.json();
+            setTokens(data.tokens);
+          }
+        } catch (error) {
+          console.error("Failed to fetch tokens:", error);
+        }
+      }
+    };
+    getUser();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (!session?.user) {
+        setTokens(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [supabase.auth]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setTokens(null);
+    toast.success("Logged out successfully");
+    router.push("/");
+    router.refresh();
+  };
+
+  // Don't render navbar on dashboard (it has its own header)
+  if (isDashboard) {
+    return null;
+  }
 
   return (
     <header className="border-b border-white/10 relative z-50 backdrop-blur-sm bg-black/40">
@@ -46,7 +103,41 @@ export function Navbar() {
           >
             Pricing
           </Link>
-          {!isDashboard && (
+          
+          {!loading && user ? (
+            <>
+              {/* Token Balance */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20">
+                <Coins className="h-4 w-4 text-amber-400" />
+                <span className="font-medium text-amber-300 text-sm">
+                  {tokens !== null ? tokens : "..."} tokens
+                </span>
+              </div>
+              
+              {/* Buy Tokens */}
+              <Link href="/pricing">
+                <Button variant="ghost" size="sm" className="text-amber-300 hover:text-amber-200 hover:bg-amber-500/10">
+                  <Sparkles className="h-4 w-4 mr-1" />
+                  Buy
+                </Button>
+              </Link>
+              
+              {/* Dashboard Link */}
+              <Link href="/dashboard">
+                <Button variant="ghost" size="sm" className="text-neutral-300 hover:text-white">
+                  <LayoutDashboard className="h-4 w-4 mr-2" />
+                  Dashboard
+                </Button>
+              </Link>
+              
+              {/* User Email & Logout */}
+              <span className="text-sm text-muted-foreground hidden md:inline">{user.email}</span>
+              <Button variant="outline" size="sm" onClick={handleLogout} className="border-slate-700 hover:border-slate-600">
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </>
+          ) : !loading ? (
             <>
               <Link href="/auth/login">
                 <Button variant="ghost" className="text-neutral-300 hover:text-white font-medium">Login</Button>
@@ -55,7 +146,7 @@ export function Navbar() {
                 <Button className="bg-slate-800 text-white border-slate-700 font-medium hover:bg-slate-700 transition-colors">Sign Up</Button>
               </Link>
             </>
-          )}
+          ) : null}
         </nav>
       </div>
     </header>
