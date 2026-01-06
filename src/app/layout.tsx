@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "sonner";
+import { SmoothScroll } from "@/components/ui/smooth-scroll";
+import { ParticlesBackground } from "@/components/ui/particles-background";
 
 export const metadata: Metadata = {
   title: "Open Hallucination Index",
@@ -17,8 +19,11 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
         <Providers>
-          {children}
-          <Toaster />
+          <SmoothScroll>
+             <ParticlesBackground />
+             {children}
+             <Toaster />
+          </SmoothScroll>
         </Providers>
       </body>
     </html>

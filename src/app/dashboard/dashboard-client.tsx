@@ -1,16 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
+import { createApiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { User } from "@supabase/supabase-js";
 import { LogOut, Plus } from "lucide-react";
+
+const AddHallucinationForm = dynamic(() => import("@/components/dashboard/add-hallucination-form"), {
+  loading: () => <Card className="mb-8 h-[300px] animate-pulse bg-muted/20" />,
+});
 
 interface DashboardClientProps {
   user: User;
@@ -18,11 +22,54 @@ interface DashboardClientProps {
 
 export default function DashboardClient({ user }: DashboardClientProps) {
   const [isAddingHallucination, setIsAddingHallucination] = useState(false);
-  const [content, setContent] = useState("");
-  const [source, setSource] = useState("");
-  const [severity, setSeverity] = useState("medium");
+  
+  // API Settings State
+  const [showApiSettings, setShowApiSettings] = useState(false);
+  const [apiUrl, setApiUrl] = useState("");
+  const [apiStatus, setApiStatus] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
+  
   const router = useRouter();
   const supabase = createClient();
+
+  useEffect(() => {
+    const savedUrl = localStorage.getItem("open_hallucination_api_url");
+    if (savedUrl) {
+      setApiUrl(savedUrl);
+      validateApi(savedUrl);
+    }
+  }, []);
+
+  const validateApi = async (url: string) => {
+    if (!url) {
+      setApiStatus("idle");
+      return;
+    }
+    setApiStatus("checking");
+    try {
+      // Just a simple check. In a real app we might need a proxy to avoid CORS.
+      // We'll perform a fetch and assume if we get a response (even 404) the server is 'reachable'.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const client = createApiClient(url);
+      await client.getHealth();
+      
+      setApiStatus("valid");
+      localStorage.setItem("open_hallucination_api_url", url);
+    } catch (error) {
+      console.error("API Validation failed:", error);
+      setApiStatus("invalid");
+    }
+  };
+
+  const handleApiUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newUrl = e.target.value;
+    setApiUrl(newUrl);
+    
+    // Debounce validation
+    const timeoutId = setTimeout(() => validateApi(newUrl), 800);
+    return () => clearTimeout(timeoutId);
+  };
 
   const { data: hallucinations, refetch } = useQuery({
     queryKey: ["hallucinations"],
@@ -39,16 +86,7 @@ export default function DashboardClient({ user }: DashboardClientProps) {
     router.refresh();
   };
 
-  const handleAddHallucination = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Placeholder for adding hallucination
-    toast.success("Hallucination added successfully!");
-    setContent("");
-    setSource("");
-    setSeverity("medium");
-    setIsAddingHallucination(false);
-    refetch();
-  };
+
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -80,90 +118,64 @@ export default function DashboardClient({ user }: DashboardClientProps) {
         </div>
 
         {isAddingHallucination && (
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle>Add New Hallucination</CardTitle>
-              <CardDescription>
-                Document a new AI hallucination for the index
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleAddHallucination} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="content">Content</Label>
-                  <Input
-                    id="content"
-                    placeholder="Describe the hallucination..."
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="source">Source</Label>
-                  <Input
-                    id="source"
-                    placeholder="AI model or system"
-                    value={source}
-                    onChange={(e) => setSource(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="severity">Severity</Label>
-                  <select
-                    id="severity"
-                    value={severity}
-                    onChange={(e) => setSeverity(e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
-                </div>
-                <div className="flex gap-2">
-                  <Button type="submit">Submit</Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsAddingHallucination(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+          <AddHallucinationForm 
+            onCancel={() => setIsAddingHallucination(false)}
+            onSuccess={() => {
+              setIsAddingHallucination(false);
+              refetch();
+            }}
+            showApiSettings={showApiSettings}
+            setShowApiSettings={setShowApiSettings}
+            apiUrl={apiUrl}
+            setApiUrl={setApiUrl}
+            apiStatus={apiStatus}
+            handleApiUrlChange={handleApiUrlChange}
+          />
         )}
 
         <div className="grid md:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Total Hallucinations</CardTitle>
+          <Card className="relative overflow-hidden border-none bg-gradient-to-br from-blue-500/10 to-indigo-500/10 dark:from-blue-500/20 dark:to-indigo-500/20 backdrop-blur-md shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] group">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-indigo-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <CardHeader className="relative">
+              <CardTitle className="bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
+                Total Hallucinations
+              </CardTitle>
               <CardDescription>All documented cases</CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold">0</p>
+            <CardContent className="relative">
+              <p className="text-4xl font-bold bg-gradient-to-r from-blue-700 to-indigo-700 dark:from-blue-300 dark:to-indigo-300 bg-clip-text text-transparent">
+                0
+              </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Verified Cases</CardTitle>
+
+          <Card className="relative overflow-hidden border-none bg-gradient-to-br from-emerald-500/10 to-teal-500/10 dark:from-emerald-500/20 dark:to-teal-500/20 backdrop-blur-md shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] group">
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/10 to-teal-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <CardHeader className="relative">
+              <CardTitle className="bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
+                Verified Cases
+              </CardTitle>
               <CardDescription>Community verified</CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold">0</p>
+            <CardContent className="relative">
+              <p className="text-4xl font-bold bg-gradient-to-r from-emerald-700 to-teal-700 dark:from-emerald-300 dark:to-teal-300 bg-clip-text text-transparent">
+                0
+              </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Critical Severity</CardTitle>
+
+          <Card className="relative overflow-hidden border-none bg-gradient-to-br from-rose-500/10 to-pink-500/10 dark:from-rose-500/20 dark:to-pink-500/20 backdrop-blur-md shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] group">
+            <div className="absolute inset-0 bg-gradient-to-r from-rose-600/10 to-pink-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <CardHeader className="relative">
+              <CardTitle className="bg-gradient-to-r from-rose-600 to-pink-600 dark:from-rose-400 dark:to-pink-400 bg-clip-text text-transparent">
+                Critical Severity
+              </CardTitle>
               <CardDescription>High priority items</CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold">0</p>
+            <CardContent className="relative">
+              <p className="text-4xl font-bold bg-gradient-to-r from-rose-700 to-pink-700 dark:from-rose-300 dark:to-pink-300 bg-clip-text text-transparent">
+                0
+              </p>
             </CardContent>
           </Card>
         </div>
