@@ -13,7 +13,6 @@ import {
   Zap,
   BookOpen,
   Globe,
-  Award,
   TrendingUp
 } from "lucide-react";
 
@@ -70,31 +69,6 @@ const values = [
   },
 ];
 
-const timeline = [
-  {
-    year: "2024",
-    title: "Research Phase",
-    description: "Intensive analysis of existing hallucination benchmarks and development of new verification methods.",
-  },
-  {
-    year: "2025",
-    title: "Prototype & Beta",
-    description: "First API version with Claim Decomposition Engine and hybrid verification architecture.",
-  },
-  {
-    year: "2026",
-    title: "Public Launch",
-    description: "Complete open source release with enterprise support and extended knowledge graph.",
-  },
-];
-
-const certifications = [
-  { name: "ISO 27001", description: "Information Security" },
-  { name: "GDPR", description: "Privacy Compliant" },
-  { name: "SOC 2 Type II", description: "Security Standards" },
-  { name: "EU AI Act", description: "AI Regulation Compliant" },
-];
-
 export default function AboutPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-neutral-100 relative overflow-hidden">
@@ -102,22 +76,22 @@ export default function AboutPage() {
       
       {/* Hero Section */}
       <section className="relative w-full overflow-hidden">
-        <div className="relative min-h-[60vh] w-full bg-slate-950/95 antialiased bg-grid-white/[0.02]">
+        <div className="relative min-h-[50vh] w-full bg-slate-950/80 antialiased bg-grid-white/[0.02]">
           <Spotlight className="-top-40 left-0 md:left-60 md:-top-20" fill="white" />
           
           <motion.div
-            className="absolute top-20 right-20 w-64 h-64 rounded-full bg-violet-500/20 blur-[100px]"
-            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+            className="absolute top-10 right-10 md:top-20 md:right-20 w-48 md:w-64 h-48 md:h-64 rounded-full bg-violet-500/30 blur-[80px]"
+            animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0.6, 0.4] }}
             transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
-            className="absolute bottom-20 left-10 w-96 h-96 rounded-full bg-cyan-400/15 blur-[120px]"
-            animate={{ scale: [1.2, 1, 1.2], opacity: [0.2, 0.4, 0.2] }}
+            className="absolute bottom-10 left-5 md:bottom-20 md:left-10 w-64 md:w-96 h-64 md:h-96 rounded-full bg-cyan-400/25 blur-[100px]"
+            animate={{ scale: [1.2, 1, 1.2], opacity: [0.3, 0.5, 0.3] }}
             transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
           />
 
           <motion.div
-            className="relative z-10 mx-auto flex min-h-[60vh] max-w-5xl flex-col items-center justify-center px-4 text-center"
+            className="relative z-10 mx-auto flex min-h-[50vh] max-w-5xl flex-col items-center justify-center px-4 py-16 text-center"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -159,14 +133,12 @@ export default function AboutPage() {
       <AnimatedSection className="relative py-20 md:py-28">
         <div className="mx-auto max-w-7xl px-4">
           <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-slate-800/40 p-8 md:p-14 backdrop-blur-xl">
-            <motion.div
-              className="absolute inset-0 rounded-3xl opacity-40"
+            <div
+              className="absolute inset-0 rounded-3xl opacity-70 animate-shimmer"
               style={{
-                background: "linear-gradient(90deg, transparent, rgba(167,139,250,0.3), transparent)",
+                background: "linear-gradient(90deg, transparent 0%, rgba(100,80,180,0.5) 25%, rgba(167,139,250,0.6) 50%, rgba(100,80,180,0.5) 75%, transparent 100%)",
                 backgroundSize: "200% 100%",
               }}
-              animate={{ backgroundPosition: ["-100% 0%", "200% 0%"] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
             />
             
             <div className="relative z-10 grid gap-10 lg:grid-cols-2 lg:items-center">
@@ -306,95 +278,6 @@ export default function AboutPage() {
                 <p className="mt-2 text-sm text-neutral-400 leading-relaxed">{value.description}</p>
               </motion.div>
             ))}
-          </div>
-        </div>
-      </AnimatedSection>
-
-      {/* Timeline */}
-      <AnimatedSection className="py-20 md:py-28 bg-slate-900/30">
-        <div className="mx-auto max-w-4xl px-4">
-          <div className="text-center mb-16">
-            <p className="text-sm font-medium tracking-widest text-violet-400 uppercase">
-              Our Journey
-            </p>
-            <h2 className="mt-4 text-3xl md:text-4xl lg:text-5xl font-heading font-bold tracking-tight text-neutral-50">
-              From Idea to Innovation
-            </h2>
-          </div>
-
-          <div className="relative">
-            {/* Vertical line */}
-            <div className="absolute left-8 top-0 bottom-0 w-px bg-gradient-to-b from-violet-500/50 via-cyan-500/50 to-emerald-500/50 hidden md:block" />
-
-            <div className="space-y-8">
-              {timeline.map((item, i) => (
-                <motion.div
-                  key={item.year}
-                  initial={{ opacity: 0, x: -20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.15, duration: 0.5 }}
-                  viewport={{ once: true }}
-                  className="relative flex gap-6 md:gap-10"
-                >
-                  <div className="relative z-10 flex-shrink-0 w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center text-lg font-bold text-white shadow-lg shadow-violet-500/25">
-                    {item.year.slice(-2)}
-                  </div>
-                  <div className="flex-1 rounded-2xl border border-white/10 bg-slate-900/60 p-6 backdrop-blur-sm">
-                    <p className="text-sm text-violet-400 font-medium">{item.year}</p>
-                    <h3 className="mt-1 text-xl font-semibold text-neutral-100">{item.title}</h3>
-                    <p className="mt-2 text-neutral-400">{item.description}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </AnimatedSection>
-
-      {/* Trust & Certifications */}
-      <AnimatedSection className="py-20 md:py-28">
-        <div className="mx-auto max-w-7xl px-4">
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-800/40 p-8 md:p-14 backdrop-blur-xl">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-[100px]" />
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-violet-500/10 rounded-full blur-[80px]" />
-
-            <div className="relative z-10 grid gap-10 lg:grid-cols-2 lg:items-center">
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <Award className="h-8 w-8 text-emerald-400" />
-                  <p className="text-sm font-medium tracking-widest text-emerald-400 uppercase">
-                    Trust & Security
-                  </p>
-                </div>
-                <h2 className="text-3xl md:text-4xl font-heading font-bold tracking-tight text-neutral-50 leading-tight">
-                  Enterprise-Grade Security
-                </h2>
-                <p className="mt-4 text-neutral-300 leading-relaxed">
-                  We understand that trust must be earned – especially when it comes to AI. 
-                  That's why we've focused on the highest security and compliance standards from the start.
-                </p>
-                <p className="mt-4 text-neutral-400">
-                  All data is encrypted in transit and at rest. Our infrastructure 
-                  is regularly audited by independent security experts.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {certifications.map((cert, i) => (
-                  <motion.div
-                    key={cert.name}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: i * 0.1, duration: 0.4 }}
-                    viewport={{ once: true }}
-                    className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5 text-center"
-                  >
-                    <p className="text-lg font-bold text-emerald-400">{cert.name}</p>
-                    <p className="text-sm text-neutral-400 mt-1">{cert.description}</p>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </AnimatedSection>

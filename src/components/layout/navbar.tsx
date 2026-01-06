@@ -35,7 +35,7 @@ export function Navbar() {
               pathname === "/about" && "text-white"
             )}
           >
-            Über uns
+            About
           </Link>
           <Link 
             href="/pricing" 
