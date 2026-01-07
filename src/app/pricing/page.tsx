@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Loader2, Sparkles, Zap, Shield, Crown, X, ChevronDown, Star, Lock, RefreshCw, Users, Globe, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -140,7 +140,7 @@ function FAQItem({ question, answer, index }: { question: string; answer: string
   );
 }
 
-export default function PricingPage() {
+function PricingContent() {
   const [loading, setLoading] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -635,5 +635,13 @@ export default function PricingPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function PricingPage() {
+  return (
+    <Suspense fallback={null}>
+      <PricingContent />
+    </Suspense>
   );
 }
