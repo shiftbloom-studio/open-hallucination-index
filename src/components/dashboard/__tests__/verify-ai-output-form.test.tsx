@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@/test/test-utils';
 import userEvent from '@testing-library/user-event';
 import VerifyAIOutputForm from '@/components/dashboard/verify-ai-output-form';
+import { server } from '@/test/mocks/server';
+import { http, HttpResponse } from 'msw';
 
 // Mock sonner toast
 vi.mock('sonner', () => ({
@@ -10,10 +12,6 @@ vi.mock('sonner', () => ({
     error: vi.fn(),
   },
 }));
-
-// Mock fetch globally
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 // Mock the API client
 vi.mock('@/lib/api', () => ({
@@ -62,7 +60,7 @@ describe('VerifyAIOutputForm', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetch.mockReset();
+    server.resetHandlers();
   });
 
   it('should render the form with text area and verify button', () => {
@@ -78,12 +76,13 @@ describe('VerifyAIOutputForm', () => {
     render(<VerifyAIOutputForm {...defaultProps} />);
 
     const textArea = screen.getByPlaceholderText(/paste your ai-generated text/i);
-    await user.type(textArea, 'This is a test text that is about 50 characters long');
+    const inputText = 'This is a test text that is about 50 characters long';
+    await user.type(textArea, inputText);
 
     // Check that character count is displayed
-    expect(screen.getByText(/characters/i)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`^${inputText.length}\\s+characters$`, 'i'))).toBeInTheDocument();
     // Check that token estimate is displayed
-    expect(screen.getByText(/token.*needed/i)).toBeInTheDocument();
+    expect(screen.getByText(/token\w*\s+needed/i)).toBeInTheDocument();
   });
 
   it('should show current token balance', () => {
@@ -117,7 +116,7 @@ describe('VerifyAIOutputForm', () => {
     const textArea = screen.getByPlaceholderText(/paste your ai-generated text/i);
     await user.type(textArea, 'Some text to verify');
 
-    expect(screen.getByText(/insufficient tokens/i)).toBeInTheDocument();
+    expect(screen.getByText(/you need\s+\d+\s+more token/i)).toBeInTheDocument();
   });
 
   it('should calculate tokens needed based on text length', async () => {
@@ -140,15 +139,16 @@ describe('VerifyAIOutputForm', () => {
   it('should call token deduction API and OHI API on verify', async () => {
     const user = userEvent.setup();
     const onTokensUpdated = vi.fn();
-    
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({
-        success: true,
-        tokensDeducted: 1,
-        tokensRemaining: 9,
-      }),
-    });
+
+    server.use(
+      http.post('/api/tokens', () => {
+        return HttpResponse.json({
+          success: true,
+          tokensDeducted: 1,
+          tokensRemaining: 9,
+        });
+      })
+    );
 
     render(<VerifyAIOutputForm {...defaultProps} onTokensUpdated={onTokensUpdated} />);
 
@@ -159,23 +159,22 @@ describe('VerifyAIOutputForm', () => {
     await user.click(verifyButton);
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith('/api/tokens', expect.objectContaining({
-        method: 'POST',
-      }));
+      expect(onTokensUpdated).toHaveBeenCalledWith(9);
     });
   });
 
   it('should display verification results after successful verification', async () => {
     const user = userEvent.setup();
-    
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({
-        success: true,
-        tokensDeducted: 1,
-        tokensRemaining: 9,
-      }),
-    });
+
+    server.use(
+      http.post('/api/tokens', () => {
+        return HttpResponse.json({
+          success: true,
+          tokensDeducted: 1,
+          tokensRemaining: 9,
+        });
+      })
+    );
 
     render(<VerifyAIOutputForm {...defaultProps} />);
 
@@ -190,7 +189,7 @@ describe('VerifyAIOutputForm', () => {
     });
 
     // Check trust score is displayed
-    expect(screen.getByText(/85.*%/)).toBeInTheDocument();
+    expect(screen.getByText(/85(\.0)?%/)).toBeInTheDocument();
     
     // Check claims are displayed
     expect(screen.getByText('Claims Analyzed')).toBeInTheDocument();
