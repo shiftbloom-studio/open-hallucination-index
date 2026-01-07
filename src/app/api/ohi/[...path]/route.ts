@@ -26,7 +26,6 @@ function copyHeaders(incoming: Headers) {
 }
 
 async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> }) {
-  try {
   const { path = [] } = await ctx.params;
 
   const baseUrl = requireEnv("DEFAULT_API_URL");
@@ -63,16 +62,13 @@ async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> 
   const hasBody = !["GET", "HEAD"].includes(method);
 
   const body = hasBody ? await req.arrayBuffer() : undefined;
-
-  const upstream = await fetch(upstreamUrl.toString(), { method, headers, body });
+  try {
+    const upstream = await fetch(upstreamUrl.toString(), { method, headers, body });
   
-  return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
+    return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
   } catch (err) {
     console.error("Upstream fetch failed", { upstreamUrl: upstreamUrl?.toString?.(), err });
-    return NextResponse.json(
-      { error: "Upstream fetch failed", details: String(err) },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: "Upstream fetch failed", details: String(err) }, { status: 502 });
   }
 }
 
