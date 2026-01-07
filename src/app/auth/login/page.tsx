@@ -57,7 +57,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-background p-4 text-foreground">
+    <main className="relative min-h-screen overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-background p-4 text-foreground">
       <div className="pointer-events-none absolute inset-0 opacity-60">
         <div className="absolute -left-24 top-12 h-72 w-72 rounded-full bg-primary/20 blur-3xl" />
         <div className="absolute -right-24 bottom-12 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
@@ -141,6 +141,6 @@ export default function LoginPage() {
           </form>
         </Card>
       </div>
-    </div>
+    </main>
   );
 }

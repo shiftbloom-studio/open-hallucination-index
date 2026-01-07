@@ -38,3 +38,10 @@ next-env.d.ts
 
 # drizzle
 /drizzle
+
+# test results
+/test-results/
+/test-results.xml
+# playwright
+/playwright-report/
+

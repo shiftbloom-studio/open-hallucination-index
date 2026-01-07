@@ -299,7 +299,7 @@ function PricingContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 py-20 px-4 relative overflow-hidden">
+    <main className="min-h-screen bg-slate-950 text-slate-100 py-20 px-4 relative overflow-hidden">
       {/* Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[100px]" />
@@ -635,7 +635,7 @@ function PricingContent() {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </main>
   );
 }
 

@@ -20,8 +20,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio",
-    "og:generate": "node scripts/generate-og.cjs"
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -74,10 +73,10 @@
     "jsdom": "^27.4.0",
     "msw": "^2.12.7",
     "postcss": "^8.5.1",
-    "prettier": "^3.4.2",
+    "prettier": "^3.7.4",
+    "sharp": "^0.32.1",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
-    "sharp": "^0.32.1",
     "vitest": "^4.0.16"
   }
 }

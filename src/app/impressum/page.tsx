@@ -8,7 +8,7 @@ export default function LegalNoticePage() {
   return (
     <main className="min-h-screen bg-black/[0.96] text-neutral-100 relative overflow-hidden">
       <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <h1 className="text-4xl font-bold mb-6">Legal Notice</h1>
+        <h1 className="text-4xl font-bold mb-6">Impressum / Legal Notice</h1>
 
         <section className="space-y-4 text-neutral-200">
           <p className="text-sm text-neutral-400">Last Updated: January 6, 2026</p>

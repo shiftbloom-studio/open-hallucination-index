@@ -289,6 +289,7 @@ export function ArchitectureFlow() {
             <button
               key={index}
               onClick={() => setActiveStep(index)}
+              aria-label={`Go to step ${index + 1}`}
               className={cn(
                 "w-1.5 h-1.5 rounded-full transition-all duration-300",
                 activeStep === index

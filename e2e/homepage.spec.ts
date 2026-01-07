@@ -10,13 +10,13 @@ test.describe('Homepage', () => {
   });
 
   test('should have navigation elements', async ({ page }) => {
-    // Check for navigation links
-    await expect(page.getByRole('link', { name: /pricing/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /login/i })).toBeVisible();
+    // Check for navigation links - use first() as there may be multiple pricing links
+    await expect(page.getByRole('link', { name: /pricing/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /login/i }).first()).toBeVisible();
   });
 
   test('should navigate to pricing page', async ({ page }) => {
-    await page.getByRole('link', { name: /pricing/i }).click();
+    await page.getByRole('link', { name: /pricing/i }).first().click();
     await expect(page).toHaveURL(/.*pricing/);
   });
 
