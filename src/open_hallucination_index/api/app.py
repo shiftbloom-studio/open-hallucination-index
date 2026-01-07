@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.security import APIKeyHeader
+from fastapi.responses import ORJSONResponse
 
 from open_hallucination_index.api.routes import health, verification
 from open_hallucination_index.infrastructure.config import get_settings
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        default_response_class=ORJSONResponse,
     )
 
     # CORS middleware

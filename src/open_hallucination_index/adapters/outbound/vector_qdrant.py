@@ -100,43 +100,69 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             raise QdrantError(f"Connection failed: {e}") from e
 
     async def _ensure_collection(self) -> None:
-        """Ensure the knowledge base collection exists."""
+        """
+        Ensure the knowledge base collection exists with correct configuration.
+        Handles concurrency between multiple workers.
+        """
         if self._client is None:
             return
 
+        collection_name = self._settings.collection_name
+        vector_size = self._settings.vector_size
+
         try:
-            collections = await self._client.get_collections()
-            collection_names = [c.name for c in collections.collections]
-
-            if self._settings.collection_name in collection_names:
-                # Check existing collection config
-                config = await self._client.get_collection(self._settings.collection_name)
-                # Pydantic models for Qdrant API
+            # Check if collection exists
+            exists = False
+            try:
+                config = await self._client.get_collection(collection_name)
+                exists = True
+                
+                # Check for dimension mismatch
                 existing_size = 0
-                if hasattr(config.config.params, "vectors") and hasattr(config.config.params.vectors, "size"):
-                    existing_size = config.config.params.vectors.size
-                elif isinstance(config.config.params.vectors, dict) and "size" in config.config.params.vectors:
-                    existing_size = config.config.params.vectors["size"]
+                vectors_params = config.config.params.vectors
+                
+                if hasattr(vectors_params, "size"):
+                    existing_size = vectors_params.size
+                elif isinstance(vectors_params, dict) and "size" in vectors_params:
+                    existing_size = vectors_params["size"]
+                elif hasattr(vectors_params, "__dict__") and "size" in vectors_params.__dict__:
+                    existing_size = vectors_params.__dict__["size"]
 
-                if existing_size != self._settings.vector_size:
+                if existing_size != vector_size:
                     logger.warning(
-                        f"Qdrant collection '{self._settings.collection_name}' has wrong dimension: "
-                        f"expected {self._settings.vector_size}, found {existing_size}. Recreating..."
+                        f"Qdrant collection '{collection_name}' has wrong dimension: "
+                        f"expected {vector_size}, found {existing_size}. Recreating..."
                     )
-                    await self._client.delete_collection(self._settings.collection_name)
-                    collection_names.remove(self._settings.collection_name)
+                    try:
+                        await self._client.delete_collection(collection_name)
+                    except Exception as e:
+                        # Ignore if already deleted by another worker
+                        logger.debug(f"Delete collection failed (likely already deleted): {e}")
+                    exists = False
+            except Exception:
+                # Collection does not exist or error getting it
+                exists = False
 
-            if self._settings.collection_name not in collection_names:
-                await self._client.create_collection(
-                    collection_name=self._settings.collection_name,
-                    vectors_config=VectorParams(
-                        size=self._settings.vector_size,
-                        distance=Distance.COSINE,
-                    ),
-                )
-                logger.info(f"Created Qdrant collection: {self._settings.collection_name}")
+            if not exists:
+                try:
+                    await self._client.create_collection(
+                        collection_name=collection_name,
+                        vectors_config=VectorParams(
+                            size=vector_size,
+                            distance=Distance.COSINE,
+                        ),
+                    )
+                    logger.info(f"Created Qdrant collection: {collection_name}")
+                except Exception as e:
+                    # If 409 Conflict, it means another worker created it in the meantime
+                    if "already exists" in str(e) or (hasattr(e, "status_code") and getattr(e, "status_code") == 409):
+                        logger.info(f"Collection {collection_name} already exists (created by another worker)")
+                    else:
+                        raise e
         except Exception as e:
-            logger.warning(f"Collection check/creation failed: {e}")
+            logger.error(f"Failed to ensure Qdrant collection: {e}")
+            # Re-raise to prevent starting with broken vector store
+            raise QdrantError(f"Collection initialization failed: {e}") from e
 
     async def disconnect(self) -> None:
         """Close the Qdrant connection."""

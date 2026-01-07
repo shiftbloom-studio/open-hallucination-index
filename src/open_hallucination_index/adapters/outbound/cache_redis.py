@@ -54,38 +54,75 @@ class RedisCacheAdapter(CacheProvider):
         self._default_ttl = settings.cache_ttl_seconds
 
     async def connect(self) -> None:
-        """Establish connection to Redis."""
-        try:
-            password = None
-            if self._settings.password:
-                password = self._settings.password.get_secret_value()
+        """Establish connection to Redis with retries."""
+        import time
 
-            # Create a connection pool with IPv4-only socket
-            pool = redis.ConnectionPool(
-                host=self._settings.host,
-                port=self._settings.port,
-                password=password,
-                db=self._settings.db,
-                max_connections=self._settings.max_connections,
-            )
-            # Force IPv4 socket family on the connection class
-            pool.connection_class = type(
-                "IPv4Connection",
-                (pool.connection_class,),
-                {"socket_type": socket.AF_INET},
-            )
+        max_retries = 10
+        retry_delay = 1.0
+        last_error = None
 
-            self._client = redis.Redis(
-                connection_pool=pool,
-                decode_responses=False,
-            )
+        for attempt in range(max_retries):
+            try:
+                password = None
+                if self._settings.password:
+                    password = self._settings.password.get_secret_value()
 
-            await self._client.ping()  # type: ignore[misc]
-            logger.info(f"Connected to Redis at {self._settings.host}:{self._settings.port}")
+                if self._settings.socket_path:
+                    # Connection via Unix Domain Socket
+                    pool = redis.ConnectionPool(
+                        connection_class=redis.UnixDomainSocketConnection,
+                        path=self._settings.socket_path,
+                        password=password,
+                        db=self._settings.db,
+                        max_connections=self._settings.max_connections,
+                    )
+                    if attempt == 0:
+                        logger.info(f"Connecting to Redis via Unix socket: {self._settings.socket_path}")
+                else:
+                    # Create a connection pool with IPv4-only socket
+                    pool = redis.ConnectionPool(
+                        host=self._settings.host,
+                        port=self._settings.port,
+                        password=password,
+                        db=self._settings.db,
+                        max_connections=self._settings.max_connections,
+                    )
+                    # Force IPv4 socket family on the connection class
+                    pool.connection_class = type(
+                        "IPv4Connection",
+                        (pool.connection_class,),
+                        {"socket_type": socket.AF_INET},
+                    )
+                    if attempt == 0:
+                        logger.info(f"Connecting to Redis via TCP: {self._settings.host}:{self._settings.port}")
 
-        except redis.ConnectionError as e:
-            logger.error(f"Redis connection failed: {e}")
-            raise RedisCacheError(f"Connection failed: {e}") from e
+                self._client = redis.Redis(
+                    connection_pool=pool,
+                    decode_responses=False,
+                )
+
+                await self._client.ping()  # type: ignore[misc]
+                
+                if self._settings.socket_path:
+                    logger.info(f"Connected to Redis via Unix socket: {self._settings.socket_path}")
+                else:
+                    logger.info(f"Connected to Redis at {self._settings.host}:{self._settings.port}")
+                return
+
+            except (redis.ConnectionError, FileNotFoundError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"Redis connection attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                continue
+            except Exception as e:
+                logger.error(f"Unexpected Redis error: {e}")
+                raise RedisCacheError(f"Connection failed: {e}") from e
+
+        logger.error(f"Redis connection failed after {max_retries} attempts: {last_error}")
+        raise RedisCacheError(f"Connection failed after {max_retries} attempts: {last_error}")
 
     async def disconnect(self) -> None:
         """Close the Redis connection."""

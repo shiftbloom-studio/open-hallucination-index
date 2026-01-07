@@ -32,8 +32,10 @@ def _get_model(model_name: str):
     logger.info(f"Loading embedding model: {model_name}")
 
     # Explicitly determine device
+    model_kwargs = {}
     if torch.cuda.is_available():
         device = "cuda"
+        model_kwargs = {"torch_dtype": torch.float16}
     elif torch.backends.mps.is_available():
         device = "mps"
     else:
@@ -41,7 +43,12 @@ def _get_model(model_name: str):
 
     # Load model with forced device to avoid meta-tensor issues
     # We disable trust_remote_code for security unless needed
-    model = SentenceTransformer(model_name, device=device, trust_remote_code=False)
+    model = SentenceTransformer(
+        model_name,
+        device=device,
+        trust_remote_code=False,
+        model_kwargs=model_kwargs,
+    )
 
     # Ensure all parameters are actually on the right device and NOT on meta
     # This specifically fixes the "Cannot copy out of meta tensor" error
@@ -115,7 +122,7 @@ class LocalEmbeddingAdapter:
         Returns:
             Embedding vector as list of floats.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_executor, self._embed_sync, text)
 
     async def generate_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
@@ -130,7 +137,7 @@ class LocalEmbeddingAdapter:
         """
         if not texts:
             return []
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_executor, self._embed_batch_sync, texts)
 
     async def health_check(self) -> bool:

@@ -28,9 +28,8 @@ RUN apt-get update \
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    # Suppress transformers deprecation warning and set cache path
-    HF_HOME=/app/.cache/huggingface \
-    TRANSFORMERS_CACHE=/app/.cache/huggingface
+    # Set HuggingFace cache path (replaces TRANSFORMERS_CACHE)
+    HF_HOME=/app/.cache/huggingface
 
 WORKDIR /app
 

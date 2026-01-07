@@ -93,6 +93,7 @@ class RedisSettings(BaseSettings):
     enabled: bool = Field(default=True, description="Enable Redis caching")
     host: str = Field(default="localhost")
     port: int = Field(default=6379)
+    socket_path: str | None = Field(default=None, description="Path to Unix socket")
     password: SecretStr | None = Field(default=None)
     db: int = Field(default=0, ge=0)
     cache_ttl_seconds: int = Field(

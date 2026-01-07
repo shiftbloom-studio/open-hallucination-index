@@ -123,7 +123,7 @@ class LLMClaimDecomposer(ClaimDecomposer):
             user_content = f"Context: {context}\n\n{user_content}"
 
         messages = [
-            LLMMessage(role="system", content=DECOMPOSITION_PROMPT),
+            LLMMessage(role="system", content=DECOMPOSITION_PROMPT + "\nRespond strictly with a JSON object containing a 'claims' list."),
             LLMMessage(role="user", content=user_content),
         ]
 
@@ -132,6 +132,7 @@ class LLMClaimDecomposer(ClaimDecomposer):
                 messages,
                 temperature=0.0,
                 max_tokens=2048,
+                json_mode=True # [NEU] Aktivieren
             )
 
             claims = self._parse_response(response.content, text)

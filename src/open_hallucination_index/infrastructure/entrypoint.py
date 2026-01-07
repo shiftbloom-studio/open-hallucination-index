@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import logging
 import sys
+import uvicorn
+import uvloop
 
 
 def main() -> None:
     """Run the API server using uvicorn."""
-    import uvicorn
-
+    uvloop.install()
+    
     from open_hallucination_index.infrastructure.config import get_settings
 
     settings = get_settings()

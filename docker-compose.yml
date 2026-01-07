@@ -35,7 +35,6 @@ services:
     container_name: ohi-redis
     ports:
       - "6379:6379"
-    command: redis-server --save 60 1 --loglevel warning
     volumes:
       - ./data/redis:/data
     networks:
@@ -162,6 +161,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    volumes:
+      - redis-socket:/run/redis
     restart: unless-stopped
 
   # 8. Nginx Reverse Proxy with SSL
@@ -196,3 +197,6 @@ services:
 networks:
   ohi-net:
     driver: bridge
+
+volumes:
+  redis-socket:

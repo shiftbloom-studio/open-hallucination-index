@@ -104,6 +104,7 @@ class OpenAILLMAdapter(LLMProvider):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         stop: list[str] | None = None,
+        json_mode: bool = False,
     ) -> LLMResponse:
         """
         Generate a completion for the given messages.
@@ -123,12 +124,15 @@ class OpenAILLMAdapter(LLMProvider):
         try:
             formatted_messages = [{"role": m.role, "content": m.content} for m in messages]
 
+            response_format = {"type": "json_object"} if json_mode else None
+
             response = await self._client.chat.completions.create(
                 model=self._model,
                 messages=formatted_messages,  # type: ignore[arg-type]
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stop=stop,
+                response_format=response_format,
             )
 
             choice = response.choices[0]
