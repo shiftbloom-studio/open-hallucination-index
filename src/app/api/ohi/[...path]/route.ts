@@ -63,16 +63,16 @@ async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> 
 
   const body = hasBody ? await req.arrayBuffer() : undefined;
 
-  const upstream = await fetch(upstreamUrl.toString(), {
-    method,
-    headers,
-    body,
-  });
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: upstream.headers,
-  });
+  const upstream = await fetch(upstreamUrl.toString(), { method, headers, body });
+  
+  return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
+} catch (err) {
+    console.error("Upstream fetch failed", { upstreamUrl: upstreamUrl?.toString?.(), err });
+    return NextResponse.json(
+      { error: "Upstream fetch failed", details: String(err) },
+      { status: 502 }
+    );
+  }
 }
 
 export const GET = handle;
