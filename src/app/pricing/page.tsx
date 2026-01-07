@@ -151,6 +151,7 @@ export default function PricingPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
 
   const supabase = createClient();
   const router = useRouter();
@@ -201,25 +202,44 @@ export default function PricingPage() {
     setAuthLoading(true);
 
     try {
-      // Attempt Sign Up
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-            emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+      if (authMode === "login") {
+        // Attempt Login
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          toast.error(error.message);
+          setAuthLoading(false);
+          return;
         }
-      });
 
-      if (error) {
-        toast.error(error.message);
-        setAuthLoading(false);
-        return;
-      }
+        if (data.user) {
+          setUser(data.user);
+          toast.success("Logged in! Redirecting to payment...");
+          await handleCheckout(selectedPackage, data.user.id, email);
+        }
+      } else {
+        // Attempt Sign Up
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+          }
+        });
 
-      if (data.user) {
-        toast.success("Account created! Redirecting to payment...");
-        // Proceed to checkout with the new user ID
-        await handleCheckout(selectedPackage, data.user.id, email);
+        if (error) {
+          toast.error(error.message);
+          setAuthLoading(false);
+          return;
+        }
+
+        if (data.user) {
+          toast.success("Account created! Redirecting to payment...");
+          await handleCheckout(selectedPackage, data.user.id, email);
+        }
       }
     } catch (error) {
       toast.error("Authentication failed");
@@ -310,7 +330,7 @@ export default function PricingPage() {
                     {loading === pkg.id ? (
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                     ) : (
-                        user ? "Buy Now" : "Sign up & Buy"
+                        "Buy Now"
                     )}
                   </Button>
                 </CardFooter>
@@ -479,11 +499,41 @@ export default function PricingPage() {
                 </button>
                 <div className="mb-6">
                     <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 mb-2">
-                        Create Account to Purchase
+                        {authMode === "login" ? "Login to Continue" : "Create Account"}
                     </h2>
                     <p className="text-slate-400 text-sm">
-                        Enter your details to create an account and proceed to secure checkout.
+                        {authMode === "login" 
+                          ? "Log in to your account to proceed to checkout." 
+                          : "Create an account to proceed to secure checkout."}
                     </p>
+                </div>
+
+                {/* Auth Mode Tabs */}
+                <div className="flex mb-6 bg-slate-800 rounded-lg p-1">
+                    <button
+                        type="button"
+                        onClick={() => setAuthMode("login")}
+                        className={cn(
+                            "flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all",
+                            authMode === "login" 
+                                ? "bg-blue-600 text-white" 
+                                : "text-slate-400 hover:text-white"
+                        )}
+                    >
+                        Login
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setAuthMode("signup")}
+                        className={cn(
+                            "flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all",
+                            authMode === "signup" 
+                                ? "bg-blue-600 text-white" 
+                                : "text-slate-400 hover:text-white"
+                        )}
+                    >
+                        Sign Up
+                    </button>
                 </div>
                 
                 <form onSubmit={handleAuthAndPurchase} className="space-y-4">
@@ -513,7 +563,7 @@ export default function PricingPage() {
                     <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={authLoading}>
                     {authLoading ? (
                         <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating Account...
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {authMode === "login" ? "Logging in..." : "Creating Account..."}
                         </>
                     ) : (
                         "Continue to Payment"
