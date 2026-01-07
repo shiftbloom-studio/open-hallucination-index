@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardClient from "./dashboard-client";
@@ -15,5 +16,9 @@ export default async function DashboardPage() {
     redirect("/auth/login");
   }
 
-  return <DashboardClient user={user} />;
+  return (
+    <Suspense fallback={null}>
+      <DashboardClient user={user} />
+    </Suspense>
+  );
 }

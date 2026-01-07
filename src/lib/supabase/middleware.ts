@@ -54,6 +54,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/accessibility') ||
     pathname === '/api/auth/callback' ||
     pathname === '/api/checkout' ||
+    pathname === '/api/checkout/status' ||
     pathname.startsWith('/api/webhooks/stripe');
 
   if (!user && !isPublicRoute) {
