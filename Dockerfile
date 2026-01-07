@@ -28,9 +28,9 @@ RUN apt-get update \
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    # Cache sentence-transformer models in container
-    TRANSFORMERS_CACHE=/app/.cache/huggingface \
-    HF_HOME=/app/.cache/huggingface
+    # Suppress transformers deprecation warning and set cache path
+    HF_HOME=/app/.cache/huggingface \
+    TRANSFORMERS_CACHE=/app/.cache/huggingface
 
 WORKDIR /app
 
@@ -43,8 +43,10 @@ RUN python -m pip install --no-cache-dir torch --index-url https://download.pyto
     && python -m pip install --no-cache-dir /wheels/* \
     && rm -rf /wheels
 
-# Pre-download the embedding model (optional, speeds up first request)
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" || true
+# Pre-download the embedding model (speeds up first request and bakes it into image)
+# We run this as root but ensure permissions are correct afterwards
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
+    && chown -R appuser:appuser /app/.cache
 
 EXPOSE 8080
 

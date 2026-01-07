@@ -26,17 +26,31 @@ _executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="embedding")
 @lru_cache(maxsize=1)
 def _get_model(model_name: str):
     """Load and cache the sentence transformer model."""
+    import torch
     from sentence_transformers import SentenceTransformer
     
     logger.info(f"Loading embedding model: {model_name}")
-    # Use device='cuda' if available, otherwise 'cpu'
-    try:
-        import torch
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-    except ImportError:
+    
+    # Explicitly determine device
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
         device = "cpu"
     
-    model = SentenceTransformer(model_name, device=device)
+    # Load model with forced device to avoid meta-tensor issues
+    # We disable trust_remote_code for security unless needed
+    model = SentenceTransformer(
+        model_name, 
+        device=device,
+        trust_remote_code=False
+    )
+    
+    # Ensure all parameters are actually on the right device and NOT on meta
+    # This specifically fixes the "Cannot copy out of meta tensor" error
+    model.to(device)
+    
     logger.info(f"Loaded embedding model on {device}, dim={model.get_sentence_embedding_dimension()}")
     return model
 

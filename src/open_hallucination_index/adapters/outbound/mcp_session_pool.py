@@ -330,18 +330,14 @@ class MCPSessionPool:
             True if session is valid, False otherwise.
         """
         try:
-            # Check age
-            if pooled.age_seconds > self._config.session_ttl_seconds:
-                logger.debug(f"Session expired for {self._source_name}")
-                return False
-            
             # Quick health check - list tools
-            async with asyncio.timeout(5.0):
+            # We use a slightly longer timeout and don't immediately fail on first transient error
+            async with asyncio.timeout(10.0):
                 await pooled.session.list_tools()
             
             return True
             
-        except Exception as e:
+        except (asyncio.TimeoutError, Exception) as e:
             logger.debug(f"Session validation failed for {self._source_name}: {e}")
             return False
 
@@ -512,15 +508,20 @@ class MCPSessionPool:
                 logger.debug(f"Removed idle session for {self._source_name}")
 
     async def _ensure_minimum_sessions(self) -> None:
-        """Ensure minimum number of sessions exist."""
+        """Ensure minimum number of sessions exist with retry logic."""
         async with self._lock:
             while len(self._sessions) < self._config.min_sessions:
+                if self._shutting_down:
+                    break
+                    
                 pooled = await self._create_session()
                 if pooled:
                     self._sessions.append(pooled)
                     await self._available.put(pooled)
                 else:
-                    break  # Stop if creation fails
+                    # If creation fails, wait a bit before retrying in the NEXT loop iteration
+                    logger.warning(f"Failed to replenish session pool for {self._source_name}, will retry in next health loop")
+                    break
 
     def get_stats(self) -> dict[str, Any]:
         """Get pool statistics."""

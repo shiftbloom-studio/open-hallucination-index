@@ -108,6 +108,24 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             collections = await self._client.get_collections()
             collection_names = [c.name for c in collections.collections]
 
+            if self._settings.collection_name in collection_names:
+                # Check existing collection config
+                config = await self._client.get_collection(self._settings.collection_name)
+                # Pydantic models for Qdrant API
+                existing_size = 0
+                if hasattr(config.config.params, "vectors") and hasattr(config.config.params.vectors, "size"):
+                    existing_size = config.config.params.vectors.size
+                elif isinstance(config.config.params.vectors, dict) and "size" in config.config.params.vectors:
+                    existing_size = config.config.params.vectors["size"]
+
+                if existing_size != self._settings.vector_size:
+                    logger.warning(
+                        f"Qdrant collection '{self._settings.collection_name}' has wrong dimension: "
+                        f"expected {self._settings.vector_size}, found {existing_size}. Recreating..."
+                    )
+                    await self._client.delete_collection(self._settings.collection_name)
+                    collection_names.remove(self._settings.collection_name)
+
             if self._settings.collection_name not in collection_names:
                 await self._client.create_collection(
                     collection_name=self._settings.collection_name,
