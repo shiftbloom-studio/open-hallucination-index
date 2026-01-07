@@ -1,3 +1,5 @@
+import { NextResponse } from 'next/server'
+
 const REQUIRED_ENVS = ["DEFAULT_API_URL", "DEFAULT_API_KEY"] as const;
 
 type RequiredEnv = (typeof REQUIRED_ENVS)[number];
