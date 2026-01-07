@@ -27,10 +27,14 @@ def main() -> None:
         format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    from open_hallucination_index.infrastructure.logging import HealthLiveAccessFilter
 
     logger = logging.getLogger(__name__)
     logger.info(f"Starting {settings.api.title} v{settings.api.version}")
     logger.info(f"Environment: {settings.environment}")
+
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.addFilter(HealthLiveAccessFilter(min_interval_seconds=120.0))
 
     # Determine host: use 127.0.0.1 for IPv4 when 0.0.0.0 is configured
     api_host = settings.api.host
