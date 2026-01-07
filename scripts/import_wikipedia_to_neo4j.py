@@ -369,6 +369,9 @@ def main():
     parser.add_argument("--directory", "-d", default=".", help="Pfad zu den XML Dumps")
     parser.add_argument("--batch-size", "-b", type=int, default=500)
     parser.add_argument("--workers", "-w", type=int, default=4)
+    parser.add_argument("--neo4j-uri", default=None, help="Neo4j URI (Standard: bolt://localhost:7687 oder NEO4J_URI env)")
+    parser.add_argument("--neo4j-user", default=None, help="Neo4j Username (Standard: neo4j oder NEO4J_USER env)")
+    parser.add_argument("--neo4j-password", default=None, help="Neo4j Password (Standard: password oder NEO4J_PASSWORD env)")
     args = parser.parse_args()
 
     # 1. Progress laden
@@ -397,9 +400,9 @@ def main():
     
     # Neo4j Verbindung
     neo4j = Neo4jImporter(
-        os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-        os.getenv("NEO4J_USER", "neo4j"),
-        os.getenv("NEO4J_PASSWORD", "password")
+        args.neo4j_uri or os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+        args.neo4j_user or os.getenv("NEO4J_USER", "neo4j"),
+        args.neo4j_password or os.getenv("NEO4J_PASSWORD", "password123")
     )
 
     try:

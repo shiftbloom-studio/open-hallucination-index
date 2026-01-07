@@ -27,5 +27,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Expose MCP port
 EXPOSE 8080
 
-# Run wikipedia-mcp with SSE transport
-CMD ["wikipedia-mcp", "--transport", "sse", "--host", "0.0.0.0", "--port", "8080", "--language", "en", "--enable-cache"]
+# Run wikipedia-mcp with SSE transport and minimal logging
+CMD ["wikipedia-mcp", "--transport", "sse", "--host", "0.0.0.0", "--port", "8080", "--language", "en", "--enable-cache", "--log-level", "WARNING"]

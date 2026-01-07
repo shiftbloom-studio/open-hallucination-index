@@ -21,7 +21,7 @@ from neo4j import GraphDatabase
 # Konfiguration
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password123")
 
 # Logging Setup
 logging.basicConfig(
@@ -205,8 +205,20 @@ class GraphOptimizer:
         self.run_query(f"CALL gds.graph.drop('{graph_name}', false)", desc="Graph Release")
 
 def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Neo4j Wikipedia Graph Optimizer")
+    parser.add_argument("--neo4j-uri", default=None, help="Neo4j URI (Standard: bolt://localhost:7687 oder NEO4J_URI env)")
+    parser.add_argument("--neo4j-user", default=None, help="Neo4j Username (Standard: neo4j oder NEO4J_USER env)")
+    parser.add_argument("--neo4j-password", default=None, help="Neo4j Password (Standard: password oder NEO4J_PASSWORD env)")
+    args = parser.parse_args()
+    
     logger.info("Start Neo4j Optimization...")
-    opt = GraphOptimizer(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    opt = GraphOptimizer(
+        args.neo4j_uri or NEO4J_URI,
+        args.neo4j_user or NEO4J_USER,
+        args.neo4j_password or NEO4J_PASSWORD
+    )
     
     try:
         # 1. Struktur bereinigen

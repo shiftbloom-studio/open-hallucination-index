@@ -15,9 +15,11 @@ COPY pyproject.toml README.md /app/
 COPY src /app/src
 
 # Install PyTorch CPU-only first (smaller than full CUDA version)
-RUN python -m pip install --upgrade pip \
-    && python -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
-    && python -m pip wheel --no-cache-dir --wheel-dir /wheels .
+# Use BuildKit cache mounts to avoid re-downloading packages
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade pip \
+    && python -m pip install torch --index-url https://download.pytorch.org/whl/cpu \
+    && python -m pip wheel --wheel-dir /wheels .
 
 
 FROM python:3.12-slim
@@ -38,12 +40,13 @@ RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app/.cache
 
 COPY --from=builder /wheels /wheels
-RUN python -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
-    && python -m pip install --no-cache-dir /wheels/* \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install torch --index-url https://download.pytorch.org/whl/cpu \
+    && python -m pip install /wheels/* \
     && rm -rf /wheels
 
 # Pre-download the embedding model (speeds up first request and bakes it into image)
-# We run this as root but ensure permissions are correct afterwards
+# Download directly to the app cache directory with proper ownership
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
     && chown -R appuser:appuser /app/.cache
 

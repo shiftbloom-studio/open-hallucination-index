@@ -40,7 +40,7 @@ services:
     networks:
       - ohi-net
 
-  # 4. vLLM (GPU Accelerated) - Upgraded to Qwen2.5-32B with CPU offload
+  # 4. vLLM (GPU Accelerated) - Qwen2.5-14B with AWQ quantization
   vllm:
     image: vllm/vllm-openai:latest
     container_name: ohi-vllm
@@ -62,9 +62,9 @@ services:
     volumes:
       # Model-Cache persistent machen
       - ~/.cache/huggingface:/root/.cache/huggingface
-    # Qwen2.5-7B with AWQ quantization for 24GB VRAM
+    # Qwen2.5-14B with AWQ quantization
     command: >
-      --model Qwen/Qwen2.5-7B-Instruct-AWQ
+      --model Qwen/Qwen2.5-14B-Instruct-AWQ
       --quantization awq
       --dtype half
       --max-model-len 8192
@@ -83,6 +83,9 @@ services:
     container_name: ohi-wikipedia-mcp
     ports:
       - "8081:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MCP_LOG_LEVEL=WARNING
     restart: unless-stopped
     networks:
       - ohi-net
@@ -106,6 +109,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      cache_from:
+        - open-hallucination-index:local
     image: open-hallucination-index:local
     container_name: ohi-api
     # Internal only - nginx handles external traffic
@@ -200,14 +205,17 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      cache_from:
+        - ohi-frontend:local
+    image: ohi-frontend:local
     container_name: ohi-frontend
     expose:
       - "3000"
     environment:
       - NODE_ENV=production
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      - DATABASE_URL=${DATABASE_URL:-}
       - NEXT_PUBLIC_API_URL=http://ohi-api:8080
     depends_on:
       - ohi-api
