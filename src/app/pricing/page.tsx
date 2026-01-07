@@ -1,17 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence, useInView } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Check, Loader2, Sparkles, Zap, Shield, Crown, X, ChevronDown, Star, Lock, RefreshCw, Users, Globe, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useRef } from "react";
 
 const packages = [
   {
@@ -155,6 +154,7 @@ export default function PricingPage() {
 
   const supabase = createClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const getUser = async () => {
@@ -163,6 +163,42 @@ export default function PricingPage() {
     };
     getUser();
   }, [supabase]);
+
+  useEffect(() => {
+    const canceled = searchParams.get("canceled");
+    const sessionId = searchParams.get("session_id");
+
+    if (!canceled) {
+      return;
+    }
+
+    const checkStatus = async () => {
+      if (!sessionId) {
+        toast.error("Payment canceled. You can try again anytime.");
+        router.replace("/pricing");
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/checkout/status?session_id=${sessionId}`);
+        if (!res.ok) throw new Error("Failed to fetch checkout status");
+        const data = await res.json();
+
+        if (data.status === "expired" || data.paymentStatus === "unpaid") {
+          toast.error("Payment was canceled or expired. Please try again.");
+        } else {
+          toast.error("Payment not completed. Please try again.");
+        }
+      } catch (error) {
+        console.error("Failed to verify checkout status:", error);
+        toast.error("We couldn't confirm the payment status. Please try again.");
+      } finally {
+        router.replace("/pricing");
+      }
+    };
+
+    checkStatus();
+  }, [router, searchParams]);
 
   const handlePurchaseClick = (pkgId: string) => {
     setSelectedPackage(pkgId);

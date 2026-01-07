@@ -2,9 +2,7 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
-import { db } from '@/lib/db';
-import { users } from '@/lib/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function POST(req: Request) {
   const body = await req.text();
@@ -40,19 +38,31 @@ export async function POST(req: Request) {
 
       if (tokensToAdd > 0) {
         try {
-          await db.update(users)
-            .set({
-              ohiTokens: sql`${users.ohiTokens} + ${tokensToAdd}`,
-            })
-            .where(eq(users.id, userId));
+          const supabase = createAdminClient();
+          const { error } = await supabase.rpc('increment_profile_tokens', {
+            profile_id: userId,
+            token_amount: tokensToAdd,
+          });
+
+          if (error) {
+            console.error('[STRIPE_WEBHOOK] Supabase update failed:', error);
+            return new NextResponse("Database Error", { status: 500 });
+          }
           
           console.log(`[STRIPE_WEBHOOK] Added ${tokensToAdd} tokens to user ${userId}`);
         } catch (error) {
-           console.error('[STRIPE_WEBHOOK] Database update failed:', error);
-           return new NextResponse("Database Error", { status: 500 });
+          console.error('[STRIPE_WEBHOOK] Database update failed:', error);
+          return new NextResponse("Database Error", { status: 500 });
         }
       }
     }
+  } else if (event.type === 'checkout.session.expired') {
+    console.warn('[STRIPE_WEBHOOK] Checkout session expired:', session.id);
+  } else if (event.type === 'checkout.session.async_payment_failed') {
+    console.warn('[STRIPE_WEBHOOK] Async payment failed:', session.id);
+  } else if (event.type === 'payment_intent.payment_failed') {
+    const intent = event.data.object as Stripe.PaymentIntent;
+    console.warn('[STRIPE_WEBHOOK] Payment intent failed:', intent.id);
   }
 
   return new NextResponse(null, { status: 200 });

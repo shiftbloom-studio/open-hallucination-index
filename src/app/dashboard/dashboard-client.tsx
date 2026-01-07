@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ interface DashboardClientProps {
 export default function DashboardClient({ user }: DashboardClientProps) {
   const [userTokens, setUserTokens] = useState<number>(0);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   // Fetch user tokens
@@ -40,6 +41,44 @@ export default function DashboardClient({ user }: DashboardClientProps) {
       setUserTokens(tokenData.tokens);
     }
   }, [tokenData]);
+
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const sessionId = searchParams.get("session_id");
+
+    if (!success) {
+      return;
+    }
+
+    const checkStatus = async () => {
+      if (!sessionId) {
+        toast.success("Payment successful! Your tokens will appear shortly.");
+        refetchTokens();
+        router.replace("/dashboard");
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/checkout/status?session_id=${sessionId}`);
+        if (!res.ok) throw new Error("Failed to fetch checkout status");
+        const data = await res.json();
+
+        if (data.paymentStatus === "paid") {
+          toast.success("Payment successful! Your tokens are now available.");
+          refetchTokens();
+        } else {
+          toast.error("Payment not completed. If you were charged, contact support.");
+        }
+      } catch (error) {
+        console.error("Failed to verify checkout status:", error);
+        toast.error("We couldn't confirm your payment yet. Please refresh later.");
+      } finally {
+        router.replace("/dashboard");
+      }
+    };
+
+    checkStatus();
+  }, [refetchTokens, router, searchParams]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
