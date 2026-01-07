@@ -87,7 +87,7 @@ describe('User Flow Integration Tests', () => {
   describe('Hallucination Verification Flow', () => {
     it('should show verification states', async () => {
       const MockVerification = () => {
-        const [status, setStatus] = vi.fn().mockReturnValue(['idle', vi.fn()])[0]();
+        const [status, setStatus] = ['idle', vi.fn()] as const;
         
         return (
           <div>

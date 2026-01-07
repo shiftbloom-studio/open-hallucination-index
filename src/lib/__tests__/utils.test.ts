@@ -60,7 +60,9 @@ describe('utils', () => {
     it('should handle complex nested conditional classes', () => {
       const isActive = true;
       const isDisabled = false;
-      const size = 'large';
+      type Size = 'small' | 'medium' | 'large';
+      const getSize = (): Size => 'large';
+      const size = getSize();
       
       const result = cn(
         'base-class',
