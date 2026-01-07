@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@/test/test-utils';
+import { render, screen } from '@/test/test-utils';
 import userEvent from '@testing-library/user-event';
 
 // Mock components for integration testing
@@ -86,17 +86,6 @@ describe('User Flow Integration Tests', () => {
 
   describe('Hallucination Verification Flow', () => {
     it('should show verification states', async () => {
-      const MockVerification = () => {
-        const [status, setStatus] = ['idle', vi.fn()] as const;
-        
-        return (
-          <div>
-            <button onClick={() => setStatus('loading')}>Verify</button>
-            <span data-testid="status">{status}</span>
-          </div>
-        );
-      };
-
       render(
         <div>
           <button>Verify</button>

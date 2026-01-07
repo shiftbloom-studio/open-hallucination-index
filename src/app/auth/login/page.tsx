@@ -50,7 +50,7 @@ export default function LoginPage() {
       toast.success("Successfully logged in!");
       router.push("/dashboard");
       router.refresh();
-    } catch (error) {
+    } catch {
       setFormError("An unexpected error occurred. Please try again.");
       setLoading(false);
     }

@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { z } from "zod";
 
 // --- Types tailored to Python Pydantic Models ---
@@ -47,7 +48,7 @@ export interface ClaimSummary {
 export interface TrustScore {
   score: number;
   // Add other fields if discovered
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface VerifyTextResponse {
@@ -97,8 +98,8 @@ export class ApiClient {
       body: JSON.stringify(request),
     });
     if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Verification failed: ${res.status} ${errorText}`);
+      const errorText = await res.text();
+      throw new Error(`Verification failed: ${res.status} ${errorText}`);
     }
     return res.json();
   }
@@ -109,10 +110,12 @@ export class ApiClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
-    if (!res.ok) throw new Error(`Batch verification failed: ${res.statusText}`);
+    if (!res.ok)
+      throw new Error(`Batch verification failed: ${res.statusText}`);
     return res.json();
   }
 }
 
 // Helper to create client instance
-export const createApiClient = (baseUrl: string = "/api/ohi") => new ApiClient(baseUrl);
+export const createApiClient = (baseUrl: string = "/api/ohi") =>
+  new ApiClient(baseUrl);

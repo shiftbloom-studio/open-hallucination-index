@@ -93,7 +93,7 @@ function StepCard({
   const progress = useRef(0);
   const [borderPosition, setBorderPosition] = useState({ x: 0, y: 0 });
 
-  useAnimationFrame((time) => {
+  useAnimationFrame(() => {
     if (!isActive || !pathRef.current) return;
     const rect = pathRef.current;
     const w = rect.width.baseVal.value;

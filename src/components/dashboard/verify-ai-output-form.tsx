@@ -48,11 +48,11 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
     setVerificationResult(null);
 
     try {
-      // First, deduct tokens
+      // First, deduct tokens (now secure: server calculates needed amount from actual content)
       const deductResponse = await fetch("/api/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ textLength }),
+        body: JSON.stringify({ text, context }),
       });
 
       if (!deductResponse.ok) {
@@ -83,7 +83,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
     } finally {
       setIsVerifying(false);
     }
-  }, [text, context, textLength, tokensNeeded, userTokens, hasEnoughTokens, onTokensUpdated]);
+  }, [text, context, tokensNeeded, userTokens, hasEnoughTokens, onTokensUpdated]);
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
@@ -263,7 +263,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
             {/* Claims List */}
             <div className="space-y-3">
               <h4 className="text-sm font-medium text-muted-foreground">Analyzed Claims</h4>
-              {verificationResult.claims.map((claim, index) => (
+              {verificationResult.claims.map((claim) => (
                 <div
                   key={claim.id}
                   className={cn(

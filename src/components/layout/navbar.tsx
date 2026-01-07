@@ -20,7 +20,7 @@ export function Navbar() {
   const [tokens, setTokens] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   
-  const isAuthPage = pathname?.startsWith("/auth");
+
   const isDashboard = pathname?.startsWith("/dashboard");
 
   useEffect(() => {

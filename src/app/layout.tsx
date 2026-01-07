@@ -10,7 +10,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { CookieConsent } from "@/components/layout/cookie-consent";
 import { ConsentAwareAnalytics } from "@/components/analytics/consent-aware-analytics";
 import { Footer } from "@/components/layout/footer";
-import { Analytics } from "@vercel/analytics/react";
+
 
 const inter = Inter({
   subsets: ["latin"],
@@ -32,9 +32,9 @@ const jetbrainsMono = JetBrains_Mono({
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.NODE_ENV === "development"
-    ? "http://localhost:3000"
-    : "https://open-hallucination-index.org");
+  (process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000");
 const siteName = "Open Hallucination Index";
 const siteDescription =
   "Open-source project to measure and mitigate hallucinations in generative AI — practical tools, benchmarks and honest evaluations to improve model reliability.";
@@ -73,16 +73,14 @@ export const metadata: Metadata = {
   },
   description: siteDescription,
   keywords: [
-    'AI safety',
-    'hallucination',
-    'factuality',
-    'generative AI',
-    'benchmark',
-    'open-source',
+    "AI safety",
+    "hallucination",
+    "factuality",
+    "generative AI",
+    "benchmark",
+    "open-source",
   ],
-  authors: [
-    { name: siteName, url: siteUrl },
-  ],
+  authors: [{ name: siteName, url: siteUrl }],
   creator: siteName,
   publisher: siteName,
   category: "Technology",
@@ -112,9 +110,9 @@ export const metadata: Metadata = {
     googleBot: {
       index: true,
       follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
     },
   },
   openGraph: {
@@ -173,26 +171,32 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const jsonLd = JSON.stringify(structuredData).replace(/</g, "\\u003c");
+
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
+    >
       <body className="font-sans antialiased">
         <Script
           id="structured-data"
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+          dangerouslySetInnerHTML={{ __html: jsonLd }}
         />
         <Providers>
           <SmoothScroll>
-             <ParticlesBackground />
-             <Navbar />
-             {children}
-             <Footer />
-             <CookieConsent />
-             <ConsentAwareAnalytics />
-             <Toaster />
+            <ParticlesBackground />
+            <Navbar />
+            {children}
+            <Footer />
+            <CookieConsent />
+            <ConsentAwareAnalytics />
+            <Toaster />
           </SmoothScroll>
         </Providers>
-        <Analytics />
+
       </body>
     </html>
   );

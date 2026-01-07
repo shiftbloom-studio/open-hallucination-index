@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 
 const REQUIRED_ENVS = ["DEFAULT_API_URL", "DEFAULT_API_KEY"] as const;
-
 type RequiredEnv = (typeof REQUIRED_ENVS)[number];
+
+export const getRequiredEnvs = () => REQUIRED_ENVS;
 
 function requireEnv(name: RequiredEnv): string {
   const value = process.env[name];
@@ -27,7 +28,10 @@ function copyHeaders(incoming: Headers) {
   return headers;
 }
 
-async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> }) {
+async function handle(
+  req: Request,
+  ctx: { params: Promise<{ path?: string[] }> }
+) {
   const { path = [] } = await ctx.params;
 
   const baseUrl = requireEnv("DEFAULT_API_URL");
@@ -47,14 +51,19 @@ async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> 
   // strip the extra `api/` to avoid duplicating `/api` in the upstream URL.
   try {
     const parsedBase = new URL(baseUrl);
-    if (parsedBase.pathname.endsWith("/api") && forwardedPath.startsWith("api/")) {
+    if (
+      parsedBase.pathname.endsWith("/api") &&
+      forwardedPath.startsWith("api/")
+    ) {
       forwardedPath = forwardedPath.replace(/^api\//, "");
     }
-  } catch (e) {
+  } catch {
     // ignore if baseUrl isn't a full URL
   }
 
-  const upstreamUrl = forwardedPath ? new URL(joinUrl(baseUrl, forwardedPath)) : new URL(baseUrl);
+  const upstreamUrl = forwardedPath
+    ? new URL(joinUrl(baseUrl, forwardedPath))
+    : new URL(baseUrl);
   upstreamUrl.search = incomingUrl.search;
 
   const headers = copyHeaders(req.headers);
@@ -65,12 +74,25 @@ async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> 
 
   const body = hasBody ? await req.arrayBuffer() : undefined;
   try {
-    const upstream = await fetch(upstreamUrl.toString(), { method, headers, body });
-  
-    return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
+    const upstream = await fetch(upstreamUrl.toString(), {
+      method,
+      headers,
+      body,
+    });
+
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: upstream.headers,
+    });
   } catch (err) {
-    console.error("Upstream fetch failed", { upstreamUrl: upstreamUrl?.toString?.(), err });
-    return NextResponse.json({ error: "Upstream fetch failed", details: String(err) }, { status: 502 });
+    console.error("Upstream fetch failed", {
+      upstreamUrl: upstreamUrl?.toString?.(),
+      err,
+    });
+    return NextResponse.json(
+      { error: "Upstream fetch failed", details: String(err) },
+      { status: 502 }
+    );
   }
 }
 

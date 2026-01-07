@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useInView, useSpring, useTransform, AnimatePresence } from "framer-motion";
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState } from "react";
 
 function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -14,9 +14,7 @@ function AnimatedCounter({ value, suffix = "" }: { value: number; suffix?: strin
     if (isInView) spring.set(value);
   }, [isInView, spring, value]);
 
-  useEffect(() => {
-    return display.on("change", (v) => setDisplayValue(v));
-  }, [display]);
+  useEffect(() => display.on("change", (v) => setDisplayValue(v)), [display]);
 
   return (
     <span ref={ref} className="tabular-nums">
@@ -94,7 +92,7 @@ function GlitchText({ text, isGlitching }: { text: string; isGlitching: boolean 
       setDisplayText(
         text
           .split("")
-          .map((char, i) => {
+          .map((char) => {
             if (char === " ") return " ";
             if (Math.random() > 0.7) {
               return glitchChars[Math.floor(Math.random() * glitchChars.length)];
@@ -300,9 +298,12 @@ function useAnimationState(isInView: boolean) {
     setState({ phase: "analyzing", claimIndex: 0 });
     scheduleNextPhase("analyzing", 0);
     
+    // Copy the ref value to a stable variable for the cleanup function
+    const currentAnimation = animationRef.current;
+    
     return () => {
-      if (animationRef.current.timeoutId) {
-        clearTimeout(animationRef.current.timeoutId);
+      if (currentAnimation.timeoutId) {
+        clearTimeout(currentAnimation.timeoutId);
       }
     };
   }, [isInView]);
@@ -600,13 +601,13 @@ export function ProblemSection() {
                 animate={isInView ? { opacity: 1, scale: 1 } : {}}
                 transition={{ duration: 0.8, delay: 0.3 }}
               >
-                {stats.map((stat, i) => (
+                {stats.map((stat, index) => (
                   <motion.div
                     key={stat.label}
                     className="relative flex flex-col items-center p-4 rounded-xl bg-white/5 border border-white/10"
                     initial={{ opacity: 0, y: 20 }}
                     animate={isInView ? { opacity: 1, y: 0 } : {}}
-                    transition={{ delay: 0.4 + i * 0.1 }}
+                    transition={{ delay: 0.4 + index * 0.1 }}
                     whileHover={{ scale: 1.05, borderColor: "rgba(139,92,246,0.5)" }}
                   >
                     <span className="text-2xl md:text-3xl font-bold text-white">

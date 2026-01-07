@@ -2,8 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@/test/test-utils';
 import userEvent from '@testing-library/user-event';
 import AddHallucinationForm from '@/components/dashboard/add-hallucination-form';
-import { server } from '@/test/mocks/server';
-import { http, HttpResponse } from 'msw';
 
 // Mock sonner toast
 vi.mock('sonner', () => ({

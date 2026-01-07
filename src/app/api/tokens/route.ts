@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
@@ -9,123 +9,132 @@ const INITIAL_TOKENS = 5;
 export async function GET() {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Get or create user profile in Supabase
     const { data: fetchedProfile, error: profileError } = await supabase
-      .from('profiles')
-      .select('tokens')
-      .eq('id', user.id)
+      .from("profiles")
+      .select("tokens")
+      .eq("id", user.id)
       .single();
 
     let profile = fetchedProfile;
 
-    if (profileError && profileError.code === 'PGRST116') {
+    if (profileError && profileError.code === "PGRST116") {
       // Profile doesn't exist, create it with initial tokens
       const { data: newProfile, error: createError } = await supabase
-        .from('profiles')
+        .from("profiles")
         .insert({ id: user.id, email: user.email, tokens: INITIAL_TOKENS })
-        .select('tokens')
+        .select("tokens")
         .single();
 
       if (createError) {
         console.error("Error creating profile:", createError);
-        return NextResponse.json({ error: "Failed to create profile" }, { status: 500 });
+        return NextResponse.json(
+          { error: "Failed to create profile" },
+          { status: 500 }
+        );
       }
       profile = newProfile;
     } else if (profileError) {
       console.error("Error fetching profile:", profileError);
-      return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Failed to fetch profile" },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       tokens: profile?.tokens ?? INITIAL_TOKENS,
       email: user.email,
     });
   } catch (error) {
     console.error("Error fetching tokens:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
-// POST /api/tokens - Deduct tokens based on text length
+// POST /api/tokens - Deduct tokens based on actual content length
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { textLength } = body;
+    const { text, context } = await request.json();
 
-    if (typeof textLength !== 'number' || textLength <= 0) {
-      return NextResponse.json({ error: "Invalid text length" }, { status: 400 });
+    if (typeof text !== "string") {
+      return NextResponse.json(
+        { error: "Text is required and must be a string" },
+        { status: 400 }
+      );
     }
 
     // Calculate tokens needed (1 token per 1000 characters, minimum 1)
-    const tokensNeeded = Math.max(1, Math.ceil(textLength / 1000));
+    // We derive this from the actual strings, not a self-reported length
+    const totalLength = text.length + (context?.length ?? 0);
+    const tokensNeeded = Math.max(1, Math.ceil(totalLength / 1000));
 
-    // Get current token balance
-    const { data: fetchedProfile, error: profileError } = await supabase
-      .from('profiles')
-      .select('tokens')
-      .eq('id', user.id)
-      .single();
-
-    let profile = fetchedProfile;
-
-    if (profileError && profileError.code === 'PGRST116') {
-      // Create profile with initial tokens if it doesn't exist
-      const { data: newProfile, error: createError } = await supabase
-        .from('profiles')
-        .insert({ id: user.id, email: user.email, tokens: INITIAL_TOKENS })
-        .select('tokens')
-        .single();
-
-      if (createError) {
-        return NextResponse.json({ error: "Failed to create profile" }, { status: 500 });
+    // Atomic deduction using RPC to prevent race conditions and ensure non-negative balance
+    const { data, error: rpcError } = await supabase.rpc(
+      "deduct_profile_tokens",
+      {
+        p_profile_id: user.id,
+        p_amount: tokensNeeded,
       }
-      profile = newProfile;
-    } else if (profileError) {
-      return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
+    );
+
+    if (rpcError) {
+      console.error("RPC Error (deduct_profile_tokens):", rpcError);
+
+      // Specifically handle the "Insufficient tokens" case if the RPC raises an exception or returns null
+      // Assuming RPC returns updated tokens or null if failed
+      return NextResponse.json(
+        {
+          error: "Insufficient tokens or transaction failed",
+          tokensNeeded,
+        },
+        { status: 402 }
+      );
     }
 
-    const currentTokens = profile?.tokens ?? 0;
-
-    if (currentTokens < tokensNeeded) {
-      return NextResponse.json({ 
-        error: "Insufficient tokens",
-        tokensNeeded,
-        tokensAvailable: currentTokens,
-      }, { status: 402 });
+    // If data is null or undefined, the RPC might have returned nothing because the 'where' clause failed
+    if (data === null) {
+      return NextResponse.json(
+        {
+          error: "Insufficient tokens",
+          tokensNeeded,
+        },
+        { status: 402 }
+      );
     }
 
-    // Deduct tokens
-    const newBalance = currentTokens - tokensNeeded;
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ tokens: newBalance, updated_at: new Date().toISOString() })
-      .eq('id', user.id);
-
-    if (updateError) {
-      console.error("Error updating tokens:", updateError);
-      return NextResponse.json({ error: "Failed to update tokens" }, { status: 500 });
-    }
-
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       tokensDeducted: tokensNeeded,
-      tokensRemaining: newBalance,
+      tokensRemaining: data, // RPC returns the new balance
     });
   } catch (error) {
     console.error("Error deducting tokens:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

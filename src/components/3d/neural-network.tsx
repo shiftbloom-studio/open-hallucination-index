@@ -3,10 +3,10 @@
 import { useRef, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Points, PointMaterial } from "@react-three/drei";
-import * as THREE from "three";
+import type * as THREE from "three";
 
-function NetworkPoints(props: any) {
-  const ref = useRef<any>(null);
+function NetworkPoints(props: Record<string, unknown>) {
+  const ref = useRef<THREE.Points>(null);
   
   // Generate random points on a sphere
   const sphere = useMemo(() => {

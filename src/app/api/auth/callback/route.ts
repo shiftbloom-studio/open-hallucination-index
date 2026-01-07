@@ -8,12 +8,14 @@ const INITIAL_TOKENS = 5;
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+
+  const next = searchParams.get("next");
+  const safeNext = next?.startsWith("/") ? next : "/dashboard";
 
   if (code) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    
+
     if (!error && data.user) {
       // Ensure user has a profile with initial tokens
       try {
@@ -27,10 +29,10 @@ export async function GET(request: Request) {
           // Create new profile with initial tokens
           await supabase
             .from('profiles')
-            .insert({ 
-              id: data.user.id, 
-              email: data.user.email, 
-              tokens: INITIAL_TOKENS 
+            .insert({
+              id: data.user.id,
+              email: data.user.email,
+              tokens: INITIAL_TOKENS
             });
         }
       } catch (dbError) {
@@ -38,7 +40,8 @@ export async function GET(request: Request) {
         // Continue anyway - profile can be created on first API call
       }
 
-      return NextResponse.redirect(`${origin}${next}`);
+
+      return NextResponse.redirect(`${origin}${safeNext}`);
     }
   }
 

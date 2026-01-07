@@ -63,7 +63,7 @@ export default function SignupPage() {
         toast.success("Check your email to confirm your account!");
         router.push("/auth/login");
       }
-    } catch (error) {
+    } catch {
       setFormError("An unexpected error occurred. Please try again.");
       setLoading(false);
     }

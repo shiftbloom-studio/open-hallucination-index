@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Loader2, Sparkles, Zap, Shield, Crown, X, ChevronDown, Star, Lock, RefreshCw, Users, Globe, Award } from "lucide-react";
+import { Check, Loader2, Sparkles, Zap, Shield, Crown, X, ChevronDown, Star, Lock, RefreshCw, Users, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { type User } from "@supabase/supabase-js";
 
 const packages = [
   {
@@ -142,7 +143,7 @@ function FAQItem({ question, answer, index }: { question: string; answer: string
 
 function PricingContent() {
   const [loading, setLoading] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   
@@ -189,8 +190,8 @@ function PricingContent() {
         } else {
           toast.error("Payment not completed. Please try again.");
         }
-      } catch (error) {
-        console.error("Failed to verify checkout status:", error);
+      } catch {
+        console.error("Failed to verify checkout status");
         toast.error("We couldn't confirm the payment status. Please try again.");
       } finally {
         router.replace("/pricing");
@@ -227,7 +228,7 @@ function PricingContent() {
       const { url } = await res.json();
       window.location.href = url;
       return true;
-    } catch (error) {
+    } catch {
       toast.error("Something went wrong. Please try again.");
       setLoading(null);
       return false;
@@ -291,7 +292,7 @@ function PricingContent() {
           setAuthLoading(false);
         }
       }
-    } catch (error) {
+    } catch {
       toast.error("Authentication failed");
       setAuthLoading(false);
     }
