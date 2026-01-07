@@ -28,9 +28,9 @@ def _get_model(model_name: str):
     """Load and cache the sentence transformer model."""
     import torch
     from sentence_transformers import SentenceTransformer
-    
+
     logger.info(f"Loading embedding model: {model_name}")
-    
+
     # Explicitly determine device
     if torch.cuda.is_available():
         device = "cuda"
@@ -38,32 +38,29 @@ def _get_model(model_name: str):
         device = "mps"
     else:
         device = "cpu"
-    
+
     # Load model with forced device to avoid meta-tensor issues
     # We disable trust_remote_code for security unless needed
-    model = SentenceTransformer(
-        model_name, 
-        device=device,
-        trust_remote_code=False
-    )
-    
+    model = SentenceTransformer(model_name, device=device, trust_remote_code=False)
+
     # Ensure all parameters are actually on the right device and NOT on meta
     # This specifically fixes the "Cannot copy out of meta tensor" error
     model.to(device)
-    
-    logger.info(f"Loaded embedding model on {device}, dim={model.get_sentence_embedding_dimension()}")
+
+    dim = model.get_sentence_embedding_dimension()
+    logger.info(f"Loaded embedding model on {device}, dim={dim}")
     return model
 
 
 class LocalEmbeddingAdapter:
     """
     Adapter for local embedding generation using sentence-transformers.
-    
+
     Uses all-MiniLM-L6-v2 by default (384 dimensions, fast, good quality).
     For higher quality, use all-mpnet-base-v2 (768 dimensions).
     """
 
-    def __init__(self, settings: "EmbeddingSettings") -> None:
+    def __init__(self, settings: EmbeddingSettings) -> None:
         """
         Initialize the local embedding adapter.
 

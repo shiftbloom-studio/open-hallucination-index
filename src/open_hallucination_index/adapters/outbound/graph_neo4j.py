@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from neo4j import AsyncGraphDatabase
-from neo4j.exceptions import ServiceUnavailable, AuthError
+from neo4j.exceptions import AuthError, ServiceUnavailable
 
 from open_hallucination_index.domain.entities import Evidence, EvidenceSource
 from open_hallucination_index.ports.knowledge_store import GraphKnowledgeStore
@@ -211,16 +211,12 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
 
         # Multi-hop path search if subject and object are known
         if claim.subject and claim.object and max_hops > 1:
-            path_evidence = await self._find_paths(
-                claim.subject, claim.object, max_hops
-            )
+            path_evidence = await self._find_paths(claim.subject, claim.object, max_hops)
             evidence.extend(path_evidence)
 
         return evidence
 
-    async def _entity_search(
-        self, claim: Claim, evidence: list[Evidence]
-    ) -> None:
+    async def _entity_search(self, claim: Claim, evidence: list[Evidence]) -> None:
         """Entity search based on capitalized words in claim."""
         if self._driver is None:
             return
@@ -260,9 +256,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
         except Exception as e:
             logger.debug(f"Entity search failed: {e}")
 
-    async def _find_paths(
-        self, subject: str, obj: str, max_hops: int
-    ) -> list[Evidence]:
+    async def _find_paths(self, subject: str, obj: str, max_hops: int) -> list[Evidence]:
         """Find paths between two entities up to max_hops."""
         if self._driver is None:
             return []
@@ -373,6 +367,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
 
         # Create content hash for deduplication
         import hashlib
+
         content_hash = hashlib.sha256(evidence.content.encode()).hexdigest()[:32]
 
         # Determine source type from EvidenceSource enum
@@ -455,16 +450,18 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                     except ValueError:
                         source = EvidenceSource.CACHED
 
-                    evidences.append(Evidence(
-                        id=uuid4(),
-                        source=source,
-                        source_id=node.get("source_id"),
-                        content=node.get("content", ""),
-                        similarity_score=node.get("similarity_score"),
-                        match_type="persisted",
-                        retrieved_at=datetime.utcnow(),
-                        source_uri=node.get("source_uri"),
-                    ))
+                    evidences.append(
+                        Evidence(
+                            id=uuid4(),
+                            source=source,
+                            source_id=node.get("source_id"),
+                            content=node.get("content", ""),
+                            similarity_score=node.get("similarity_score"),
+                            match_type="persisted",
+                            retrieved_at=datetime.utcnow(),
+                            source_uri=node.get("source_uri"),
+                        )
+                    )
         except Exception as e:
             logger.warning(f"Persisted evidence search failed: {e}")
 

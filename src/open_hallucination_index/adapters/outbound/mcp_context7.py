@@ -23,17 +23,13 @@ from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import TextContent
 
 from open_hallucination_index.adapters.outbound.mcp_session_pool import (
-    MCPPoolManager,
     MCPSessionPool,
     MCPTransportType,
     PoolConfig,
-    get_mcp_pool_manager,
 )
 from open_hallucination_index.domain.entities import Evidence, EvidenceSource
 from open_hallucination_index.ports.mcp_source import (
-    MCPConnectionError,
     MCPKnowledgeSource,
-    MCPQueryError,
 )
 
 if TYPE_CHECKING:
@@ -44,12 +40,47 @@ logger = logging.getLogger(__name__)
 
 # Common programming libraries/frameworks to detect in claims
 TECH_KEYWORDS = {
-    "python", "javascript", "typescript", "react", "vue", "angular", "node",
-    "fastapi", "django", "flask", "express", "next.js", "nextjs", "vite",
-    "pytorch", "tensorflow", "pandas", "numpy", "scipy", "sklearn",
-    "docker", "kubernetes", "aws", "azure", "gcp", "redis", "mongodb",
-    "postgresql", "mysql", "graphql", "rest", "api", "sdk", "library",
-    "framework", "package", "module", "npm", "pip", "cargo", "maven",
+    "python",
+    "javascript",
+    "typescript",
+    "react",
+    "vue",
+    "angular",
+    "node",
+    "fastapi",
+    "django",
+    "flask",
+    "express",
+    "next.js",
+    "nextjs",
+    "vite",
+    "pytorch",
+    "tensorflow",
+    "pandas",
+    "numpy",
+    "scipy",
+    "sklearn",
+    "docker",
+    "kubernetes",
+    "aws",
+    "azure",
+    "gcp",
+    "redis",
+    "mongodb",
+    "postgresql",
+    "mysql",
+    "graphql",
+    "rest",
+    "api",
+    "sdk",
+    "library",
+    "framework",
+    "package",
+    "module",
+    "npm",
+    "pip",
+    "cargo",
+    "maven",
 }
 
 
@@ -78,11 +109,11 @@ class Context7MCPAdapter(MCPKnowledgeSource):
         self._api_key = settings.context7_api_key
         self._available = False
         self._tools: list[str] = []
-        
+
         # Session pool for persistent connections
         self._pool: MCPSessionPool | None = None
         self._use_pool = True  # Enable session pooling by default
-        
+
         # Auth headers for Context7
         self._headers: dict[str, str] = {}
         if self._api_key:
@@ -101,7 +132,7 @@ class Context7MCPAdapter(MCPKnowledgeSource):
     async def connect(self) -> None:
         """
         Test connection and list available tools.
-        
+
         Initializes the session pool for persistent HTTP connections.
         """
         try:
@@ -121,7 +152,7 @@ class Context7MCPAdapter(MCPKnowledgeSource):
                     headers=self._headers,
                 )
                 await self._pool.initialize()
-                
+
                 # Get tools from pooled session
                 async with self._pool.acquire() as session:
                     tools = await session.list_tools()
@@ -131,12 +162,12 @@ class Context7MCPAdapter(MCPKnowledgeSource):
                 async with self._session_fallback() as session:
                     tools = await session.list_tools()
                     self._tools = [t.name for t in tools.tools]
-            
+
             self._available = True
             logger.info(f"Connected to Context7 MCP at {self._mcp_url}")
             logger.info(f"Available tools: {self._tools}")
             logger.info(f"Session pooling: {'enabled' if self._pool else 'disabled'}")
-            
+
         except Exception as e:
             self._available = False
             logger.warning(f"Context7 MCP connection failed: {e}")
@@ -149,7 +180,7 @@ class Context7MCPAdapter(MCPKnowledgeSource):
         if self._pool:
             await self._pool.shutdown()
             self._pool = None
-        
+
         self._available = False
         self._tools = []
         logger.info("Disconnected from Context7 MCP")
@@ -157,7 +188,7 @@ class Context7MCPAdapter(MCPKnowledgeSource):
     async def health_check(self) -> bool:
         """
         Check if Context7 MCP is responding.
-        
+
         Uses pooled session if available for efficiency.
         """
         try:
@@ -176,7 +207,7 @@ class Context7MCPAdapter(MCPKnowledgeSource):
     async def _session(self):
         """
         Get an MCP session (from pool or create new).
-        
+
         Uses the session pool for persistent connections when available.
         Falls back to per-request sessions if pool is not initialized.
         """
@@ -191,10 +222,12 @@ class Context7MCPAdapter(MCPKnowledgeSource):
     @asynccontextmanager
     async def _session_fallback(self):
         """Create a new MCP session (non-pooled, for fallback)."""
-        async with streamablehttp_client(self._mcp_url, headers=self._headers) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                yield session
+        async with (
+            streamablehttp_client(self._mcp_url, headers=self._headers) as (read, write, _),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            yield session
 
     def get_pool_stats(self) -> dict[str, Any] | None:
         """Get session pool statistics."""
@@ -202,7 +235,9 @@ class Context7MCPAdapter(MCPKnowledgeSource):
             return self._pool.get_stats()
         return None
 
-    async def _call_tool(self, session: ClientSession, tool_name: str, arguments: dict[str, Any]) -> str:
+    async def _call_tool(
+        self, session: ClientSession, tool_name: str, arguments: dict[str, Any]
+    ) -> str:
         """
         Call an MCP tool within an existing session.
 
@@ -215,13 +250,13 @@ class Context7MCPAdapter(MCPKnowledgeSource):
             Tool result as text.
         """
         result = await session.call_tool(tool_name, arguments)
-        
+
         # Extract text content from result
         texts = []
         for content in result.content:
             if isinstance(content, TextContent):
                 texts.append(content.text)
-        
+
         return "\n".join(texts)
 
     def _is_technical_claim(self, claim: Claim) -> bool:
@@ -232,28 +267,28 @@ class Context7MCPAdapter(MCPKnowledgeSource):
     def _extract_library_name(self, claim: Claim) -> str | None:
         """Extract potential library/framework name from claim."""
         text = claim.text
-        
+
         # Look for common patterns (explicit library names first, then generic patterns)
         patterns = [
             # First try to match explicit library names that are well-known
-            r'\b(React|Vue|Angular|FastAPI|Django|Flask|Express|Next\.?js|PyTorch|TensorFlow|Pandas|NumPy|Scikit-learn|Keras|Redis|MongoDB|PostgreSQL|MySQL|GraphQL|REST|Docker|Kubernetes)\b',
+            r"\b(React|Vue|Angular|FastAPI|Django|Flask|Express|Next\.?js|PyTorch|TensorFlow|Pandas|NumPy|Scikit-learn|Keras|Redis|MongoDB|PostgreSQL|MySQL|GraphQL|REST|Docker|Kubernetes)\b",
             # Then try word-before-type patterns
-            r'\b([A-Za-z][A-Za-z0-9_.-]+)\s+(?:library|framework|package|module)',
-            r'(?:in|using|with)\s+([A-Za-z][A-Za-z0-9_.-]+)',
+            r"\b([A-Za-z][A-Za-z0-9_.-]+)\s+(?:library|framework|package|module)",
+            r"(?:in|using|with)\s+([A-Za-z][A-Za-z0-9_.-]+)",
         ]
-        
+
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 return match.group(1)
-        
+
         # Check for subject if structured
         if claim.subject:
             subject_lower = claim.subject.lower()
             for keyword in TECH_KEYWORDS:
                 if keyword in subject_lower:
                     return claim.subject
-        
+
         return None
 
     async def find_evidence(self, claim: Claim) -> list[Evidence]:
@@ -286,10 +321,14 @@ class Context7MCPAdapter(MCPKnowledgeSource):
             async with self._session() as session:
                 # First resolve the library to a Context7 ID
                 # resolve-library-id requires both 'query' and 'libraryName' parameters
-                resolve_text = await self._call_tool(session, "resolve-library-id", {
-                    "query": claim.text,  # Full claim text for context
-                    "libraryName": library_name,
-                })
+                resolve_text = await self._call_tool(
+                    session,
+                    "resolve-library-id",
+                    {
+                        "query": claim.text,  # Full claim text for context
+                        "libraryName": library_name,
+                    },
+                )
 
                 if not resolve_text:
                     logger.debug(f"No Context7 library found for: {library_name}")
@@ -302,28 +341,34 @@ class Context7MCPAdapter(MCPKnowledgeSource):
                 # Get documentation for the library
                 # query-docs requires 'libraryId' and 'query' parameters
                 topic = self._extract_topic(claim)
-                
-                docs_text = await self._call_tool(session, "query-docs", {
-                    "libraryId": library_id,
-                    "query": topic if topic else claim.text,
-                })
+
+                docs_text = await self._call_tool(
+                    session,
+                    "query-docs",
+                    {
+                        "libraryId": library_id,
+                        "query": topic if topic else claim.text,
+                    },
+                )
 
                 if docs_text and len(docs_text) > 50:
-                    evidences.append(Evidence(
-                        id=uuid4(),
-                        source=EvidenceSource.MCP_CONTEXT7,
-                        source_id=f"context7:{library_id}",
-                        content=docs_text[:3000],  # Limit length
-                        structured_data={
-                            "library_id": library_id,
-                            "library_name": library_name,
-                            "topic": topic,
-                        },
-                        similarity_score=0.9,  # High confidence for docs
-                        match_type="mcp_docs",
-                        retrieved_at=datetime.utcnow(),
-                        source_uri=f"https://context7.com{library_id}",
-                    ))
+                    evidences.append(
+                        Evidence(
+                            id=uuid4(),
+                            source=EvidenceSource.MCP_CONTEXT7,
+                            source_id=f"context7:{library_id}",
+                            content=docs_text[:3000],  # Limit length
+                            structured_data={
+                                "library_id": library_id,
+                                "library_name": library_name,
+                                "topic": topic,
+                            },
+                            similarity_score=0.9,  # High confidence for docs
+                            match_type="mcp_docs",
+                            retrieved_at=datetime.utcnow(),
+                            source_uri=f"https://context7.com{library_id}",
+                        )
+                    )
 
             logger.info(f"Found {len(evidences)} Context7 evidences for claim")
             return evidences
@@ -348,9 +393,13 @@ class Context7MCPAdapter(MCPKnowledgeSource):
 
         try:
             async with self._session() as session:
-                result = await self._call_tool(session, "resolve-library-id", {
-                    "libraryName": query,
-                })
+                result = await self._call_tool(
+                    session,
+                    "resolve-library-id",
+                    {
+                        "libraryName": query,
+                    },
+                )
                 return [{"text": result}] if result else []
         except Exception:
             return []
@@ -359,33 +408,34 @@ class Context7MCPAdapter(MCPKnowledgeSource):
         """Extract library ID from resolve-library-id response."""
         if not text:
             return None
-        
+
         # Look for "Context7-compatible library ID: /org/project" pattern
         # The response contains this field after each library title
-        match = re.search(r'Context7-compatible library ID:\s*(/[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)', text)
+        pattern = r"Context7-compatible library ID:\s*(/[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)"
+        match = re.search(pattern, text)
         if match:
             return match.group(1)
-        
+
         # Fallback: look for any library ID pattern that's NOT /org/project
-        for m in re.finditer(r'(/[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)', text):
+        for m in re.finditer(r"(/[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)", text):
             lib_id = m.group(1)
             if lib_id != "/org/project":
                 return lib_id
-        
+
         return None
 
     def _extract_topic(self, claim: Claim) -> str | None:
         """Extract specific topic from claim for focused documentation."""
         # Look for specific concepts mentioned in claim
         topic_patterns = [
-            r'(hooks?|routing|authentication|api|components?|state|props)',
-            r'(async|await|promises?|callbacks?)',
-            r'(classes?|functions?|methods?|decorators?)',
+            r"(hooks?|routing|authentication|api|components?|state|props)",
+            r"(async|await|promises?|callbacks?)",
+            r"(classes?|functions?|methods?|decorators?)",
         ]
-        
+
         for pattern in topic_patterns:
             match = re.search(pattern, claim.text, re.IGNORECASE)
             if match:
                 return match.group(1).lower()
-        
+
         return None
