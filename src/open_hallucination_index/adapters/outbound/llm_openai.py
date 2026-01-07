@@ -8,10 +8,11 @@ Adapter for OpenAI-compatible LLM APIs (including vLLM, Ollama, etc.).
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 import httpx
-from openai import AsyncOpenAI, APIConnectionError, APIStatusError
+from openai import APIConnectionError, APIStatusError, AsyncOpenAI
 
 from open_hallucination_index.ports.llm_provider import (
     LLMMessage,
@@ -120,9 +121,7 @@ class OpenAILLMAdapter(LLMProvider):
             LLMProviderError: If inference fails.
         """
         try:
-            formatted_messages = [
-                {"role": m.role, "content": m.content} for m in messages
-            ]
+            formatted_messages = [{"role": m.role, "content": m.content} for m in messages]
 
             response = await self._client.chat.completions.create(
                 model=self._model,
@@ -178,9 +177,7 @@ class OpenAILLMAdapter(LLMProvider):
             Token strings as they're generated.
         """
         try:
-            formatted_messages = [
-                {"role": m.role, "content": m.content} for m in messages
-            ]
+            formatted_messages = [{"role": m.role, "content": m.content} for m in messages]
 
             stream = await self._client.chat.completions.create(
                 model=self._model,
@@ -212,9 +209,7 @@ class OpenAILLMAdapter(LLMProvider):
             # Use OpenAI API key for embeddings (separate from vLLM key)
             openai_key = self._settings.openai_api_key.get_secret_value()
             if not openai_key:
-                raise LLMProviderError(
-                    "OPENAI_API_KEY not set. Required for embeddings."
-                )
+                raise LLMProviderError("OPENAI_API_KEY not set. Required for embeddings.")
             embedding_client = AsyncOpenAI(
                 api_key=openai_key,
                 timeout=self._settings.timeout_seconds,
