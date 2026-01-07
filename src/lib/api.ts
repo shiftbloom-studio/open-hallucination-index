@@ -75,6 +75,9 @@ export class ApiClient {
   private getUrl(path: string): string {
     // Ensure path starts with slash
     const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    if (this.baseUrl.endsWith("/api") && cleanPath.startsWith("/api/")) {
+      return `${this.baseUrl}${cleanPath.replace(/^\/api/, "")}`;
+    }
     return `${this.baseUrl}${cleanPath}`;
   }
 
