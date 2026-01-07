@@ -9,6 +9,7 @@ on:
 env:
   NODE_VERSION: '20'
   PNPM_VERSION: 9
+  TOKEN_GITHUB: ${{ secrets.TOKEN_GITHUB }}
 
 jobs:
   # ─────────────────────────────────────────────────────────────
@@ -236,7 +237,7 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.TOKEN_GITHUB }}
 
   # ─────────────────────────────────────────────────────────────
   # Deploy Production (Vercel)
@@ -262,4 +263,4 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           vercel-args: '--prod'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.TOKEN_GITHUB }}
