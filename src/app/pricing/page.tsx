@@ -366,7 +366,7 @@ export default function PricingPage() {
             <Award className="w-12 h-12 mx-auto mb-4 text-emerald-400" />
             <h3 className="text-2xl font-bold text-white mb-2">14-Day Money-Back Guarantee</h3>
             <p className="text-slate-300 max-w-lg mx-auto">
-              Not satisfied? Get a full refund within 14 days if you've used less than 10% of your tokens. No questions asked.
+              Not satisfied? Get a full refund within 14 days if you&apos;ve used less than 10% of your tokens. No questions asked.
             </p>
           </div>
         </motion.div>
@@ -398,7 +398,7 @@ export default function PricingPage() {
                         <Star key={j} className="w-4 h-4 fill-amber-400 text-amber-400" />
                       ))}
                     </div>
-                    <p className="text-slate-300 mb-6 italic">"{testimonial.content}"</p>
+                    <p className="text-slate-300 mb-6 italic">&quot;{testimonial.content}&quot;</p>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-semibold text-sm">
                         {testimonial.avatar}

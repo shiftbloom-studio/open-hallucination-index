@@ -16,11 +16,13 @@ export async function GET() {
     }
 
     // Get or create user profile in Supabase
-    let { data: profile, error: profileError } = await supabase
+    const { data: fetchedProfile, error: profileError } = await supabase
       .from('profiles')
       .select('tokens')
       .eq('id', user.id)
       .single();
+
+    let profile = fetchedProfile;
 
     if (profileError && profileError.code === 'PGRST116') {
       // Profile doesn't exist, create it with initial tokens
@@ -71,11 +73,13 @@ export async function POST(request: Request) {
     const tokensNeeded = Math.max(1, Math.ceil(textLength / 1000));
 
     // Get current token balance
-    let { data: profile, error: profileError } = await supabase
+    const { data: fetchedProfile, error: profileError } = await supabase
       .from('profiles')
       .select('tokens')
       .eq('id', user.id)
       .single();
+
+    let profile = fetchedProfile;
 
     if (profileError && profileError.code === 'PGRST116') {
       // Create profile with initial tokens if it doesn't exist
