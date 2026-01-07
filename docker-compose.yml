@@ -115,7 +115,7 @@ services:
       API_HOST: "0.0.0.0"
       API_PORT: "8080"
       API_WORKERS: "4"
-      API_API_KEY: "${API_KEY}"
+      API_API_KEY: "${API_API_KEY}"
 
       # Use in-network service names
       LLM_BASE_URL: "http://vllm:8000/v1"
