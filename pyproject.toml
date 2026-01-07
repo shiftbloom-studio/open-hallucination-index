@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "open-hallucination-index"
+version = "0.1.0"
+description = "Middleware API for LLM hallucination detection via claim verification against trusted knowledge graphs and vector stores"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "ShiftBloom", email = "dev@shiftbloom.com" }
+]
+keywords = ["llm", "hallucination", "verification", "knowledge-graph", "vector-search"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "httpx>=0.26.0",
+    "openai>=1.10.0",
+    "neo4j>=5.15.0",
+    "qdrant-client==1.16.2",
+    "redis>=5.0.0",
+    "pyyaml>=6.0.1",
+    "mcp>=1.9.0",
+    "sentence-transformers>=2.2.0",
+    "wikitextparser>=0.55.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
+]
+
+[project.scripts]
+ohi-server = "open_hallucination_index.infrastructure.entrypoint:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/open_hallucination_index"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

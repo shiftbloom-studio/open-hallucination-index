@@ -1,0 +1,814 @@
+Open Hallucination Index (OHI): Ein Architektur-Framework zur Wiederherstellung epistemischer Integrität in synthetischen Informationssystemen
+1. Einführung: Die Krise der synthetischen Wahrheit
+1.1 Die Ontologie der stochastischen Fabulation
+Die gegenwärtige technologische Landschaft ist durch eine fundamentale Disruption in der Produktion und Distribution von Wissen gekennzeichnet. Mit der ubiquitären Verbreitung von Large Language Models (LLMs) hat sich das Paradigma der Informationsgenese von der deterministischen Abfrage kuratierter Datenbanken hin zur probabilistischen Synthese verschoben. Während diese Verschiebung beispiellose Fähigkeiten in der Generierung natürlichsprachlicher Texte freigesetzt hat, konfrontiert sie die wissenschaftliche Gemeinschaft und die Gesellschaft als Ganzes mit einer epistemologischen Krise ersten Ranges: der Erosion der faktischen Wahrheit durch das Phänomen der Halluzination.
+
+In der Terminologie der KI-Sicherheit beschreibt Halluzination die Tendenz generativer Modelle, Aussagen zu produzieren, die semantisch kohärent und rhetorisch überzeugend, jedoch faktisch inkongruent zur realen Welt oder dem bereitgestellten Kontext sind. Emily M. Bender und Kollegen prägten in ihrer wegweisenden Arbeit den Begriff der "stochastischen Papageien" (Stochastic Parrots), um diese ontologische Lücke zu beschreiben. LLMs operieren als statistische Mustererkennungssysteme, die Wahrscheinlichkeitsverteilungen über Token-Sequenzen lernen, ohne dabei über eine referenzielle Verankerung in der außersprachlichen Realität zu verfügen. Sie mimikrieren den Diskurs der Wahrheit, ohne Zugang zur Wahrheit selbst zu haben.   
+
+Diese Entkopplung von Form und Inhalt ist kein trivialer Fehler ("Bug"), sondern ein inhärentes Merkmal der Transformer-Architektur, die darauf optimiert ist, den plausibelsten nächsten Token vorherzusagen, nicht den wahrhaftigsten. Die Gefahr liegt hierbei nicht in der offensichtlichen Unsinnigkeit, sondern in der subtilen Mimikry von Kompetenz. Wenn ein Modell mit hoher rhetorischer Sicherheit behauptet, ein juristischer Präzedenzfall existiere oder eine chemische Reaktion verlaufe auf eine bestimmte Weise, so tut es dies ohne interne Repräsentation von "Wissen" oder "Unwissen". Es generiert lediglich Text, der statistisch gesehen Texten ähnelt, die Fakten enthalten. Diese "stochastische Integrität" ist für kreative Prozesse wertvoll, für epistemisch kritische Anwendungen in Medizin, Recht und Wissenschaft jedoch fatal.   
+
+Der hier vorgeschlagene Open Hallucination Index (OHI) versteht sich als Antwort auf diese Krise. Er postuliert, dass die rein stochastische Generierung durch eine deterministische Verifikationsarchitektur ergänzt werden muss. Der OHI ist nicht nur eine passive Metrik zur Messung von Fehlern, sondern eine aktive architektonische Vorschrift, die die Entkopplung von Generierung (durch LLMs) und Validierung (durch Wissensgraphen) erzwingt.
+
+1.2 Epistemische Vigilanz und das Vertrauensdilemma
+Die Notwendigkeit des OHI ergibt sich nicht nur aus den technischen Defiziten der Modelle, sondern aus der psychologischen Interaktion zwischen Mensch und Maschine. Kognitionswissenschaftliche Untersuchungen deuten darauf hin, dass Nutzer dazu neigen, KI-Systemen eine unverdiente "epistemische Autorität" zuzuschreiben. Jäger (2024) definiert epistemische Autorität als eine funktionale Rolle, die auf der Zuschreibung von Kompetenz und Zuverlässigkeit basiert. LLMs simulieren diese Kompetenz durch sprachliche Fluenz, was beim Nutzer zu einem "Automation Bias" führt – der Tendenz, algorithmischen Entscheidungen auch dann zu vertrauen, wenn widersprüchliche Evidenz vorliegt.   
+
+Besonders kritisch ist das Phänomen des "aufgeschobenen Vertrauens" (Deferred Trust). Nutzer verlagern ihre epistemische Abhängigkeit oft von als voreingenommen wahrgenommenen menschlichen Quellen auf KI-Systeme, die fälschlicherweise als neutrale, objektive Akteure angesehen werden. In faktischen Domänen wie historischen Abfragen oder technischen Instruktionen zeigen Studien einen klaren "epistemischen Bias" zugunsten der KI. Dieses Vertrauen ist jedoch extrem fragil ("brittle"). Ein einziger offensichtlicher Fehler kann das Vertrauen in das gesamte System kollabieren lassen, wenn die Mechanismen der "epistemischen Vigilanz" reaktiviert werden.   
+
+Der OHI zielt darauf ab, diese epistemische Vigilanz technisch zu institutionalisieren. Anstatt vom Nutzer zu verlangen, jede Aussage manuell zu prüfen (was den Effizienzvorteil der KI negieren würde), integriert der OHI eine automatisierte Schicht der Skepsis. Durch die Quantifizierung der Faktizität jeder generierten Aussage und deren Abgleich mit einer externen "Ground Truth" transformiert der OHI das blinde Vertrauen in ein verifiziertes Vertrauen. Er liefert die notwendigen Metadaten, damit Nutzer die epistemische Qualität einer Antwort bewerten können, ähnlich wie Nährwerttabellen die physische Qualität von Lebensmitteln transparent machen.
+
+1.3 Politische Souveränität und die Gefahr proprietärer Biases
+Ein oft übersehener Aspekt der Halluzinationsdebatte ist die politische Dimension der "Wahrheit", die LLMs generieren. Proprietäre Modelle (Closed Source), die von wenigen großen Technologiekonzernen kontrolliert werden, unterliegen undurchsichtigen Prozessen des Reinforcement Learning from Human Feedback (RLHF). Diese Prozesse dienen zwar der Sicherheit ("Alignment"), kodieren aber unvermeidlich die ideologischen, kulturellen und politischen Biases der Annotatoren und Entwickler. Studien haben gezeigt, dass Modelle wie GPT-4 und GPT-3.5 signifikante ideologische Verzerrungen aufweisen können, die oft zentristische oder spezifisch westlich-liberale Weltbilder bevorzugen und bei sensiblen Themen wie Geschlecht oder politischer Zugehörigkeit systematische Fehler machen.   
+
+In diesem Kontext wird Halluzination zu einem politischen Problem: Wenn ein Modell Fakten erfindet oder verzerrt darstellt, die mit den im Training verankerten Biases korrespondieren, wird Desinformation automatisiert und skaliert. Der OHI adressiert dies durch das Prinzip der "lokalen Souveränität". Indem der Index auf einer offenen Architektur basiert (Open Source Modelle wie Qwen, offene Protokolle wie MCP, lokale Wissensgraphen), ermöglicht er es Organisationen und Staaten, die Hoheit über die "Ground Truth" zurückzugewinnen.
+
+Anstatt sich darauf zu verlassen, dass ein Modell in Kalifornien die Geschichte oder Gesetze eines anderen Landes korrekt "auswendig gelernt" hat, erzwingt der OHI die Validierung gegen einen lokal kontrollierten Wissensgraphen. Halluzination wird somit nicht nur als technischer Fehler, sondern als Abweichung von einer definierten, souveränen Datenbasis messbar. Dies ist ein entscheidender Schritt weg von der epistemischen Abhängigkeit hin zur epistemischen Autonomie.
+
+2. Theoretischer Ansatz: Dekomposition und Graph-basierte Epistemologie
+Um Halluzinationen nicht nur zu konstatieren, sondern quantitativ zu erfassen und zu korrigieren, bedarf es eines robusten theoretischen Rahmens. Der OHI basiert auf zwei Säulen: der Zerlegung komplexer Aussagen in atomare Fakten (Claim Decomposition) und der Validierung dieser Fakten durch strukturierte Wissensrepräsentation (GraphRAG).
+
+2.1 Claim Decomposition: Die Atomisierung der Aussage
+Die Bewertung der Wahrhaftigkeit eines generierten Textes scheitert oft an dessen Granularität. Ein Absatz kann fünf korrekte Fakten und eine subtile Lüge enthalten. Eine binäre Klassifizierung ("Wahr" vs. "Falsch") ist hier unzureichend. Der OHI adoptiert daher den methodischen Ansatz der Atomic Fact Decomposition, wie er in Metriken wie FActScore  und Ragas Faithfulness  formalisiert wurde.   
+
+Der Prozess der Dekomposition folgt einer strengen Logik:
+
+Segmentierung: Der generierte Text T wird in eine Menge von Sätzen S={s 
+1
+​
+ ,s 
+2
+​
+ ,...,s 
+n
+​
+ } zerlegt.
+
+Atomisierung: Jeder Satz s 
+i
+​
+  wird weiter in eine Menge atomarer Behauptungen (Claims) A 
+i
+​
+ ={c 
+i,1
+​
+ ,c 
+i,2
+​
+ ,...} unterteilt. Ein atomarer Claim ist definiert als die kleinste Informationseinheit, die unabhängig verifiziert werden kann (z.B. ein Triplett aus Subjekt-Prädikat-Objekt).
+
+Normalisierung: Die Claims werden in eine kanonische Form gebracht, um sprachliche Varianz zu eliminieren (z.B. Auflösung von Pronomen durch Entity Linking).
+
+Metriken wie FActScore berechnen die Präzision P eines Modells als den Anteil der durch eine zuverlässige Wissensquelle unterstützten atomaren Fakten.   
+
+FActScore= 
+∣A∣
+1
+​
+  
+c∈A
+∑
+​
+ 1(c is supported)
+Wobei 1 die Indikatorfunktion ist. Im Gegensatz zu FActScore, das oft Wikipedia als statische Referenz nutzt, verwendet der OHI dynamische, lokale Wissensgraphen als Referenzsystem. Dies erlaubt die Anwendung des Indexes auf proprietäre Unternehmensdaten oder hochaktuelle Ereignisse, die noch nicht in öffentlichen Korpora enthalten sind.
+
+Ein weiterer kritischer Aspekt ist die Unterscheidung zwischen "Halluzination durch Fabulation" (Erfindung neuer Fakten) und "Halluzination durch Inkonsistenz" (Widerspruch zum Kontext). Frameworks wie ReDeEP haben gezeigt, dass Halluzinationen oft entstehen, wenn das Modell sein internes, parametrisches Wissen (Parametric Knowledge) fälschlicherweise über den abgerufenen Kontext (Retrieved Context) priorisiert. Der OHI muss daher in der Lage sein, die Quelle einer Behauptung zu attributieren: Stammt sie aus dem Kontext oder aus den Gewichten des Modells?   
+
+2.2 Die Insuffizienz des Vektorraums (VectorRAG Limitations)
+Das derzeit dominante Paradigma zur Reduktion von Halluzinationen ist Retrieval Augmented Generation (RAG) auf Basis von Vektordatenbanken (VectorRAG). Hierbei werden Textfragmente in hochdimensionale Vektoren (Embeddings) transformiert, und bei einer Anfrage werden die semantisch ähnlichsten Fragmente abgerufen.   
+
+Obwohl VectorRAG die Faktizität gegenüber rein generativen Modellen verbessert, stößt es auf fundamentale epistemologische Grenzen, die den OHI notwendig machen:
+
+1. Der flache Wissensraum: Vektordatenbanken behandeln Wissen als eine unstrukturierte Ansammlung isolierter Punkte (Chunks) im Raum. Es fehlen explizite Verbindungen zwischen diesen Punkten. Wenn die Antwort auf eine Frage die Synthese von Informationen aus zwei weit entfernten Dokumenten erfordert (Multi-Hop Reasoning), versagt die Vektorsuche oft. Die Vektoren der einzelnen Dokumente mögen keine hohe Ähnlichkeit zur Frage aufweisen, obwohl ihre Kombination die Antwort enthält.   
+
+2. Semantische Ähnlichkeit vs. Logische Wahrheit: Vektoren kodieren semantische Nähe, nicht logische Wahrheit oder Kausalität. Die Sätze "X verursacht Y" und "X verhindert Y" können im Vektorraum sehr nahe beieinander liegen, da sie dieselben Entitäten und Themen behandeln. Eine reine Vektorsuche kann daher Dokumente abrufen, die thematisch relevant, aber faktisch widersprüchlich sind, was das LLM verwirrt und zu Halluzinationen führt.
+
+3. Kontext-Fragmentierung: Durch das "Chunking" (Zerhacken) von Dokumenten geht der makroskopische Kontext verloren. Das LLM erhält Informationsschnipsel ohne den ursprünglichen narrativen oder logischen Zusammenhang. Studien zeigen, dass dies zu Fehlinterpretationen führt, da das Modell fehlenden Kontext stochastisch auffüllt.   
+
+4. Performance-Grenzen: Empirische Vergleiche, wie die von Lettria durchgeführten Benchmarks, zeigen die Grenzen von VectorRAG deutlich auf. In komplexen Szenarien, die logisches Schließen erfordern, unterliegt VectorRAG graphbasierten Ansätzen massiv.
+
+Metrik / Szenario	VectorRAG Performance	GraphRAG Performance	Delta
+Industrie-Spezifische Fragen	65.63%	90.63%	+25.00%
+Temporales Reasoning	50.00%	83.35%	+33.35%
+Numerisches Reasoning	< 80%	100.00%	> 20%
+Tabellarisches Reasoning	33%	33%	0%
+Tabelle 1: Vergleich der Genauigkeit von VectorRAG vs. GraphRAG basierend auf Lettria Benchmarks.   
+
+Diese Daten unterstreichen, dass für eine robuste Verifikation (wie sie der OHI fordert) Vektoren allein nicht ausreichen. Sie sind gut für unscharfe Suche, aber schlecht für präzise Faktenprüfung.
+
+2.3 GraphRAG: Struktur als Korrektiv
+Als notwendiges Korrektiv führt der OHI das Konzept von GraphRAG ein. Hierbei wird Wissen als Graph G=(V,E) modelliert, wobei V Entitäten (Knoten) und E Beziehungen (Kanten) darstellen. Dieser Ansatz transzendiert die Einschränkungen des Vektorraums durch explizite Struktur.   
+
+Mechanismen der Graph-Validierung:
+
+Explizite Relationen: Anders als die implizite Nähe von Vektoren, kodieren Kanten im Graphen spezifische logische Beziehungen (z.B. IS_A, PART_OF, BEFORE). Dies ermöglicht deterministisches "Reasoning". Wenn der OHI prüfen muss, ob Person A mit Person B zusammengearbeitet hat, kann er den Graphen nach einem Pfad zwischen A und B durchsuchen.   
+
+Multi-Hop Retrieval: GraphRAG ermöglicht das Navigieren über mehrere Knoten hinweg (A→B→C). Dies ist essenziell für komplexe Verifikationen, bei denen die Evidenz nicht in einem einzelnen Dokument steht.   
+
+Community Detection: Algorithmen wie Leiden oder Louvain können Cluster im Graphen identifizieren, die thematische Zusammenhänge repräsentieren. Dies erlaubt es dem System, Antworten auf globalen Zusammenfassungen zu basieren, anstatt nur auf lokalen Schnipseln.   
+
+Für den OHI bedeutet dies: Ein atomarer Claim c=(Subjekt,Pr 
+a
+¨
+ dikat,Objekt) wird nicht gegen einen Text-Chunk geprüft, sondern als Query gegen den Graphen ausgeführt.
+
+Existiert die Kante (Subjekt) 
+Pr 
+a
+¨
+ dikat
+
+​
+ (Objekt)? → Verifiziert.
+
+Existiert eine Kante (Subjekt) 
+Pr 
+a
+¨
+ dikat
+
+​
+ (Anderes_Objekt) (bei funktionalen Relationen)? → Falsifiziert.
+
+Fehlen die Knoten? → Nicht verifizierbar.
+
+Diese deterministische Logik ist der Kern des OHI-Scores.
+
+2.4 Hybride Retrieval-Strategien: Das Beste aus beiden Welten
+Der OHI verlangt keine dogmatische Entscheidung zwischen Vektor und Graph, sondern eine hybride Architektur. "Hybrid Retrieval" kombiniert die Stärken der lexikalischen Suche (Sparse Vectors, BM25), der semantischen Suche (Dense Vectors) und der strukturierten Graph-Traversierung.   
+
+Die Herausforderung liegt in der Fusion der heterogenen Signale. Zwei Hauptstrategien sind relevant:
+
+Reciprocal Rank Fusion (RRF): RRF ist eine robuste Methode, um Ergebnislisten aus verschiedenen Quellen zu kombinieren, ohne deren Score-Verteilungen normalisieren zu müssen.   
+
+RRFscore(d)= 
+r∈R
+∑
+​
+  
+k+rank 
+r
+​
+ (d)
+1
+​
+ 
+Hierbei ist rank 
+r
+​
+ (d) der Rang des Dokuments d im Retriever r. RRF eignet sich hervorragend für OHI-Systeme, die "out-of-the-box" funktionieren müssen, da es keine Trainingsdaten benötigt.
+
+Lineare Kombination (Linear Combination): Wenn Trainingsdaten verfügbar sind, übertrifft eine gewichtete lineare Kombination oft RRF.   
+
+Score(d)=α⋅S 
+vec
+​
+ (d)+β⋅S 
+graph
+​
+ (d)+γ⋅S 
+lex
+​
+ (d)
+Hierbei können die Gewichte α,β,γ so kalibriert werden, dass die Graph-Evidenz (die oft präziser ist) stärker gewichtet wird als die Vektor-Ähnlichkeit. Dies minimiert Halluzinationen, da eine hohe Vektor-Ähnlichkeit (Plausibilität) durch fehlende Graph-Evidenz (Faktizität) überstimmt werden kann ("Veto-Recht" des Graphen).
+
+Die Implementierung dieser theoretischen Konzepte erfordert eine Software-Architektur, die über traditionelle LLM-Pipelines hinausgeht. Dies führt uns zum Model Context Protocol und modernen Graph-Datenbanken.
+
+3. Implementierung: Eine Souveräne Software-Architektur
+Die Realisierung des Open Hallucination Index erfordert einen radikalen Bruch mit monolithischen KI-Architekturen. Wir schlagen einen modularen Stack vor, der Offenheit, Interoperabilität und lokale Souveränität priorisiert. Die Kernkomponenten sind das Model Context Protocol (MCP) als Integrationsschicht, vLLM für Hochleistungs-Inferenz und Neo4j als Speicher der dynamischen Wahrheit.
+
+3.1 Das Model Context Protocol (MCP): Standardisierung des Kontextes
+Die größte Hürde für verifizierbare KI war bisher die Fragmentierung der Datenquellen. Jede Datenbank, jedes Tool erforderte eine proprietäre Integration ("Connector"), was zu fragilen und schwer wartbaren Systemen führte. Das von Anthropic im November 2024 eingeführte Model Context Protocol (MCP) adressiert genau dieses Problem und dient als Rückgrat der OHI-Architektur.   
+
+3.1.1 Architektur und Topologie
+MCP etabliert einen offenen Standard für die Kommunikation zwischen "AI Clients" (Hosts wie Claude Desktop, IDEs oder OHI-Verifikationsagenten) und "MCP Servern" (Datenquellen, Tools). Es folgt einer strikten Client-Server-Architektur :   
+
+MCP Host (Client): Die Instanz, die das LLM ausführt und Kontext benötigt.
+
+MCP Server: Ein leichtgewichtiger Service, der Daten (Resources), Funktionen (Tools) und Vorlagen (Prompts) bereitstellt.
+
+Transport Layer: Die Kommunikation erfolgt über JSON-RPC 2.0, transportiert entweder über stdio (für lokale Prozesse) oder HTTP mit Server-Sent Events (SSE) für Remote-Verbindungen.   
+
+3.1.2 Relevanz für den OHI
+Für den OHI ist MCP aus mehreren Gründen unverzichtbar:
+
+Entkopplung von Modell und Wissen: Anstatt Wissen in die Gewichte des Modells zu brennen (was statisch und halluzinationsanfällig ist) oder in proprietäre Vektor-Stores zu laden, erlaubt MCP den Zugriff auf lebende Systeme. Ein OHI-Agent kann via MCP direkt einen SQL-Server, ein Dateisystem oder einen Wissensgraphen abfragen.   
+
+Sicherheit und Souveränität: Das Protokoll ermöglicht eine granulare Zugriffskontrolle. Da der MCP-Server lokal oder im kontrollierten Unternehmensnetzwerk laufen kann, verlassen sensible Daten für die Verifikation niemals die Hoheitszone des Eigentümers. Die stdio-Transportmethode garantiert, dass Daten nur innerhalb des lokalen Rechners fließen, was maximale Sicherheit bietet.   
+
+Standardisierte Tool-Nutzung: Der OHI erfordert, dass das LLM aktiv Tools zur Verifikation aufruft (z.B. verify_claim(claim_id)). MCP standardisiert, wie diese Tools dem Modell präsentiert werden, unabhängig davon, ob das zugrunde liegende System in Python, Go oder Java geschrieben ist.   
+
+3.1.3 MCP vs. LangChain
+Ein häufiger Einwand ist die Existenz von Frameworks wie LangChain. Die Analyse zeigt jedoch fundamentale Unterschiede :   
+
+Merkmal	Model Context Protocol (MCP)	LangChain
+Typ	Protokoll / Standard	Framework / Bibliothek
+Fokus	Universelle Konnektivität (1:N)	Orchestrierung & Workflows
+Architektur	Client-Server (Dezentral)	Monolithisch (in der App)
+Sicherheit	Starke Isolation (Prozessgrenzen)	Abhängig von Implementierung
+OHI-Rolle	Standardisierte Schnittstelle zur Wahrheit	Logikschicht für Agenten
+LangChain ist hervorragend für die Orchestrierung ("Wie denkt der Agent?"), aber MCP ist notwendig für die Konnektivität ("Worauf greift er zu?"). Im OHI-Stack nutzen wir LangChain (oder LlamaIndex) innerhalb des MCP-Servers, um die Logik abzubilden, während MCP die standardisierte Schnittstelle nach außen darstellt.   
+
+3.2 Lokale Inferenz: vLLM und Qwen 2.5
+Um den OHI-Score zu berechnen, muss jeder generierte Satz potenziell zerlegt und verifiziert werden. Dies erfordert enorme Inferenzkapazitäten. Die Nutzung externer APIs (wie GPT-4) wäre zu teuer und datenschutzrechtlich problematisch. Daher setzt die OHI-Architektur auf lokale Hochleistungs-Inferenz mit vLLM und offenen Modellen wie Qwen 2.5.
+
+3.2.1 vLLM: Durchsatz und Effizienz
+vLLM hat sich als De-facto-Standard für den Betrieb offener Modelle etabliert. Sein Kernstück, PagedAttention, optimiert das Speichermanagement des Key-Value (KV) Caches drastisch. Anstatt Speicher statisch zu reservieren, verwaltet vLLM den Speicher in Blöcken (Pages), ähnlich wie ein Betriebssystem.   
+
+Performance: vLLM ermöglicht einen bis zu 24x höheren Durchsatz im Vergleich zu naiven HuggingFace-Implementierungen. Dies ist kritisch für den OHI, da die Verifikation parallel zur Generierung (oder kurz danach) erfolgen muss, ohne die User Experience durch Latenz zu zerstören.   
+
+Quantisierung: Die Unterstützung von AWQ (Activation-aware Weight Quantization) erlaubt es, große Modelle (wie Qwen-72B) auf Consumer-Hardware (z.B. RTX 4090) mit minimalem Qualitätsverlust auszuführen.   
+
+3.2.2 Qwen 2.5: Das Arbeitspferd der Verifikation
+Als Referenzmodell für den OHI empfehlen wir Qwen 2.5 (insbesondere die 7B und 32B Instruct Varianten).
+
+Strukturierte Ausgabe: Qwen 2.5 zeigt exzellente Fähigkeiten im Generieren von strukturiertem Output (JSON). Dies ist vital für die Claim Decomposition. Der OHI-Agent kann Qwen anweisen: "Zerlege den folgenden Text in ein JSON-Array von atomaren Tripletts", und das Modell liefert parsbares JSON zuverlässiger als viele Konkurrenten.   
+
+Kontext-Länge: Mit Unterstützung für bis zu 128k Token (und Generierung bis 8k) kann Qwen auch umfangreiche Dokumente als Kontext für die Verifikation verarbeiten.   
+
+Kalibrierung: Benchmarks deuten darauf hin, dass offene Modelle wie Qwen, insbesondere wenn sie mittels Techniken wie Adaptive Temperature Scaling (ATS) nachjustiert werden, eine bessere "Confidence Calibration" aufweisen können als geschlossene Modelle. Das bedeutet, die vom Modell ausgegebene Wahrscheinlichkeit korreliert stärker mit der tatsächlichen Korrektheit.   
+
+3.3 Der Speicher der Wahrheit: Neo4j und Dynamische Wissensgraphen
+Der OHI ist nur so gut wie die Referenzdatenbank, gegen die er prüft. Neo4j dient hier als technologische Basis für den Wissensgraphen.
+
+3.3.1 Graph vs. Vektor (Architektonischer Vergleich)
+Während Vektordatenbanken (Qdrant, Chroma, Milvus) auf Ähnlichkeitssuche spezialisiert sind , bietet Neo4j als native Graphdatenbank die notwendige Struktur für logische Verifikation. Neo4j hat kürzlich Vektor-Indizes integriert, was es zu einer hybriden Datenbank macht.   
+
+Neo4j: Speichert Knoten und Kanten nativ ("Index-free Adjacency"). Dies erlaubt extrem schnelle Traversierung von Beziehungen, was für Multi-Hop-Verifikation essenziell ist.   
+
+Qdrant: Optimiert für hochdimensionale Vektorsuche (HNSW). Exzellent für Retrieval, aber schwach bei komplexen Relationen. Für den OHI nutzen wir oft eine hybride Konfiguration: Qdrant für den initialen, schnellen Abruf von Kandidaten, und Neo4j für die tiefe, strukturelle Validierung der Claims.   
+
+3.3.2 Dynamische Wissensgraphen (DKGs)
+Ein statischer Graph ist nutzlos in einer sich ändernden Welt. Der OHI erfordert Dynamische Wissensgraphen, die sich in Echtzeit aktualisieren.   
+
+Zeitliche Dimension: Fakten haben eine Lebensdauer. Eine Kante im Graphen (Präsident) -> -> (Person) muss mit einem Zeitstempel t 
+valid
+​
+  versehen sein. Algorithmen zur Temporal Knowledge Graph Completion (TKGC) helfen dabei, die Gültigkeit von Fakten zu prädizieren und Inkonsistenzen über die Zeit zu erkennen.   
+
+Automatisierte Konstruktion: Die manuelle Pflege von Graphen ist nicht skalierbar. Wir setzen auf Pipelines, die mittels LLMs (z.B. via "Knowledge Graph Augmented Generation" Frameworks wie KeDkg) unstrukturierte Datenströme (Nachrichten, Logs) automatisch in Graph-Updates übersetzen. Hierbei ist die Bewältigung von Rauschen ("Noise") in den Quelltexten eine zentrale Herausforderung, die durch iterative Filterung und Entity Linking adressiert wird.   
+
+3.4 Der OHI-Algorithmus: End-to-End Pipeline
+Zusammenfassend ergibt sich folgender Ablauf für die Berechnung des OHI-Scores in einer Live-Umgebung:
+
+Input: Nutzer stellt Anfrage Q an den OHI-Client.
+
+Generation: Client sendet Q via vLLM an Qwen 2.5. Modell generiert Antwort R.
+
+Decomposition (Parallel): R wird an einen "Critic-Agent" (ebenfalls Qwen via vLLM) gesendet, der R in atomare Claims A={c 
+1
+​
+ ,...,c 
+n
+​
+ } zerlegt (JSON-Format).
+
+Verification (via MCP):
+
+Der Critic-Agent ruft via MCP das Tool verify_claims(A) auf dem Graph-Server auf.
+
+Der Server führt Hybrid Retrieval (Vektor + Graph) in Neo4j durch.
+
+Für jeden Claim c 
+i
+​
+ :
+
+Suche Subgraph G 
+sub
+​
+  relevant für c 
+i
+​
+ .
+
+Prüfe logische Konsistenz (Existenz von Pfaden).
+
+Klassifiziere: Supported, Contradicted, Unverifiable.
+
+Scoring: Berechnung des OHI-Scores basierend auf dem Verhältnis verifizierter Claims.
+
+Output: Anzeige von R zusammen mit dem OHI-Score und visuellen Markierungen der Claims (Grün/Rot/Grau) für den Nutzer.   
+
+Dieser Prozess transformiert die Black-Box des LLMs in eine Glass-Box der verifizierbaren Fakten.
+
+4. Diskussion und Ausblick: OHI als sozio-technisches Korrektiv
+4.1 OHI als Instrument der Governance und Compliance
+Mit der Einführung regulatorischer Rahmenwerke wie dem EU AI Act stehen Unternehmen und Entwickler vor der Herausforderung, die "Robustheit" und "Genauigkeit" ihrer KI-Systeme nachzuweisen. Der OHI bietet hierfür eine quantifizierbare Metrik. Anstatt vage von "Sicherheit" zu sprechen, können Unternehmen einen OHI-Score als KPI (Key Performance Indicator) definieren.
+
+Auditierbarkeit: Da der OHI auf deterministischen Graphen basiert, ist jeder Fehler zurückverfolgbar ("Provenance"). Man kann genau sagen, warum eine Aussage als falsch markiert wurde: Weil Kante E im Graphen G zum Zeitpunkt t einen anderen Wert hatte.
+
+Risikomanagement: Für kritische Anwendungen (Finanzen, Medizin) können Schwellenwerte definiert werden (z.B. "Antworten nur anzeigen bei OHI > 0.95"). Dies ermöglicht den Einsatz generativer KI in High-Stakes-Umgebungen, indem das Risiko der Fabulation kontrollierbar wird.   
+
+4.2 Die Herausforderung der "Entity Linking" Fehler
+Eine signifikante Limitation aktueller GraphRAG-Systeme ist die Fehleranfälligkeit beim Entity Linking (EL). Wenn das System die Entität "Paris" im Text nicht korrekt mit dem Knoten "Paris (Stadt in Frankreich)" im Graphen verknüpft (sondern z.B. mit "Paris Hilton"), bricht die Verifikation zusammen. Forschung zeigt, dass EL oft an Ambiguitäten und fehlendem Kontext scheitert. Angriffe durch "Knowledge Poisoning" können diese Schwäche gezielt ausnutzen. Zukünftige Iterationen des OHI müssen robustere EL-Verfahren integrieren, die LLMs selbst nutzen, um Kontextdisambiguierung vor der Verlinkung durchzuführen ("Generative Entity Linking").   
+
+4.3 Die Zukunft: LLMs als Gärtner des Graphen
+Wir bewegen uns auf eine Zukunft zu, in der LLMs nicht nur Konsumenten, sondern Produzenten von Wissensgraphen sind. Der Flaschenhals der manuellen Graphenpflege ("Knowledge Acquisition Bottleneck") wird durch Automated Knowledge Graph Construction überwunden. Das LLM liest unstrukturierte Texte, extrahiert Tripel und aktualisiert den Neo4j-Graphen via MCP. Der OHI überwacht dann das LLM mithilfe genau dieses Graphen. Dies schafft einen zirkulären, selbstkorrigierenden Mechanismus: Die KI hilft, die Struktur zu bauen, die sie selbst diszipliniert. Hierbei entsteht jedoch die ethische Frage: "Wem gehört der Graph?". Wenn der Graph die Wahrheit definiert, wird die Kontrolle über den Graphen zur ultimativen Machtposition. Der OHI plädiert durch seine "Open"-Komponente für offene Standards und dezentrale Graphen, um ein Wahrheitsmonopol zu verhindern.   
+
+4.4 Konklusion
+Der Open Hallucination Index ist mehr als eine technische Metrik; er ist ein epistemologisches Manifest. Er erkennt an, dass stochastische Generierung allein niemals ausreicht, um Wahrheit zu garantieren. Durch die Symbiose von MCP (Konnektivität), vLLM (lokale Inferenzkraft) und GraphRAG/Neo4j (strukturierte Wahrheitsspeicherung) entsteht eine Architektur, die das "Stochastic Parrot"-Problem nicht durch bessere Papageien, sondern durch externe Validierung löst.
+
+Der OHI markiert den Übergang von der Ära der plausiblen KI zur Ära der verifizierbaren KI. In einer Welt, in der die Kosten für die Erzeugung von Bullshit gegen Null tendieren, wird die Fähigkeit zur verifizierbaren Wahrheit zum wertvollsten Gut. Der OHI liefert das Werkzeug, um dieses Gut zu sichern, zu messen und zu verteidigen.
+
+Verwendete Forschungsmaterialien und Referenzen: Die Analyse stützt sich umfassend auf die bereitgestellten Forschungsdaten, insbesondere:
+
+Zur Stochastic Parrot Theorie und epistemischen Krise:.   
+
+Zu MCP Architektur und Spezifikation:.   
+
+Zu GraphRAG vs. VectorRAG und Benchmarks:.   
+
+Zu vLLM und Qwen Performance:.   
+
+Zu FactScore und Dekomposition:.   
+
+Zu Dynamischen Wissensgraphen und Neo4j:.   
+
+Quellen: 
+en.wikipedia.org
+Stochastic parrot - Wikipedia
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Lumina: Detecting Hallucinations in RAG System with Context–Knowledge Signals - arXiv
+Wird in einem neuen Fenster geöffnet
+
+s10251.pcdn.co
+On the Dangers of Stochastic Parrots: Can Language Models Be Too Big? "1F99C
+Wird in einem neuen Fenster geöffnet
+
+actuaries.asn.au
+The Rise of Stochastic Parrots - Actuaries Digital
+Wird in einem neuen Fenster geöffnet
+
+jdsupra.com
+Stochastic Parrots: The Hidden Bias of Large Language Model AI | EDRM - JD Supra
+Wird in einem neuen Fenster geöffnet
+
+frontiersin.org
+Epistemic authority and generative AI in learning spaces: rethinking knowledge in the algorithmic age - Frontiers
+Wird in einem neuen Fenster geöffnet
+
+academic.oup.com
+Epistemic authority in the digital public sphere. An integrative conceptual framework and research agenda | Communication Theory | Oxford Academic
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Trust in AI emerges from distrust in humans: A machine learning study on decision-making guidance - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+A race to belief: How Evidence Accumulation shapes trust in AI and Human informants
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+A race to belief: How Evidence Accumulation shapes trust in AI and Human informants - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Beyond Partisan Leaning: A Comparative Analysis of Political Bias in Large Language Models - arXiv
+Wird in einem neuen Fenster geöffnet
+
+cambridge.org
+Is ChatGPT conservative or liberal? A novel approach to assess ideological stances and biases in generative LLMs | Political Science Research and Methods | Cambridge Core
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+[2509.06164] Benchmarking Gender and Political Bias in Large Language Models - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+[2305.14251] FActScore: Fine-grained Atomic Evaluation of Factual Precision in Long Form Text Generation - arXiv
+Wird in einem neuen Fenster geöffnet
+
+emergentmind.com
+FActScore: Metric for Factual Precision in LLMs - Emergent Mind
+Wird in einem neuen Fenster geöffnet
+
+github.com
+A package to evaluate factuality of long-form generation. Original implementation of our EMNLP 2023 paper "FActScore - GitHub
+Wird in einem neuen Fenster geöffnet
+
+docs.ragas.io
+Faithfulness - Ragas
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+ReDeEP: Detecting Hallucination in Retrieval-Augmented Generation via Mechanistic Interpretability - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+InterpDetect: Interpretable Signals for Detecting Hallucinations in Retrieval-Augmented Generation - arXiv
+Wird in einem neuen Fenster geöffnet
+
+shakudo.io
+From RAG to GraphRAG: What's Changed? - Shakudo
+Wird in einem neuen Fenster geöffnet
+
+neo4j.com
+Knowledge Graph vs. Vector RAG: Optimization & Analysis - Neo4j
+Wird in einem neuen Fenster geöffnet
+
+cloudkitect.com
+RAG (Retrieval-Augmented Generation): How It Works, Its Limitations, and Strategies for Accurate Results - Cloudkitect
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Retrieval-Augmented Generation: A Comprehensive Survey of Architectures, Enhancements, and Robustness Frontiers - arXiv
+Wird in einem neuen Fenster geöffnet
+
+lettria.com
+VectorRAG vs. GraphRAG: a convincing comparison - Lettria
+Wird in einem neuen Fenster geöffnet
+
+emergentmind.com
+GraphRAG: Graph Retrieval-Augmented Generation - Emergent Mind
+Wird in einem neuen Fenster geöffnet
+
+emergentmind.com
+Hybrid Retrieval Methods - Emergent Mind
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Efficient and Effective Retrieval of Dense-Sparse Hybrid Vectors using Graph-based Approximate Nearest Neighbor Search - arXiv
+Wird in einem neuen Fenster geöffnet
+
+dev.to
+RAG Retrieval Performance Enhancement Practices: Detailed Explanation of Hybrid Retrieval and Self-Query Techniques - DEV Community
+Wird in einem neuen Fenster geöffnet
+
+elastic.co
+A Comprehensive Hybrid Search Guide | Elastic
+Wird in einem neuen Fenster geöffnet
+
+qdrant.tech
+Hybrid Search Revamped - Building with Qdrant's Query API
+Wird in einem neuen Fenster geöffnet
+
+medium.com
+How to Build a Better RAG System: Smart Hybrid Search for Tables | by Dmitrii Maksimov
+Wird in einem neuen Fenster geöffnet
+
+anthropic.com
+Introducing the Model Context Protocol - Anthropic
+Wird in einem neuen Fenster geöffnet
+
+modelcontextprotocol.io
+Specification - Model Context Protocol
+Wird in einem neuen Fenster geöffnet
+
+en.wikipedia.org
+Model Context Protocol - Wikipedia
+Wird in einem neuen Fenster geöffnet
+
+medium.com
+A Quick Introduction to Model Context Protocol (MCP) in Python - Medium
+Wird in einem neuen Fenster geöffnet
+
+modelcontextprotocol.io
+Architecture overview - Model Context Protocol
+Wird in einem neuen Fenster geöffnet
+
+modelcontextprotocol.io
+Model Context Protocol
+Wird in einem neuen Fenster geöffnet
+
+github.com
+The official Python SDK for Model Context Protocol servers and clients - GitHub
+Wird in einem neuen Fenster geöffnet
+
+gopher.security
+MCP vs LangChain: Framework Comparison | Gopher MCP: On-demand MCP Servers and Gateways with Enterprise Security
+Wird in einem neuen Fenster geöffnet
+
+deeplp.com
+MCP vs. LangChain: Choosing the Right AI Framework - Deep Learning Partnership
+Wird in einem neuen Fenster geöffnet
+
+tetrate.io
+MCP vs LangChain vs RAG: AI Context Management Comparison 2025 - Tetrate
+Wird in einem neuen Fenster geöffnet
+
+reddit.com
+A Breakdown of A2A, MCP, and Agentic Interoperability : r/LangChain - Reddit
+Wird in einem neuen Fenster geöffnet
+
+qwen.readthedocs.io
+vLLM - Qwen
+Wird in einem neuen Fenster geöffnet
+
+qwen.readthedocs.io
+AWQ - Qwen
+Wird in einem neuen Fenster geöffnet
+
+reddit.com
+What's the fastest backend for local long context (100k+)? : r/LocalLLaMA - Reddit
+Wird in einem neuen Fenster geöffnet
+
+huggingface.co
+Qwen/Qwen2.5-7B-Instruct-AWQ - Hugging Face
+Wird in einem neuen Fenster geöffnet
+
+liner.com
+[Quick Review] Calibrating Language Models with Adaptive Temperature Scaling - Liner
+Wird in einem neuen Fenster geöffnet
+
+medinform.jmir.org
+Benchmarking the Confidence of Large Language Models in Answering Clinical Questions: Cross-Sectional Evaluation Study - JMIR Medical Informatics
+Wird in einem neuen Fenster geöffnet
+
+zilliz.com
+Qdrant vs Neo4j on Vector Search Capabilities - Zilliz blog
+Wird in einem neuen Fenster geöffnet
+
+medium.com
+Vector Database Comparison for AI Developers - Medium
+Wird in einem neuen Fenster geöffnet
+
+neo4j.com
+Integrate Qdrant and Neo4j to Enhance Your RAG Pipeline - Graph Database & Analytics
+Wird in einem neuen Fenster geöffnet
+
+qdrant.tech
+GraphRAG: How Lettria Unlocked 20% Accuracy Gains with Qdrant and Neo4j
+Wird in einem neuen Fenster geöffnet
+
+liminary.io
+Wird in einem neuen Fenster geöffnet
+
+emergentmind.com
+Dynamic Knowledge Graphs - Emergent Mind
+Wird in einem neuen Fenster geöffnet
+
+ijcai.org
+Temporal Knowledge Graph Completion: A Survey - IJCAI
+Wird in einem neuen Fenster geöffnet
+
+ojs.aaai.org
+Logic and Commonsense-Guided Temporal Knowledge Graph Completion
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Knowledge Editing with Dynamic Knowledge Graphs for Multi-hop Question Answering - arXiv
+Wird in einem neuen Fenster geöffnet
+
+researchgate.net
+Automatic Knowledge Graph Construction: A Report on the 2019 ICDM/ICBK Contest | Request PDF - ResearchGate
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Automated Knowledge Graph Construction using Large Language Models and Sentence Complexity Modelling - arXiv
+Wird in einem neuen Fenster geöffnet
+
+visible-language.org
+Addressing Uncertainty in LLM Outputs for Trust Calibration Through Visualization and User Interface Design - Visible Language Journal
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Interactive Reasoning: Visualizing and Controlling Chain-of-Thought Reasoning in Large Language Models - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+TRiSM for Agentic AI: A Review of Trust, Risk, and Security Management in LLM-based Agentic Multi-Agent Systems - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+TRiSM for Agentic AI: A Review of Trust, Risk, and Security Management in LLM-based Agentic Multi-Agent Systems - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+A Few Words Can Distort Graphs: Knowledge Poisoning Attacks on Graph-based Retrieval-Augmented Generation of Large Language Models - arXiv
+Wird in einem neuen Fenster geöffnet
+
+medium.com
+RAG Notes 3: Extending RAG through Knowledge Graphs | by Bahadır AKDEMİR - Medium
+Wird in einem neuen Fenster geöffnet
+
+developer.nvidia.com
+Insights, Techniques, and Evaluation for LLM-Driven Knowledge Graphs | NVIDIA Technical Blog
+
+
+Gelesene aber nicht verwendete Quellen:
+
+github.com
+Model Context Protocol - GitHub
+Wird in einem neuen Fenster geöffnet
+
+modelcontextprotocol.io
+Build an MCP client - Model Context Protocol
+Wird in einem neuen Fenster geöffnet
+
+github.com
+modelscope/ms-swift - GitHub
+Wird in einem neuen Fenster geöffnet
+
+warwick.ac.uk
+Stochastic Parrots Case Study - University of Warwick
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+LettuceDetect: A Hallucination Detection Framework for RAG Applications - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Retrieval Augmented Generation Evaluation in the Era of Large Language Models: A Comprehensive Survey - arXiv
+Wird in einem neuen Fenster geöffnet
+
+openreview.net
+FActScore: Fine-grained Atomic Evaluation of Factual Precision in Long Form Text Generation | OpenReview
+Wird in einem neuen Fenster geöffnet
+
+aclanthology.org
+FACTSCORE: Fine-grained Atomic Evaluation of Factual Precision in Long Form Text Generation - ACL Anthology
+Wird in einem neuen Fenster geöffnet
+
+docs.ragas.io
+Faithfulness - Ragas
+Wird in einem neuen Fenster geöffnet
+
+docs.datadoghq.com
+Ragas Evaluations - Datadog Docs
+Wird in einem neuen Fenster geöffnet
+
+dkaarthick.medium.com
+RAGAS for RAG in LLMs: A Comprehensive Guide to Evaluation Metrics. | by Karthikeyan Dhanakotti
+Wird in einem neuen Fenster geöffnet
+
+docs.ragas.io
+Overview of Metrics - Ragas
+Wird in einem neuen Fenster geöffnet
+
+reddit.com
+What's the best Vector DB? What's new in vector db and how is one better than other? [D]
+Wird in einem neuen Fenster geöffnet
+
+reddit.com
+How are you guys doing Hybrid Search in production? : r/Rag - Reddit
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Trust in AI emerges from distrust in humans: A machine learning study on decision-making guidance - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Classifying Epistemic Relationships in Human-AI Interaction: An Exploratory Approach - arXiv
+Wird in einem neuen Fenster geöffnet
+
+aclanthology.org
+Assessing Reliability and Political Bias In LLMs' Judgements of Formal and Material Inferences With Partisan Conclusions - ACL Anthology
+Wird in einem neuen Fenster geöffnet
+
+reddit.com
+The "political bias" of AI model is an indictment of political parties at least as often as it is of the AI models : r/singularity - Reddit
+Wird in einem neuen Fenster geöffnet
+
+redis.io
+Revamping context-oriented retrieval with hybrid search in Redis 8.4
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+A Survey of Graph Retrieval-Augmented Generation for Customized Large Language Models - arXiv
+Wird in einem neuen Fenster geöffnet
+
+openreview.net
+A Survey of Graph Retrieval-Augmented Generation for Customized Large Language Models - OpenReview
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Graph-based Approaches and Functionalities in Retrieval-Augmented Generation: A Comprehensive Survey - arXiv
+Wird in einem neuen Fenster geöffnet
+
+qed42.com
+How knowledge graphs take RAG beyond retrieval - QED42
+Wird in einem neuen Fenster geöffnet
+
+pmc.ncbi.nlm.nih.gov
+Graph retrieval augmented large language models for facial phenotype associated rare genetic disease - NIH
+Wird in einem neuen Fenster geöffnet
+
+direct.mit.edu
+Understanding Epistemic Language with a Language-augmented Bayesian Theory of Mind | Transactions of the Association for Computational Linguistics - MIT Press Direct
+Wird in einem neuen Fenster geöffnet
+
+tandfonline.com
+Full article: Artificial Epistemic Authorities - Taylor & Francis Online
+Wird in einem neuen Fenster geöffnet
+
+pmc.ncbi.nlm.nih.gov
+The Epistemological Danger of Large Language Models - PMC - NIH
+Wird in einem neuen Fenster geöffnet
+
+researchgate.net
+Benchmarking large language models GPT-4o, llama 3.1, and qwen 2.5 for cancer genetic variant classification - ResearchGate
+Wird in einem neuen Fenster geöffnet
+
+scale.com
+Professional Reasoning Benchmark - Finance - Scale AI
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Bench: Benchmarking Uncertainty in Large Language Models with Multiple Choice Questions - arXiv
+Wird in einem neuen Fenster geöffnet
+
+liminary.io
+Dynamic Knowledge Graphs: Beyond Static Maps - Liminary
+Wird in einem neuen Fenster geöffnet
+
+ieeexplore.ieee.org
+Connect, Understand and Learn: Dynamic Knowledge Graph Transforms Learning
+Wird in einem neuen Fenster geöffnet
+
+umwelt-campus.de
+Connect, Understand and Learn: Dynamic Knowledge Graph Transforms Learning - Umwelt-Campus Birkenfeld
+Wird in einem neuen Fenster geöffnet
+
+mdpi.com
+Enhanced Temporal Knowledge Graph Completion via Learning High-Order Connectivity and Attribute Information - MDPI
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Temporal Reasoning over Evolving Knowledge Graphs - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+A Modular Agentic AI Visual Classification System with Trust-Aware Orchestration and RAG-Based Reasoning - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+A Novel Zero-Trust Identity Framework for Agentic AI: Decentralized Authentication and Fine-Grained Access Control - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+TRiSM for Agentic AI: A Review of Trust, Risk, and Security Management in LLM-based Agentic Multi-Agent Systems - arXiv
+Wird in einem neuen Fenster geöffnet
+
+aclanthology.org
+Revisiting Epistemic Markers in Confidence Estimation: Can Markers Accurately Reflect Large Language Models' Uncertainty? - ACL Anthology
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Reasoning Models Better Express Their Confidence - arXiv
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+Overconfidence in LLM-as-a-Judge: Diagnosis and Confidence-Driven Solution - arXiv
+Wird in einem neuen Fenster geöffnet
+
+mdpi.com
+Construction of Knowledge Graphs: Current State and Challenges - MDPI
+Wird in einem neuen Fenster geöffnet
+
+emergentmind.com
+Knowledge Graph Construction and Reasoning - Emergent Mind
+Wird in einem neuen Fenster geöffnet
+
+aclanthology.org
+Ontology-guided Knowledge Graph Construction from Maintenance Short Texts - ACL Anthology
+Wird in einem neuen Fenster geöffnet
+
+neo4j.com
+GraphRAG Field Guide: Navigating the World of Advanced RAG Patterns - Neo4j
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+OnGoal: Tracking and Visualizing Conversational Goals in Multi-Turn Dialogue with Large Language Models - arXiv
+Wird in einem neuen Fenster geöffnet
+
+researchgate.net
+(PDF) Addressing Uncertainty in LLM Outputs for Trust Calibration Through Visualization and User Interface Design - ResearchGate
+Wird in einem neuen Fenster geöffnet
+
+facctconference.org
+“I'm Not Sure, But...”: Examining the Impact of Large Language Models' Uncertainty Expression on User Reliance and Trust - ACM FAccT
+Wird in einem neuen Fenster geöffnet
+
+arxiv.org
+NeurIPS Paper Checklist - arXiv
+Wird in einem neuen Fenster geöffnet
+
+neurips.cc
+NeurIPS 2025 FAQ for Authors
+Wird in einem neuen Fenster geöffnet
+
+neurips.cc
+NeurIPS Paper Checklist Guidelines
+Wird in einem neuen Fenster geöffnet
+
+neurips.cc
+NeurIPS 2025 Call for Papers
+Wird in einem neuen Fenster geöffnet
+
+neurips.cc
+2025 Reviewer Guidelines - NeurIPS
+Wird in einem neuen Fenster geöffnet
+
+meilisearch.com
+RAG vs. long-context LLMs: A side-by-side comparison - Meilisearch
+Wird in einem neuen Fenster geöffnet
+
+digitaldefynd.com
+15 Pros & Cons of Retrieval Augmented Generation (RAG) [2026] - DigitalDefynd Education
+Wird in einem neuen Fenster geöffnet
+
+reddit.com
+New Google Paper on RAG's limitation - What do you all think - Reddit
