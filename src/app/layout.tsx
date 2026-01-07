@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -29,15 +30,48 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.NODE_ENV === "development"
+    ? "http://localhost:3000"
+    : "https://open-hallucination-index.org");
+const siteName = "Open Hallucination Index";
+const siteDescription =
+  "Open-source project to measure and mitigate hallucinations in generative AI — practical tools, benchmarks and honest evaluations to improve model reliability.";
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${siteUrl}/#organization`,
+      name: siteName,
+      url: siteUrl,
+      logo: `${siteUrl}/logo_black.svg`,
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${siteUrl}/#website`,
+      url: siteUrl,
+      name: siteName,
+      description: siteDescription,
+      publisher: {
+        "@id": `${siteUrl}/#organization`,
+      },
+      inLanguage: "en",
+    },
+  ],
+};
+
 // Use a metadataBase if available from env, otherwise fall back to localhost for local dev.
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
+  metadataBase: new URL(siteUrl),
+  applicationName: siteName,
   title: {
-    default: 'Open Hallucination Index',
-    template: '%s | Open Hallucination Index',
+    default: siteName,
+    template: `%s | ${siteName}`,
   },
-  description:
-    'Open-source project to measure and mitigate hallucinations in generative AI — practical tools, benchmarks and honest evaluations to improve model reliability.',
+  description: siteDescription,
   keywords: [
     'AI safety',
     'hallucination',
@@ -47,20 +81,27 @@ export const metadata: Metadata = {
     'open-source',
   ],
   authors: [
-    { name: 'Open Hallucination Index', url: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://open-hallucination-index.org' },
+    { name: siteName, url: siteUrl },
   ],
-  creator: 'Open Hallucination Index',
-  publisher: 'Open Hallucination Index',
+  creator: siteName,
+  publisher: siteName,
+  category: "Technology",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
   // themeColor and colorScheme removed from metadata to comply with Next.js App Router
   // and avoid warnings; consider using `generateViewport` for viewport-related exports.
   icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
-    apple: '/favicon.ico',
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
   },
   alternates: {
-    canonical: process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
+    canonical: siteUrl,
   },
+  manifest: "/site.webmanifest",
   verification: {
     // keep empty keys if you don't have a verification token; these are placeholders
     google: process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION ?? undefined,
@@ -77,54 +118,53 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: 'Open Hallucination Index',
-    description:
-      'Open-source project to measure and mitigate hallucinations in generative AI — practical tools, benchmarks and honest evaluations to improve model reliability.',
-    url: process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
-    siteName: 'Open Hallucination Index',
-    type: 'website',
-    locale: 'en_US',
+    title: siteName,
+    description: siteDescription,
+    url: siteUrl,
+    siteName,
+    type: "website",
+    locale: "en_US",
     images: [
       // Primary large image (recommended 1200x630)
       {
-        url: '/open-graph.jpg',
+        url: "/open-graph.jpg",
         width: 1200,
         height: 630,
-        alt: 'Open Hallucination Index — improving AI factuality',
-        type: 'image/jpeg',
+        alt: "Open Hallucination Index — improving AI factuality",
+        type: "image/jpeg",
       },
       // Medium variant for social previews
       {
-        url: '/open-graph-800x418.jpg',
+        url: "/open-graph-800x418.jpg",
         width: 800,
         height: 418,
-        alt: 'Open Hallucination Index — improving AI factuality (800x418)',
-        type: 'image/jpeg',
+        alt: "Open Hallucination Index — improving AI factuality (800x418)",
+        type: "image/jpeg",
       },
       // WebP versions for platforms that support modern formats
       {
-        url: '/open-graph-1200x630.webp',
+        url: "/open-graph-1200x630.webp",
         width: 1200,
         height: 630,
-        alt: 'Open Hallucination Index — improving AI factuality (webp)',
-        type: 'image/webp',
+        alt: "Open Hallucination Index — improving AI factuality (webp)",
+        type: "image/webp",
       },
       {
-        url: '/open-graph-800x418.webp',
+        url: "/open-graph-800x418.webp",
         width: 800,
         height: 418,
-        alt: 'Open Hallucination Index — improving AI factuality (webp)',
-        type: 'image/webp',
+        alt: "Open Hallucination Index — improving AI factuality (webp)",
+        type: "image/webp",
       },
     ],
   },
   twitter: {
-    card: 'summary_large_image',
-    title: 'Open Hallucination Index',
-    description:
-      'Open-source project to measure and mitigate hallucinations in generative AI — practical tools, benchmarks and honest evaluations to improve model reliability.',
-    images: ['/open-graph-1200x630.webp', '/open-graph.jpg'],
-    creator: '@openhallucindex',
+    card: "summary_large_image",
+    title: siteName,
+    description: siteDescription,
+    images: ["/open-graph-1200x630.webp", "/open-graph.jpg"],
+    creator: "@openhallucindex",
+    site: "@openhallucindex",
   },
 };
 
@@ -136,6 +176,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
       <body className="font-sans antialiased">
+        <Script
+          id="structured-data"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
         <Providers>
           <SmoothScroll>
              <ParticlesBackground />
