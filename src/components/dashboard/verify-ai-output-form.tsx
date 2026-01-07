@@ -23,8 +23,6 @@ interface VerifyAIOutputFormProps {
   onTokensUpdated: (newBalance: number) => void;
 }
 
-const OHI_API_URL = "http://localhost:8080";
-
 export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: VerifyAIOutputFormProps) {
   const [text, setText] = useState("");
   const [context, setContext] = useState("");
@@ -70,7 +68,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
       onTokensUpdated(deductResult.tokensRemaining);
 
       // Now verify with OHI API
-      const client = createApiClient(OHI_API_URL);
+      const client = createApiClient();
       const result = await client.verifyText({
         text,
         context: context || undefined,

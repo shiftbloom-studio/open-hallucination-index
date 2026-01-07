@@ -1,0 +1,61 @@
+const REQUIRED_ENVS = ["DEFAULT_API_URL", "DEFAULT_API_KEY"] as const;
+
+type RequiredEnv = (typeof REQUIRED_ENVS)[number];
+
+function requireEnv(name: RequiredEnv): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required env var: ${name}`);
+  return value;
+}
+
+function joinUrl(base: string, path: string) {
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${b}${p}`;
+}
+
+function copyHeaders(incoming: Headers) {
+  const headers = new Headers(incoming);
+
+  // Avoid forwarding hop-by-hop headers.
+  headers.delete("connection");
+  headers.delete("host");
+  headers.delete("content-length");
+
+  return headers;
+}
+
+async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> }) {
+  const { path = [] } = await ctx.params;
+
+  const baseUrl = requireEnv("DEFAULT_API_URL");
+  const apiKey = requireEnv("DEFAULT_API_KEY");
+
+  const incomingUrl = new URL(req.url);
+
+  const upstreamUrl = new URL(joinUrl(baseUrl, path.join("/")));
+  upstreamUrl.search = incomingUrl.search;
+
+  const headers = copyHeaders(req.headers);
+  headers.set("X-API-KEY", apiKey);
+
+  const method = req.method.toUpperCase();
+  const hasBody = !["GET", "HEAD"].includes(method);
+
+  const upstream = await fetch(upstreamUrl.toString(), {
+    method,
+    headers,
+    body: hasBody ? req.body : undefined,
+  });
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: upstream.headers,
+  });
+}
+
+export const GET = handle;
+export const POST = handle;
+export const PUT = handle;
+export const PATCH = handle;
+export const DELETE = handle;

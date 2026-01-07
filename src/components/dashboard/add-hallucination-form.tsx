@@ -5,30 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings, Check, X, Loader2, ShieldCheck, BadgeCheck } from "lucide-react";
+import { ShieldCheck, BadgeCheck, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createApiClient, VerifyTextResponse } from "@/lib/api";
 
 interface AddHallucinationFormProps {
   onCancel: () => void;
   onSuccess: () => void;
-  // Props for API Settings state (could also be moved to context/store, but passing down for now)
-  showApiSettings: boolean;
-  setShowApiSettings: (show: boolean) => void;
-  apiUrl: string;
-  setApiUrl: (url: string) => void;
-  apiStatus: "idle" | "checking" | "valid" | "invalid";
-  handleApiUrlChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export default function AddHallucinationForm({
   onCancel,
   onSuccess,
-  showApiSettings,
-  setShowApiSettings,
-  apiUrl,
-  handleApiUrlChange,
-  apiStatus
 }: AddHallucinationFormProps) {
   const [content, setContent] = useState("");
   const [source, setSource] = useState("");
@@ -37,11 +25,6 @@ export default function AddHallucinationForm({
   const [verificationResult, setVerificationResult] = useState<VerifyTextResponse | null>(null);
 
   const handleVerify = async () => {
-    if (!apiUrl) {
-      toast.error("Please configure API URL first");
-      setShowApiSettings(true);
-      return;
-    }
     if (!content) {
       toast.error("Please enter content to verify");
       return;
@@ -49,7 +32,7 @@ export default function AddHallucinationForm({
 
     setIsVerifying(true);
     try {
-      const client = createApiClient(apiUrl);
+      const client = createApiClient();
       const result = await client.verifyText({
         text: content,
         context: source || undefined,
@@ -88,46 +71,6 @@ export default function AddHallucinationForm({
           <div className="space-y-2 relative">
             <div className="flex justify-between items-center">
               <Label htmlFor="content">Content</Label>
-              <div className="relative">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setShowApiSettings(!showApiSettings)}
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-                
-                {showApiSettings && (
-                  <Card className="absolute right-0 top-8 z-50 w-80 shadow-lg border-2">
-                    <CardHeader className="py-3 px-4">
-                      <CardTitle className="text-sm font-medium">API Configuration</CardTitle>
-                    </CardHeader>
-                    <CardContent className="py-2 px-4 pb-4 space-y-2">
-                        <div className="space-y-1">
-                          <Label htmlFor="apiUrl" className="text-xs">Open Hallucination API URL</Label>
-                          <div className="relative">
-                            <Input
-                              id="apiUrl"
-                              placeholder="https://api.example.com"
-                              value={apiUrl}
-                              onChange={handleApiUrlChange}
-                              className="pr-8 h-8 text-sm"
-                            />
-                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                              {apiStatus === "checking" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                              {apiStatus === "valid" && <Check className="h-4 w-4 text-green-500" />}
-                              {apiStatus === "invalid" && <X className="h-4 w-4 text-red-500" />}
-                            </div>
-                          </div>
-                          {apiStatus === "invalid" && <p className="text-xs text-red-500">API not reachable</p>}
-                          {apiStatus === "valid" && <p className="text-xs text-green-500">API connected</p>}
-                        </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
             </div>
             <Input
               id="content"

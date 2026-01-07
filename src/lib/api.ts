@@ -67,7 +67,7 @@ export interface BatchVerifyResponse {
 // --- API Client ---
 
 export class ApiClient {
-  constructor(private baseUrl: string) {
+  constructor(private baseUrl: string = "/api/ohi") {
     // Ensure no trailing slash
     this.baseUrl = baseUrl.replace(/\/$/, "");
   }
@@ -112,4 +112,4 @@ export class ApiClient {
 }
 
 // Helper to create client instance
-export const createApiClient = (baseUrl: string) => new ApiClient(baseUrl);
+export const createApiClient = (baseUrl: string = "/api/ohi") => new ApiClient(baseUrl);

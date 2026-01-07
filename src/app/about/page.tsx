@@ -13,7 +13,6 @@ import {
   Zap,
   BookOpen,
   Globe,
-  TrendingUp
 } from "lucide-react";
 
 const containerVariants = {
@@ -276,41 +275,6 @@ export default function AboutPage() {
                 </div>
                 <h3 className="text-lg font-semibold text-neutral-100">{value.title}</h3>
                 <p className="mt-2 text-sm text-neutral-400 leading-relaxed">{value.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </AnimatedSection>
-
-      {/* Stats Section */}
-      <AnimatedSection className="py-20 md:py-28 bg-slate-900/30">
-        <div className="mx-auto max-w-7xl px-4">
-          <div className="text-center mb-16">
-            <TrendingUp className="h-10 w-10 text-cyan-400 mx-auto mb-4" />
-            <h2 className="text-3xl md:text-4xl font-heading font-bold tracking-tight text-neutral-50">
-              Numbers That Speak for Themselves
-            </h2>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-4">
-            {[
-              { value: "1M+", label: "Verified Claims" },
-              { value: "99.2%", label: "Detection Accuracy" },
-              { value: "<50ms", label: "Avg. Latency" },
-              { value: "100%", label: "Open Source Core" },
-            ].map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1, duration: 0.5 }}
-                viewport={{ once: true }}
-                className="text-center p-6"
-              >
-                <p className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-cyan-400 to-emerald-400">
-                  {stat.value}
-                </p>
-                <p className="mt-2 text-neutral-400">{stat.label}</p>
               </motion.div>
             ))}
           </div>

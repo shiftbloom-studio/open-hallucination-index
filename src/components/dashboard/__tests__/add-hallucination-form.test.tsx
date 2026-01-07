@@ -34,12 +34,6 @@ describe('AddHallucinationForm', () => {
   const defaultProps = {
     onCancel: vi.fn(),
     onSuccess: vi.fn(),
-    showApiSettings: false,
-    setShowApiSettings: vi.fn(),
-    apiUrl: 'http://localhost:8000',
-    setApiUrl: vi.fn(),
-    apiStatus: 'valid' as const,
-    handleApiUrlChange: vi.fn(),
   };
 
   beforeEach(() => {
@@ -74,56 +68,6 @@ describe('AddHallucinationForm', () => {
     expect(sourceInput).toHaveValue('GPT-4');
   });
 
-  it('should toggle API settings on button click', async () => {
-    const user = userEvent.setup();
-    const setShowApiSettings = vi.fn();
-    
-    render(
-      <AddHallucinationForm 
-        {...defaultProps} 
-        setShowApiSettings={setShowApiSettings}
-      />
-    );
-
-    const settingsButton = screen.getByRole('button', { name: '' });
-    await user.click(settingsButton);
-
-    expect(setShowApiSettings).toHaveBeenCalledWith(true);
-  });
-
-  it('should show API settings when showApiSettings is true', () => {
-    render(
-      <AddHallucinationForm 
-        {...defaultProps} 
-        showApiSettings={true}
-      />
-    );
-
-    expect(screen.getByText('API Configuration')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Open Hallucination API URL/i)).toBeInTheDocument();
-  });
-
-  it('should show API status indicators', () => {
-    const { rerender } = render(
-      <AddHallucinationForm 
-        {...defaultProps} 
-        showApiSettings={true}
-        apiStatus="valid"
-      />
-    );
-
-    expect(screen.getByText('API connected')).toBeInTheDocument();
-
-    rerender(
-      <AddHallucinationForm 
-        {...defaultProps} 
-        showApiSettings={true}
-        apiStatus="invalid"
-      />
-    );
-
-    expect(screen.getByText('API not reachable')).toBeInTheDocument();
-  });
 
   it('should call onSuccess on form submission', async () => {
     const user = userEvent.setup();
@@ -177,33 +121,10 @@ describe('AddHallucinationForm', () => {
     expect(verifyButton).toBeInTheDocument();
   });
 
-  it('should require API URL before verification', async () => {
-    const user = userEvent.setup();
-    const setShowApiSettings = vi.fn();
-    const { toast } = await import('sonner');
-    
-    render(
-      <AddHallucinationForm 
-        {...defaultProps} 
-        apiUrl=""
-        setShowApiSettings={setShowApiSettings}
-      />
-    );
-
-    const contentInput = screen.getByLabelText(/content/i);
-    await user.type(contentInput, 'Test content');
-
-    const verifyButton = screen.getByRole('button', { name: /verify/i });
-    await user.click(verifyButton);
-
-    expect(toast.error).toHaveBeenCalledWith('Please configure API URL first');
-    expect(setShowApiSettings).toHaveBeenCalledWith(true);
-  });
-
   it('should show verify button when content is empty', async () => {
     // This test verifies that the form has the verify button visible
     // The actual validation behavior depends on the component implementation
-    render(<AddHallucinationForm {...defaultProps} apiUrl="http://localhost:8000" />);
+    render(<AddHallucinationForm {...defaultProps} />);
 
     // Verify button should be present
     const verifyButton = screen.getByRole('button', { name: /verify/i });

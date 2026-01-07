@@ -148,9 +148,6 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                 <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
                 <span className="text-sm text-green-400">Connected to OHI API</span>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                localhost:8080
-              </p>
             </CardContent>
           </Card>
         </div>
