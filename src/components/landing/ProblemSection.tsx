@@ -533,11 +533,14 @@ export function ProblemSection() {
           <motion.div
             className="absolute inset-0 rounded-3xl opacity-60"
             style={{
-              background: "linear-gradient(90deg, transparent, rgba(167,139,250,0.4), transparent)",
+              // Start and end colors are identical to ensure a seamless loop
+              background: "linear-gradient(90deg, rgba(167,139,250,0.4) 0%, rgba(34,211,238,0.4) 50%, rgba(167,139,250,0.4) 100%)",
               backgroundSize: "200% 100%",
             }}
-            animate={{ backgroundPosition: ["-100% 0%", "200% 0%"] }}
-            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+            // animate backgroundPosition from 0% -> 100% for a smooth translation
+            animate={{ backgroundPosition: ["0% 0%", "100% 0%"] }}
+            // slowed down for a calmer effect; adjust duration as needed
+            transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
           />
           
           {/* Pulsing corner accents */}
