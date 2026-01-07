@@ -24,22 +24,28 @@ export function Navbar() {
   const isDashboard = pathname?.startsWith("/dashboard");
 
   useEffect(() => {
+    const fetchTokens = async () => {
+      try {
+        const res = await fetch("/api/tokens");
+        if (res.ok) {
+          const data = await res.json();
+          setTokens(data.tokens);
+        } else {
+          setTokens(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch tokens:", error);
+        setTokens(null);
+      }
+    };
+
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
       setLoading(false);
 
       if (user) {
-        // Fetch tokens
-        try {
-          const res = await fetch("/api/tokens");
-          if (res.ok) {
-            const data = await res.json();
-            setTokens(data.tokens);
-          }
-        } catch (error) {
-          console.error("Failed to fetch tokens:", error);
-        }
+        await fetchTokens();
       }
     };
     getUser();
@@ -47,7 +53,10 @@ export function Navbar() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (!session?.user) {
+      setLoading(false);
+      if (session?.user) {
+        fetchTokens();
+      } else {
         setTokens(null);
       }
     });

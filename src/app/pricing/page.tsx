@@ -190,15 +190,17 @@ export default function PricingPage() {
 
       const { url } = await res.json();
       window.location.href = url;
+      return true;
     } catch (error) {
       toast.error("Something went wrong. Please try again.");
       setLoading(null);
+      return false;
     }
   };
 
   const handleAuthAndPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPackage) return;
+    if (!selectedPackage || authLoading) return;
     setAuthLoading(true);
 
     try {
@@ -218,7 +220,13 @@ export default function PricingPage() {
         if (data.user) {
           setUser(data.user);
           toast.success("Logged in! Redirecting to payment...");
-          await handleCheckout(selectedPackage, data.user.id, email);
+          const checkoutSuccess = await handleCheckout(selectedPackage, data.user.id, email);
+          if (!checkoutSuccess) {
+            setAuthLoading(false);
+          }
+        } else {
+          toast.error("Login was successful, but we couldn't load your account. Please try again.");
+          setAuthLoading(false);
         }
       } else {
         // Attempt Sign Up
@@ -238,7 +246,13 @@ export default function PricingPage() {
 
         if (data.user) {
           toast.success("Account created! Redirecting to payment...");
-          await handleCheckout(selectedPackage, data.user.id, email);
+          const checkoutSuccess = await handleCheckout(selectedPackage, data.user.id, email);
+          if (!checkoutSuccess) {
+            setAuthLoading(false);
+          }
+        } else {
+          toast.success("Account created! Please check your email to confirm before purchasing.");
+          setAuthLoading(false);
         }
       }
     } catch (error) {
@@ -492,8 +506,9 @@ export default function PricingPage() {
                className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-2xl z-10"
             >
                 <button 
-                    onClick={() => setShowAuthModal(false)} 
-                    className="absolute top-4 right-4 text-slate-400 hover:text-white"
+                    onClick={() => setShowAuthModal(false)}
+                    disabled={authLoading}
+                    className="absolute top-4 right-4 text-slate-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     <X className="w-5 h-5" />
                 </button>
@@ -513,11 +528,13 @@ export default function PricingPage() {
                     <button
                         type="button"
                         onClick={() => setAuthMode("login")}
+                        disabled={authLoading}
                         className={cn(
                             "flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all",
                             authMode === "login" 
                                 ? "bg-blue-600 text-white" 
-                                : "text-slate-400 hover:text-white"
+                                : "text-slate-400 hover:text-white",
+                            authLoading && "opacity-60 cursor-not-allowed"
                         )}
                     >
                         Login
@@ -525,18 +542,20 @@ export default function PricingPage() {
                     <button
                         type="button"
                         onClick={() => setAuthMode("signup")}
+                        disabled={authLoading}
                         className={cn(
                             "flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all",
                             authMode === "signup" 
                                 ? "bg-blue-600 text-white" 
-                                : "text-slate-400 hover:text-white"
+                                : "text-slate-400 hover:text-white",
+                            authLoading && "opacity-60 cursor-not-allowed"
                         )}
                     >
                         Sign Up
                     </button>
                 </div>
                 
-                <form onSubmit={handleAuthAndPurchase} className="space-y-4">
+                <form onSubmit={handleAuthAndPurchase} className="space-y-4" aria-busy={authLoading}>
                     <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
                     <Input
@@ -546,6 +565,7 @@ export default function PricingPage() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
+                        disabled={authLoading}
                         className="bg-slate-950 border-slate-700 focus:border-blue-500 text-slate-100"
                     />
                     </div>
@@ -557,6 +577,7 @@ export default function PricingPage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
+                        disabled={authLoading}
                         className="bg-slate-950 border-slate-700 focus:border-blue-500 text-slate-100"
                     />
                     </div>
@@ -569,6 +590,9 @@ export default function PricingPage() {
                         "Continue to Payment"
                     )}
                     </Button>
+                    <p className="text-xs text-slate-500 text-center" aria-live="polite">
+                      {authLoading ? "Processing your request. Please wait..." : "You can switch between login and sign up any time."}
+                    </p>
                 </form>
             </motion.div>
           </div>

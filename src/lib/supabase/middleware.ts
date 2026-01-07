@@ -45,6 +45,13 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/auth') ||
     pathname.startsWith('/pricing') ||
     pathname.startsWith('/about') ||
+    pathname.startsWith('/agb') ||
+    pathname.startsWith('/datenschutz') ||
+    pathname.startsWith('/impressum') ||
+    pathname.startsWith('/eula') ||
+    pathname.startsWith('/disclaimer') ||
+    pathname.startsWith('/cookies') ||
+    pathname.startsWith('/accessibility') ||
     pathname === '/api/auth/callback' ||
     pathname === '/api/checkout' ||
     pathname.startsWith('/api/webhooks/stripe');
