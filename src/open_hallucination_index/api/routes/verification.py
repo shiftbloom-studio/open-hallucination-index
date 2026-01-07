@@ -7,8 +7,10 @@ Primary API for text verification against knowledge sources.
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Annotated, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -23,6 +25,7 @@ from open_hallucination_index.infrastructure.dependencies import get_verify_use_
 from open_hallucination_index.ports.verification_oracle import VerificationStrategy
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # -----------------------------------------------------------------------------
@@ -122,10 +125,24 @@ async def verify_text(
     graph and vector knowledge stores, and returns an aggregated
     trust score with explanations.
     """
+    request_id = uuid4()
+    start = time.perf_counter()
+
     # Map string strategy to enum
     strategy = None
     if request.strategy:
         strategy = VerificationStrategy(request.strategy)
+
+    logger.info(
+        "Verify request started",
+        extra={
+            "request_id": str(request_id),
+            "text_length": len(request.text),
+            "has_context": bool(request.context),
+            "strategy": strategy.value if strategy else "default",
+            "use_cache": request.use_cache,
+        },
+    )
 
     try:
         result: VerificationResult = await use_case.execute(
@@ -135,10 +152,29 @@ async def verify_text(
             context=request.context,
         )
     except Exception as e:
+        logger.error(
+            "Verify request failed",
+            extra={
+                "request_id": str(request_id),
+                "stage": "use_case.execute",
+                "error_type": type(e).__name__,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Verification failed: {e!s}",
         ) from e
+
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        "Verify request completed",
+        extra={
+            "request_id": str(request_id),
+            "verification_id": str(result.id),
+            "processing_time_ms": round(elapsed_ms, 2),
+            "cached": result.cached,
+        },
+    )
 
     # Transform to API response
     claims = [
@@ -180,16 +216,26 @@ async def verify_batch(
     Uses a semaphore to limit concurrency and protect downstream services.
     """
     import asyncio
-    import time
 
     # Concurrency limit to protect downstream services (LLM, vector DB, etc.)
     BATCH_CONCURRENCY_LIMIT = 10
 
     start = time.perf_counter()
+    request_id = uuid4()
 
     strategy = None
     if request.strategy:
         strategy = VerificationStrategy(request.strategy)
+
+    logger.info(
+        "Batch verify request started",
+        extra={
+            "request_id": str(request_id),
+            "batch_size": len(request.texts),
+            "strategy": strategy.value if strategy else "default",
+            "use_cache": request.use_cache,
+        },
+    )
 
     # Semaphore to limit concurrent verification operations
     semaphore = asyncio.Semaphore(BATCH_CONCURRENCY_LIMIT)
@@ -211,6 +257,13 @@ async def verify_batch(
     responses: list[VerifyTextResponse] = []
     for item in gathered:
         if isinstance(item, BaseException):
+            logger.error(
+                "Batch verify item failed",
+                extra={
+                    "request_id": str(request_id),
+                    "error_type": type(item).__name__,
+                },
+            )
             # Skip failed verifications
             continue
 
@@ -238,6 +291,16 @@ async def verify_batch(
         )
 
     total_time = (time.perf_counter() - start) * 1000
+
+    logger.info(
+        "Batch verify request completed",
+        extra={
+            "request_id": str(request_id),
+            "batch_size": len(request.texts),
+            "completed_count": len(responses),
+            "processing_time_ms": round(total_time, 2),
+        },
+    )
 
     return BatchVerifyResponse(
         results=responses,
