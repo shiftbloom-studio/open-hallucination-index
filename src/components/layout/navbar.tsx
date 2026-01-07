@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { User } from "@supabase/supabase-js";
+import { type AuthChangeEvent, type Session, type User } from "@supabase/supabase-js";
 import { Coins, LogOut, LayoutDashboard, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
@@ -51,7 +51,7 @@ export function Navbar() {
     getUser();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setUser(session?.user ?? null);
       setLoading(false);
       if (session?.user) {
