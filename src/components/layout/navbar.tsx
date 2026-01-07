@@ -148,11 +148,17 @@ export function Navbar() {
             </>
           ) : !loading ? (
             <>
-              <Link href="/auth/login">
-                <Button variant="ghost" className="text-neutral-300 hover:text-white font-medium">Login</Button>
+              <Link 
+                href="/auth/login" 
+                className={cn(
+                  "text-neutral-300 hover:text-white font-medium transition-colors px-3 py-2 cursor-pointer",
+                  pathname === "/auth/login" && "text-white"
+                )}
+              >
+                Login
               </Link>
               <Link href="/auth/signup">
-                <Button className="bg-slate-800 text-white border-slate-700 font-medium hover:bg-slate-700 transition-colors">Sign Up</Button>
+                <Button className="bg-slate-800 text-white border border-slate-700 font-medium hover:bg-slate-700 transition-colors cursor-pointer">Sign Up</Button>
               </Link>
             </>
           ) : null}
