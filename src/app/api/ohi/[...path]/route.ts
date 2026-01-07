@@ -33,7 +33,26 @@ async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> 
 
   const incomingUrl = new URL(req.url);
 
-  const upstreamUrl = new URL(joinUrl(baseUrl, path.join("/")));
+  // Build forwarded path and remove local `api/ohi` prefix if present to avoid duplication
+  let forwardedPath = path.join("/");
+  if (forwardedPath.startsWith("api/ohi/")) {
+    forwardedPath = forwardedPath.replace(/^api\/ohi\//, "");
+  } else if (forwardedPath === "api/ohi") {
+    forwardedPath = "";
+  }
+
+  // If the baseUrl already includes an `/api` segment and the forwardedPath also starts with `api/`,
+  // strip the extra `api/` to avoid duplicating `/api` in the upstream URL.
+  try {
+    const parsedBase = new URL(baseUrl);
+    if (parsedBase.pathname.endsWith("/api") && forwardedPath.startsWith("api/")) {
+      forwardedPath = forwardedPath.replace(/^api\//, "");
+    }
+  } catch (e) {
+    // ignore if baseUrl isn't a full URL
+  }
+
+  const upstreamUrl = forwardedPath ? new URL(joinUrl(baseUrl, forwardedPath)) : new URL(baseUrl);
   upstreamUrl.search = incomingUrl.search;
 
   const headers = copyHeaders(req.headers);
