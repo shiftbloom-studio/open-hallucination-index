@@ -61,10 +61,12 @@ async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> 
   const method = req.method.toUpperCase();
   const hasBody = !["GET", "HEAD"].includes(method);
 
+  const body = hasBody ? await req.arrayBuffer() : undefined;
+
   const upstream = await fetch(upstreamUrl.toString(), {
     method,
     headers,
-    body: hasBody ? req.body : undefined,
+    body,
   });
 
   return new Response(upstream.body, {
