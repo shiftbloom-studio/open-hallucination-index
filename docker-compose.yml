@@ -178,6 +178,7 @@ services:
       - ./data/certbot/www:/var/www/certbot:ro
     depends_on:
       - ohi-api
+      - ohi-frontend
     networks:
       - ohi-net
     command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
@@ -185,14 +186,34 @@ services:
 
   # 9. Certbot for Let's Encrypt certificates
   certbot:
-    image: certbot/certbot:v3.3.0
+    image: certbot/certbot:v5.2.2
     container_name: ohi-certbot
     volumes:
       - ./data/certbot/conf:/etc/letsencrypt
       - ./data/certbot/www:/var/www/certbot
     networks:
       - ohi-net
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    entrypoint: "/bin/sh -c 'tail -f /dev/null'"
+
+  # 10. Frontend (Next.js App)
+  ohi-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ohi-frontend
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - NEXT_PUBLIC_API_URL=http://ohi-api:8080
+    depends_on:
+      - ohi-api
+    networks:
+      - ohi-net
+    restart: unless-stopped
 
 networks:
   ohi-net:
