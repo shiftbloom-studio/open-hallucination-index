@@ -109,6 +109,34 @@ services:
     networks:
       - ohi-net
 
+  # 6b. OHI MCP Server - Unified Knowledge Sources
+  ohi-mcp-server:
+    build:
+      context: ./docker/ohi-mcp-server
+      dockerfile: Dockerfile
+      cache_from:
+        - ohi-mcp-server:local
+    image: ohi-mcp-server:local
+    container_name: ohi-mcp-server
+    ports:
+      - "127.0.0.1:8083:8080" # localhost only for dev
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      # Polite pool email for Crossref & OpenAlex (higher rate limits)
+      # Crossref: 50 req/sec (vs 1 req/sec anonymous)
+      # OpenAlex: 100k req/day with faster response (vs rate-limited anonymous)
+      - POLITE_POOL_EMAIL=${POLITE_POOL_EMAIL:-hi@shiftbloom.studio}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - ohi-net
+
   # 7. Open Hallucination Index API
   ohi-api:
     build:
@@ -151,6 +179,8 @@ services:
       MCP_CONTEXT7_ENABLED: "true"
       MCP_CONTEXT7_URL: "http://context7-mcp:3000"
       CONTEXT7_API_KEY: "${CONTEXT7_API_KEY}"
+      MCP_OHI_ENABLED: "true"
+      MCP_OHI_URL: "http://ohi-mcp-server:8080"
 
       # Verification settings
       VERIFY_DEFAULT_STRATEGY: "mcp_enhanced"
@@ -163,6 +193,7 @@ services:
       - vllm
       - wikipedia-mcp
       - context7-mcp
+      - ohi-mcp-server
     networks:
       - ohi-net
     healthcheck:

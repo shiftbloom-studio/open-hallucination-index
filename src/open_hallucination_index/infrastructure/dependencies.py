@@ -24,6 +24,7 @@ from open_hallucination_index.adapters.outbound.llm_openai import OpenAILLMAdapt
 from open_hallucination_index.adapters.outbound.vector_qdrant import QdrantVectorAdapter
 from open_hallucination_index.adapters.outbound.mcp_wikipedia import WikipediaMCPAdapter
 from open_hallucination_index.adapters.outbound.mcp_context7 import Context7MCPAdapter
+from open_hallucination_index.adapters.outbound.mcp_ohi import OHIMCPAdapter
 from open_hallucination_index.adapters.outbound.embeddings_local import LocalEmbeddingAdapter
 from open_hallucination_index.application.verify_text import VerifyTextUseCase
 from open_hallucination_index.domain.services.claim_decomposer import LLMClaimDecomposer
@@ -148,6 +149,15 @@ async def _initialize_adapters() -> None:
             logger.info(f"Context7 MCP connected: {settings.mcp.context7_url}")
         except Exception as e:
             logger.warning(f"Context7 MCP unavailable (will use fallback): {e}")
+
+    if settings.mcp.ohi_enabled:
+        try:
+            ohi_adapter = OHIMCPAdapter(settings.mcp)
+            await ohi_adapter.connect()
+            _mcp_sources.append(ohi_adapter)
+            logger.info(f"OHI MCP connected: {settings.mcp.ohi_url}")
+        except Exception as e:
+            logger.warning(f"OHI MCP unavailable (will use fallback): {e}")
 
     # Initialize domain services
     _claim_decomposer = LLMClaimDecomposer(

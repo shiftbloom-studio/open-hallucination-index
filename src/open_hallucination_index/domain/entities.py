@@ -71,6 +71,16 @@ class EvidenceSource(StrEnum):
     CACHED = auto()  # Retrieved from semantic cache
     MCP_WIKIPEDIA = auto()  # Wikipedia via MCP server
     MCP_CONTEXT7 = auto()  # Context7 documentation via MCP server
+    
+    # Unified OHI MCP Server sources
+    WIKIPEDIA = auto()  # Wikipedia/Wikidata/DBpedia
+    KNOWLEDGE_GRAPH = auto()  # Generic knowledge graph
+    ACADEMIC = auto()  # OpenAlex, Crossref, Europe PMC
+    PUBMED = auto()  # PubMed/NCBI
+    CLINICAL_TRIALS = auto()  # ClinicalTrials.gov
+    NEWS = auto()  # GDELT news
+    WORLD_BANK = auto()  # World Bank economic data
+    OSV = auto()  # Open Source Vulnerabilities
 
 
 class Evidence(BaseModel):

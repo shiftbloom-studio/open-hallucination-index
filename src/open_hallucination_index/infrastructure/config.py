@@ -143,7 +143,7 @@ class VerificationSettings(BaseSettings):
 
 
 class MCPSettings(BaseSettings):
-    """Configuration for MCP knowledge sources (Wikipedia, Context7)."""
+    """Configuration for MCP knowledge sources (Wikipedia, Context7, OHI)."""
 
     model_config = SettingsConfigDict(env_prefix="MCP_")
 
@@ -163,6 +163,13 @@ class MCPSettings(BaseSettings):
     context7_api_key: str = Field(
         default="",
         description="Context7 API key for higher rate limits",
+    )
+
+    # OHI Unified MCP Server (13+ knowledge sources)
+    ohi_enabled: bool = Field(default=True)
+    ohi_url: str = Field(
+        default="http://ohi-mcp-server:8080",
+        description="URL of unified OHI MCP server",
     )
 
     def __init__(self, **kwargs: object) -> None:
