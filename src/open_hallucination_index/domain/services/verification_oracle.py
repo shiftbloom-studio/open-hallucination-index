@@ -3,6 +3,7 @@ Hybrid Verification Oracle
 ==========================
 
 Verifies claims using multiple strategies (graph + vector + MCP).
+Includes ADAPTIVE strategy with intelligent tiered collection.
 """
 
 from __future__ import annotations
@@ -29,6 +30,10 @@ if TYPE_CHECKING:
         VectorKnowledgeStore,
     )
     from open_hallucination_index.ports.mcp_source import MCPKnowledgeSource
+    from open_hallucination_index.domain.services.evidence_collector import (
+        AdaptiveEvidenceCollector,
+    )
+    from open_hallucination_index.domain.services.mcp_selector import SmartMCPSelector
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +53,7 @@ class HybridVerificationOracle(VerificationOracle):
     - HYBRID: Use both in parallel, merge results
     - CASCADING: Try graph first, fall back to vector if no results
     - MCP_ENHANCED: Query MCP sources first, fall back to local stores
+    - ADAPTIVE: Intelligent tiered collection with early-exit and latency optimization
     """
 
     def __init__(
@@ -55,8 +61,12 @@ class HybridVerificationOracle(VerificationOracle):
         graph_store: GraphKnowledgeStore | None = None,
         vector_store: VectorKnowledgeStore | None = None,
         mcp_sources: list[MCPKnowledgeSource] | None = None,
-        default_strategy: VerificationStrategy = VerificationStrategy.HYBRID,
+        default_strategy: VerificationStrategy = VerificationStrategy.ADAPTIVE,
         persist_mcp_evidence: bool = True,
+        persist_to_vector: bool = True,
+        # New components for ADAPTIVE strategy
+        evidence_collector: AdaptiveEvidenceCollector | None = None,
+        mcp_selector: SmartMCPSelector | None = None,
     ) -> None:
         """
         Initialize the oracle.
@@ -67,12 +77,18 @@ class HybridVerificationOracle(VerificationOracle):
             mcp_sources: List of MCP knowledge sources (Wikipedia, Context7, etc.).
             default_strategy: Default verification strategy.
             persist_mcp_evidence: Whether to persist MCP evidence to graph store.
+            persist_to_vector: Whether to also persist to vector store.
+            evidence_collector: AdaptiveEvidenceCollector for ADAPTIVE strategy.
+            mcp_selector: SmartMCPSelector for intelligent source selection.
         """
         self._graph_store = graph_store
         self._vector_store = vector_store
         self._mcp_sources = mcp_sources or []
         self._strategy = default_strategy
         self._persist_mcp_evidence = persist_mcp_evidence
+        self._persist_to_vector = persist_to_vector
+        self._evidence_collector = evidence_collector
+        self._mcp_selector = mcp_selector
 
     @property
     def current_strategy(self) -> VerificationStrategy:
@@ -135,6 +151,10 @@ class HybridVerificationOracle(VerificationOracle):
             elif active_strategy == VerificationStrategy.MCP_ENHANCED:
                 # MCP Enhanced: Query MCP sources first, then fallback to local
                 all_evidence = await self._mcp_enhanced_evidence(claim)
+
+            elif active_strategy == VerificationStrategy.ADAPTIVE:
+                # ADAPTIVE: Use AdaptiveEvidenceCollector for intelligent tiered collection
+                all_evidence = await self._adaptive_evidence(claim)
 
         except Exception as e:
             logger.error(f"Evidence gathering failed: {e}")
@@ -310,6 +330,79 @@ class HybridVerificationOracle(VerificationOracle):
 
         if not all_evidence:
             logger.debug(f"No evidence found from any source for claim: {claim.text[:100]}")
+
+        return all_evidence
+
+    async def _adaptive_evidence(self, claim: Claim) -> list[Evidence]:
+        """
+        Adaptive evidence gathering with intelligent tiered collection.
+
+        Uses AdaptiveEvidenceCollector for:
+        1. Tier 1: Local sources (Neo4j + Qdrant) with early-exit check
+        2. Tier 2: Selected MCP sources based on claim domain
+        3. Quality-weighted accumulation
+        4. Background completion for cache warming
+
+        Falls back to MCP_ENHANCED if collector not configured.
+        """
+        if self._evidence_collector is None:
+            # Fallback to MCP_ENHANCED if no collector configured
+            logger.debug("No evidence collector configured, falling back to MCP_ENHANCED")
+            return await self._mcp_enhanced_evidence(claim)
+
+        try:
+            # Get MCP sources to query based on claim domain
+            mcp_sources = None
+            if self._mcp_selector is not None:
+                selection = self._mcp_selector.select(claim)
+                mcp_sources = self._mcp_selector.get_sources_for_selection(selection)
+                logger.debug(
+                    f"Claim domain: {selection.domain.value}, "
+                    f"selected {len(selection.selected_sources)} MCP sources"
+                )
+            else:
+                # Use all available MCP sources
+                mcp_sources = [s for s in self._mcp_sources if s.is_available]
+
+            # Collect evidence using adaptive collector
+            result = await self._evidence_collector.collect(claim, mcp_sources)
+
+            logger.debug(
+                f"Adaptive collection: {len(result.evidence)} evidence, "
+                f"weighted_value={result.total_weighted_value:.2f}, "
+                f"latency={result.latency_ms:.1f}ms, "
+                f"early_exit={result.early_exit}"
+            )
+
+            # Persist MCP evidence to both graph and vector stores
+            mcp_evidence = [
+                ev for ev in result.evidence
+                if ev.source.value not in ("graph_exact", "graph_inferred", "vector_semantic")
+            ]
+
+            if mcp_evidence:
+                if self._persist_mcp_evidence:
+                    asyncio.create_task(self._persist_evidence_to_graph(mcp_evidence))
+                if self._persist_to_vector and self._vector_store is not None:
+                    asyncio.create_task(self._persist_evidence_to_vector(mcp_evidence))
+
+            return result.evidence
+
+        except Exception as e:
+            logger.warning(f"Adaptive evidence collection failed: {e}, falling back to MCP_ENHANCED")
+            return await self._mcp_enhanced_evidence(claim)
+
+    async def _persist_evidence_to_vector(self, evidence_list: list[Evidence]) -> None:
+        """Persist evidence to vector store for semantic fallback."""
+        if self._vector_store is None:
+            return
+
+        try:
+            if hasattr(self._vector_store, "persist_external_evidence"):
+                await self._vector_store.persist_external_evidence(evidence_list)
+                logger.debug(f"Persisted {len(evidence_list)} evidence to vector store")
+        except Exception as e:
+            logger.debug(f"Failed to persist evidence to vector store: {e}")
 
         return all_evidence
 
@@ -538,3 +631,19 @@ class HybridVerificationOracle(VerificationOracle):
             r is True for r in results[:2] if not isinstance(r, BaseException)
         )
         return local_healthy
+
+    def get_latency_stats(self) -> dict[str, object]:
+        """
+        Get latency statistics from the adaptive evidence collector.
+
+        Returns:
+            Dictionary with per-source latency metrics.
+        """
+        if self._evidence_collector is not None:
+            return self._evidence_collector.get_latency_stats()
+        return {}
+
+    async def cleanup(self) -> None:
+        """Cleanup resources (background tasks, etc.)."""
+        if self._evidence_collector is not None:
+            await self._evidence_collector.cleanup()

@@ -32,6 +32,10 @@ from open_hallucination_index.domain.services.scorer import WeightedScorer
 from open_hallucination_index.domain.services.verification_oracle import (
     HybridVerificationOracle,
 )
+from open_hallucination_index.domain.services.evidence_collector import (
+    AdaptiveEvidenceCollector,
+)
+from open_hallucination_index.domain.services.mcp_selector import SmartMCPSelector
 from open_hallucination_index.ports.cache import CacheProvider
 from open_hallucination_index.ports.claim_decomposer import ClaimDecomposer
 from open_hallucination_index.ports.knowledge_store import (
@@ -173,10 +177,56 @@ async def _initialize_adapters() -> None:
         "vector_semantic": VerificationStrategy.VECTOR_SEMANTIC,
         "cascading": VerificationStrategy.CASCADING,
         "mcp_enhanced": VerificationStrategy.MCP_ENHANCED,
+        "adaptive": VerificationStrategy.ADAPTIVE,
     }
     strategy = strategy_map.get(
         settings.verification.default_strategy.lower(),
-        VerificationStrategy.MCP_ENHANCED,
+        VerificationStrategy.ADAPTIVE,  # Default to ADAPTIVE
+    )
+
+    # Initialize SmartMCPSelector for intelligent source selection
+    mcp_selector = SmartMCPSelector(
+        mcp_sources=_mcp_sources,
+        max_sources_per_claim=settings.verification.max_mcp_sources_per_claim,
+        min_relevance_threshold=settings.verification.min_source_relevance,
+    )
+    logger.info("SmartMCPSelector initialized")
+
+    # Initialize AdaptiveEvidenceCollector for tiered collection
+    evidence_collector = AdaptiveEvidenceCollector(
+        graph_store=_graph_store,
+        vector_store=_vector_store,
+        mcp_selector=mcp_selector,
+        min_evidence_count=settings.verification.min_evidence_count,
+        min_weighted_value=settings.verification.min_weighted_value,
+        high_confidence_threshold=settings.verification.high_confidence_threshold,
+        local_timeout_ms=settings.verification.local_timeout_ms,
+        mcp_timeout_ms=settings.verification.mcp_timeout_ms,
+        total_timeout_ms=settings.verification.total_timeout_ms,
+        enable_background_completion=settings.verification.enable_background_completion,
+    )
+
+    # Add persist callbacks for dual-write to Neo4j and Qdrant
+    async def persist_to_graph(evidence_list: list) -> None:
+        if _graph_store is not None:
+            for ev in evidence_list:
+                if hasattr(_graph_store, "persist_external_evidence"):
+                    await _graph_store.persist_external_evidence(ev)
+
+    async def persist_to_vector(evidence_list: list) -> None:
+        if _vector_store is not None and hasattr(_vector_store, "persist_external_evidence"):
+            await _vector_store.persist_external_evidence(evidence_list)
+
+    if settings.verification.persist_mcp_evidence:
+        evidence_collector.add_persist_callback(persist_to_graph)
+    if settings.verification.persist_to_vector:
+        evidence_collector.add_persist_callback(persist_to_vector)
+
+    logger.info(
+        f"AdaptiveEvidenceCollector initialized: "
+        f"min_evidence={settings.verification.min_evidence_count}, "
+        f"local_timeout={settings.verification.local_timeout_ms}ms, "
+        f"mcp_timeout={settings.verification.mcp_timeout_ms}ms"
     )
 
     _verification_oracle = HybridVerificationOracle(
@@ -185,6 +235,9 @@ async def _initialize_adapters() -> None:
         mcp_sources=_mcp_sources,
         default_strategy=strategy,
         persist_mcp_evidence=settings.verification.persist_mcp_evidence,
+        persist_to_vector=settings.verification.persist_to_vector,
+        evidence_collector=evidence_collector,
+        mcp_selector=mcp_selector,
     )
     logger.info(f"Verification oracle initialized: strategy={strategy.value}, mcp_sources={len(_mcp_sources)}")
 

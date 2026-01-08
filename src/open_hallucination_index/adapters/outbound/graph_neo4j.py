@@ -468,3 +468,164 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
             logger.warning(f"Persisted evidence search failed: {e}")
 
         return evidences
+
+    async def count_evidence_for_claim(
+        self,
+        claim: Claim,
+    ) -> int:
+        """
+        Fast count of evidence without retrieving full content.
+
+        Useful for sufficiency checks before committing to full retrieval.
+
+        Args:
+            claim: The claim to check evidence for.
+
+        Returns:
+            Approximate count of matching evidence.
+        """
+        if self._driver is None:
+            return 0
+
+        count = 0
+
+        # Count direct triplet matches if claim has structured form
+        if claim.subject and claim.object:
+            count += await self._count_triplet_matches(claim.subject, claim.object)
+
+        # Count entity matches
+        count += await self._count_entity_matches(claim.text)
+
+        return count
+
+    async def _count_triplet_matches(self, subject: str, obj: str) -> int:
+        """Count triplet matches without retrieving data."""
+        if self._driver is None:
+            return 0
+
+        query = """
+            MATCH (s)-[r]->(o)
+            WHERE toLower(s.name) CONTAINS toLower($subject)
+              AND toLower(o.name) CONTAINS toLower($obj)
+            RETURN count(*) AS cnt
+        """
+
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                result = await session.run(query, {"subject": subject, "obj": obj})
+                record = await result.single()
+                return record["cnt"] if record else 0
+        except Exception:
+            return 0
+
+    async def _count_entity_matches(self, text: str) -> int:
+        """Count entity matches in text."""
+        if self._driver is None:
+            return 0
+
+        # Extract capitalized words as potential entities
+        words = text.split()
+        entities = [w for w in words if w and w[0].isupper() and len(w) > 1]
+
+        if not entities:
+            return 0
+
+        query = """
+            MATCH (n)-[r]-(m)
+            WHERE any(word IN $words WHERE toLower(n.name) CONTAINS toLower(word))
+            RETURN count(*) AS cnt
+        """
+
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                result = await session.run(query, {"words": entities[:5]})
+                record = await result.single()
+                return min(record["cnt"], 50) if record else 0  # Cap for performance
+        except Exception:
+            return 0
+
+    async def ensure_indexes(self) -> None:
+        """
+        Ensure optimal indexes exist for common query patterns.
+
+        Creates indexes for:
+        - Node name lookups (case-insensitive)
+        - ExternalEvidence content hash
+        - ExternalEvidence source type
+        """
+        if self._driver is None:
+            return
+
+        indexes = [
+            # Full-text index on common node name property
+            """
+            CREATE TEXT INDEX node_name_text IF NOT EXISTS
+            FOR (n:Entity)
+            ON (n.name)
+            """,
+            # Index for external evidence deduplication
+            """
+            CREATE INDEX external_evidence_hash IF NOT EXISTS
+            FOR (e:ExternalEvidence)
+            ON (e.content_hash)
+            """,
+            # Index for source-based lookups
+            """
+            CREATE INDEX external_evidence_source IF NOT EXISTS
+            FOR (e:ExternalEvidence)
+            ON (e.source_type)
+            """,
+            # Composite index for similarity filtering
+            """
+            CREATE INDEX external_evidence_similarity IF NOT EXISTS
+            FOR (e:ExternalEvidence)
+            ON (e.similarity_score)
+            """,
+        ]
+
+        for index_query in indexes:
+            try:
+                async with self._driver.session(database=self._settings.database) as session:
+                    await session.run(index_query)
+            except Exception as e:
+                # Index might already exist or syntax differs by Neo4j version
+                logger.debug(f"Index creation note: {e}")
+
+        logger.info("Neo4j indexes ensured")
+
+    async def get_stats(self) -> dict[str, Any]:
+        """
+        Get graph statistics for monitoring.
+
+        Returns:
+            Dictionary with node/relationship counts and index status.
+        """
+        if self._driver is None:
+            return {"connected": False}
+
+        stats: dict[str, Any] = {"connected": True}
+
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                # Node count
+                result = await session.run("MATCH (n) RETURN count(n) AS count")
+                record = await result.single()
+                stats["node_count"] = record["count"] if record else 0
+
+                # Relationship count
+                result = await session.run("MATCH ()-[r]->() RETURN count(r) AS count")
+                record = await result.single()
+                stats["relationship_count"] = record["count"] if record else 0
+
+                # External evidence count
+                result = await session.run(
+                    "MATCH (e:ExternalEvidence) RETURN count(e) AS count"
+                )
+                record = await result.single()
+                stats["external_evidence_count"] = record["count"] if record else 0
+
+        except Exception as e:
+            logger.warning(f"Stats collection failed: {e}")
+            stats["error"] = str(e)
+
+        return stats

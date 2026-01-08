@@ -25,6 +25,7 @@ class VerificationStrategy(StrEnum):
     HYBRID = auto()  # Combination of graph + vector
     CASCADING = auto()  # Try graph first, fall back to vector
     MCP_ENHANCED = auto()  # MCP sources first, fallback to local stores
+    ADAPTIVE = auto()  # Intelligent tiered collection with early-exit
 
 
 class VerificationOracle(ABC):

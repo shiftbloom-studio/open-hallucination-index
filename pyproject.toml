@@ -36,7 +36,7 @@ dependencies = [
     "mcp>=1.25.0",
     "sentence-transformers>=5.2.0",
     "wikitextparser>=0.56.4",
-    "uvloop>=0.22.1",
+    "uvloop>=0.22.1; sys_platform != 'win32'",
     "orjson>=3.11.5"
 ]
 
