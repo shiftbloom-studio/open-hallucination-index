@@ -129,8 +129,11 @@ class VerificationSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="VERIFY_")
 
-    default_strategy: Literal["graph_exact", "vector_semantic", "hybrid", "cascading", "mcp_enhanced"] = Field(
-        default="mcp_enhanced"
+    default_strategy: Literal[
+        "graph_exact", "vector_semantic", "hybrid", "cascading", "mcp_enhanced", "adaptive"
+    ] = Field(
+        default="adaptive",
+        description="Verification strategy. 'adaptive' uses intelligent tiered collection.",
     )
     max_claims_per_request: int = Field(default=100, ge=1)
     similarity_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
@@ -139,6 +142,64 @@ class VerificationSettings(BaseSettings):
     persist_mcp_evidence: bool = Field(
         default=True,
         description="Persist evidence from MCP sources to Neo4j graph",
+    )
+    persist_to_vector: bool = Field(
+        default=True,
+        description="Also persist MCP evidence to Qdrant for semantic fallback",
+    )
+
+    # === Adaptive Evidence Collection Settings ===
+    min_evidence_count: int = Field(
+        default=3,
+        ge=1,
+        description="Minimum evidence pieces before early exit",
+    )
+    min_weighted_value: float = Field(
+        default=2.0,
+        ge=0.0,
+        description="Minimum quality-weighted value for sufficiency",
+    )
+    high_confidence_threshold: int = Field(
+        default=2,
+        ge=1,
+        description="High-confidence evidence count for early exit",
+    )
+
+    # === Timeout Settings (milliseconds) ===
+    local_timeout_ms: float = Field(
+        default=50.0,
+        ge=10.0,
+        description="Timeout for local sources (Neo4j + Qdrant)",
+    )
+    mcp_timeout_ms: float = Field(
+        default=500.0,
+        ge=100.0,
+        description="Timeout for MCP sources per claim",
+    )
+    total_timeout_ms: float = Field(
+        default=2000.0,
+        ge=500.0,
+        description="Total timeout for all evidence collection",
+    )
+
+    # === Source Selection ===
+    max_mcp_sources_per_claim: int = Field(
+        default=4,
+        ge=1,
+        le=10,
+        description="Maximum MCP sources to query per claim",
+    )
+    min_source_relevance: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum relevance score to include MCP source",
+    )
+
+    # === Background Completion ===
+    enable_background_completion: bool = Field(
+        default=True,
+        description="Allow slow MCP tasks to complete in background for caching",
     )
 
 

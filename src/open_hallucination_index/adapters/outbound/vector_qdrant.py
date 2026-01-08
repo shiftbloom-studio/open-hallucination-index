@@ -383,3 +383,162 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
         except Exception as e:
             logger.error(f"Failed to add facts: {e}")
             raise QdrantError(f"Upsert failed: {e}") from e
+
+    async def persist_external_evidence(
+        self,
+        evidence_list: list[Evidence],
+    ) -> int:
+        """
+        Persist external evidence (from MCP) to Qdrant for semantic fallback.
+
+        This enables future claims to find similar evidence via vector search,
+        reducing latency by avoiding MCP calls for previously seen content.
+
+        Args:
+            evidence_list: List of Evidence objects to persist.
+
+        Returns:
+            Number of evidence items persisted.
+        """
+        if self._client is None:
+            raise QdrantError("Not connected to Qdrant")
+
+        if not evidence_list:
+            return 0
+
+        # Convert Evidence to facts format
+        facts = []
+        for ev in evidence_list:
+            fact = {
+                "id": str(ev.id),
+                "content": ev.content,
+                "source_uri": ev.source_uri,
+                "source": ev.source.value if hasattr(ev.source, "value") else str(ev.source),
+                "match_type": ev.match_type or "external",
+                "original_similarity": ev.similarity_score,
+                "retrieved_at": ev.retrieved_at.isoformat() if ev.retrieved_at else None,
+            }
+
+            # Add structured data fields if available
+            if ev.structured_data:
+                fact["subject"] = ev.structured_data.get("subject")
+                fact["predicate"] = ev.structured_data.get("predicate")
+                fact["object"] = ev.structured_data.get("object")
+
+            facts.append(fact)
+
+        return await self.add_facts(facts)
+
+    async def count_similar(
+        self,
+        text: str,
+        min_similarity: float = 0.7,
+    ) -> int:
+        """
+        Fast count of similar vectors without retrieving full content.
+
+        Useful for sufficiency checks before full retrieval.
+
+        Args:
+            text: Text to find similar content for.
+            min_similarity: Minimum similarity threshold.
+
+        Returns:
+            Count of similar items.
+        """
+        if self._client is None:
+            return 0
+
+        try:
+            embedding = await self.embed_text(text)
+
+            # Use scroll with count to efficiently count matches
+            results = await self._client.query_points(
+                collection_name=self._settings.collection_name,
+                query=embedding,
+                limit=100,  # Cap for performance
+                score_threshold=min_similarity,
+            )
+
+            return len(results.points)
+        except Exception as e:
+            logger.debug(f"Count similar failed: {e}")
+            return 0
+
+    async def hybrid_search(
+        self,
+        text: str,
+        keywords: list[str] | None = None,
+        top_k: int = 10,
+        min_similarity: float = 0.5,
+        keyword_boost: float = 0.3,
+    ) -> list[Evidence]:
+        """
+        Hybrid search combining dense vectors with keyword matching.
+
+        First performs vector search, then boosts results containing keywords.
+
+        Args:
+            text: Query text for dense search.
+            keywords: Optional keywords to boost matching results.
+            top_k: Maximum results to return.
+            min_similarity: Minimum similarity threshold.
+            keyword_boost: Score boost for keyword matches (0.0-1.0).
+
+        Returns:
+            List of evidence with adjusted scores.
+        """
+        if self._client is None:
+            raise QdrantError("Not connected to Qdrant")
+
+        # Get dense vector results with extra buffer for reranking
+        base_results = await self.search_similar(
+            VectorQuery(
+                text=text,
+                top_k=top_k * 2,  # Get extra for filtering
+                min_similarity=min_similarity,
+            )
+        )
+
+        if not keywords:
+            return base_results[:top_k]
+
+        # Apply keyword boost
+        boosted_results: list[tuple[float, Evidence]] = []
+        keywords_lower = [k.lower() for k in keywords]
+
+        for ev in base_results:
+            content_lower = ev.content.lower()
+            boost = 0.0
+
+            # Count keyword matches
+            matches = sum(1 for kw in keywords_lower if kw in content_lower)
+            if matches > 0:
+                # Boost proportional to matches (capped)
+                boost = min(keyword_boost * matches, keyword_boost * 2)
+
+            final_score = (ev.similarity_score or 0.5) + boost
+            boosted_results.append((final_score, ev))
+
+        # Sort by boosted score and return top_k
+        boosted_results.sort(key=lambda x: x[0], reverse=True)
+
+        # Update similarity scores with boosted values
+        final_evidence: list[Evidence] = []
+        for score, ev in boosted_results[:top_k]:
+            # Create new Evidence with updated score
+            final_evidence.append(
+                Evidence(
+                    id=ev.id,
+                    source=ev.source,
+                    source_id=ev.source_id,
+                    content=ev.content,
+                    structured_data=ev.structured_data,
+                    similarity_score=min(1.0, score),  # Cap at 1.0
+                    match_type=ev.match_type,
+                    retrieved_at=ev.retrieved_at,
+                    source_uri=ev.source_uri,
+                )
+            )
+
+        return final_evidence
