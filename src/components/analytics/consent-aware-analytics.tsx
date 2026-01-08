@@ -41,8 +41,14 @@ export function ConsentAwareAnalytics() {
     };
   }, []);
 
-  // Only render Analytics component if user has consented
+  // Only render Analytics component if user has consented AND Vercel Analytics is configured
   if (!hasConsent) {
+    return null;
+  }
+
+  // Check if running on Vercel (has VERCEL env var) or explicitly enabled
+  const isVercel = process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.VERCEL;
+  if (!isVercel) {
     return null;
   }
 

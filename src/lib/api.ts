@@ -43,12 +43,17 @@ export interface ClaimSummary {
   reasoning: string;
 }
 
-// TrustScore structure is not fully visible in provided files so we treat it as a generic object or strictly typed if we knew.
-// Assuming it acts as a JSON object in the response.
+// TrustScore structure matching Python backend (domain/results.py)
 export interface TrustScore {
-  score: number;
-  // Add other fields if discovered
-  [key: string]: unknown;
+  overall: number;
+  claims_total: number;
+  claims_supported: number;
+  claims_refuted: number;
+  claims_unverifiable: number;
+  confidence: number;
+  scoring_method: string;
+  // Convenience getter for backward compatibility
+  score?: number;
 }
 
 export interface VerifyTextResponse {
@@ -76,9 +81,6 @@ export class ApiClient {
   private getUrl(path: string): string {
     // Ensure path starts with slash
     const cleanPath = path.startsWith("/") ? path : `/${path}`;
-    if (this.baseUrl.endsWith("/api") && cleanPath.startsWith("/api/")) {
-      return `${this.baseUrl}${cleanPath.replace(/^\/api/, "")}`;
-    }
     return `${this.baseUrl}${cleanPath}`;
   }
 

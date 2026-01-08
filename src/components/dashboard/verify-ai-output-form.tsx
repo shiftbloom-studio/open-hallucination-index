@@ -223,9 +223,9 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
                 <p className="text-sm text-muted-foreground mb-1">Trust Score</p>
                 <p className={cn(
                   "text-3xl font-bold",
-                  getTrustScoreColor(verificationResult.trust_score.score)
+                  getTrustScoreColor(verificationResult.trust_score.overall ?? verificationResult.trust_score.score ?? 0)
                 )}>
-                  {(verificationResult.trust_score.score * 100).toFixed(1)}%
+                  {((verificationResult.trust_score.overall ?? verificationResult.trust_score.score ?? 0) * 100).toFixed(1)}%
                 </p>
               </div>
               <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">

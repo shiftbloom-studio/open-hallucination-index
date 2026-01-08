@@ -114,7 +114,7 @@ export default function AddHallucinationForm({
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Trust Score</p>
-                  <p className="font-medium text-lg">{(verificationResult.trust_score.score * 100).toFixed(1)}%</p>
+                  <p className="font-medium text-lg">{((verificationResult.trust_score.overall ?? verificationResult.trust_score.score ?? 0) * 100).toFixed(1)}%</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Claims Verified</p>
