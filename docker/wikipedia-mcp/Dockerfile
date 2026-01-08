@@ -2,7 +2,7 @@
 # ====================
 # Sidecar container providing Wikipedia access via MCP protocol
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 LABEL maintainer="ShiftBloom <dev@shiftbloom.com>"
 LABEL description="Wikipedia MCP Server for Open Hallucination Index"
@@ -20,12 +20,13 @@ RUN useradd --create-home --uid 10001 mcpuser
 USER mcpuser
 WORKDIR /home/mcpuser
 
-# Health check endpoint
+# Health check - use /sse endpoint instead since /health doesn't exist
+# The sse endpoint is the main MCP entry point
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -sf http://localhost:8080/sse 2>/dev/null || exit 1
 
 # Expose MCP port
 EXPOSE 8080
 
 # Run wikipedia-mcp with SSE transport and minimal logging
-CMD ["wikipedia-mcp", "--transport", "sse", "--host", "0.0.0.0", "--port", "8080", "--language", "en", "--enable-cache", "--log-level", "WARNING"]
+CMD ["wikipedia-mcp", "--transport", "sse", "--host", "0.0.0.0", "--port", "8080", "--language", "en", "--enable-cache"]

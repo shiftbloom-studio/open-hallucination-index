@@ -64,7 +64,9 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
             )
 
             # Neo4j can take a while to accept Bolt connections after container start.
-            max_attempts = 30
+            # With large Wikipedia imports, startup can take several minutes.
+            max_attempts = 60  # Increased for large databases
+            retry_interval = 30.0  # Fixed 30-second interval for less log spam
             for attempt in range(1, max_attempts + 1):
                 try:
                     await self._driver.verify_connectivity()
@@ -73,15 +75,15 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                 except ServiceUnavailable as e:
                     if attempt >= max_attempts:
                         raise
-                    sleep_seconds = min(5.0, 0.5 * (2 ** (attempt - 1)))
-                    logger.warning(
-                        "Neo4j not ready yet (attempt %s/%s). Retrying in %.1fs: %s",
-                        attempt,
-                        max_attempts,
-                        sleep_seconds,
-                        e,
-                    )
-                    await asyncio.sleep(sleep_seconds)
+                    # Only log every 2 attempts to reduce noise
+                    if attempt == 1 or attempt % 2 == 0:
+                        logger.info(
+                            "Neo4j not ready yet (attempt %s/%s). Retrying in %.0fs...",
+                            attempt,
+                            max_attempts,
+                            retry_interval,
+                        )
+                    await asyncio.sleep(retry_interval)
         except AuthError as e:
             logger.error(f"Neo4j authentication failed: {e}")
             raise Neo4jError(f"Authentication failed: {e}") from e

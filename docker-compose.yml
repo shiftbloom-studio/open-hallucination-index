@@ -4,14 +4,14 @@ services:
     image: neo4j:2025.11.2
     container_name: ohi-neo4j
     ports:
-      - "7474:7474" # HTTP
-      - "7687:7687" # Bolt
+      - "127.0.0.1:7474:7474" # HTTP - localhost only for dev
+      - "127.0.0.1:7687:7687" # Bolt - localhost only for dev
     environment:
       - NEO4J_AUTH=neo4j/password123
       - NEO4J_PLUGINS=["apoc", "graph-data-science"]
-      - NEO4J_dbms_memory_heap_initial__size=4G
-      - NEO4J_dbms_memory_heap_max__size=16G  
-      - NEO4J_dbms_memory_pagecache_size=8G  
+      - NEO4J_server_memory_heap_initial__size=4G
+      - NEO4J_server_memory_heap_max__size=16G  
+      - NEO4J_server_memory_pagecache_size=8G  
     volumes:
       - ./data/neo4j/data:/data
       - ./data/neo4j/logs:/logs
@@ -23,7 +23,7 @@ services:
     image: qdrant/qdrant:v1.16.3
     container_name: ohi-qdrant
     ports:
-      - "6333:6333"
+      - "127.0.0.1:6333:6333" # localhost only for dev
     volumes:
       - ./data/qdrant:/qdrant/storage
     networks:
@@ -34,20 +34,23 @@ services:
     image: redis:8.4.0
     container_name: ohi-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379" # localhost only for dev
     volumes:
       - ./data/redis:/data
     networks:
       - ohi-net
 
-  # 4. vLLM (GPU Accelerated) - Qwen2.5-14B with AWQ quantization
+  # 4. vLLM (GPU Accelerated) - Qwen2.5-14B full precision
   vllm:
     image: vllm/vllm-openai:latest
     container_name: ohi-vllm
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000" # localhost only for dev
     # Shared Memory ist kritisch für PyTorch/NCCL
     ipc: host
+    # Note: UDP buffer sysctls (net.core.rmem_max/wmem_max) are not supported 
+    # on Docker Desktop for Windows. Set these on the host if needed:
+    # sysctl -w net.core.rmem_max=7500000 net.core.wmem_max=7500000
     environment:
       - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
       - VLLM_WORKER_MULTIPROC_METHOD=spawn
@@ -62,16 +65,18 @@ services:
     volumes:
       # Model-Cache persistent machen
       - ~/.cache/huggingface:/root/.cache/huggingface
-    # Qwen2.5-14B with AWQ quantization
+    # Qwen2.5-14B with AWQ 4-bit quantization (fits in 24GB GPU)
+    # Using --generation-config vllm to use model's recommended sampling params
+    # (temp=0.7, top_p=0.8, top_k=20, repetition_penalty=1.05)
     command: >
       --model Qwen/Qwen2.5-14B-Instruct-AWQ
       --quantization awq
       --dtype half
       --max-model-len 8192
       --max-num-seqs 16
-      --enforce-eager
       --gpu-memory-utilization 0.90
       --tensor-parallel-size 1
+      --generation-config vllm
     networks:
       - ohi-net
 
@@ -82,7 +87,7 @@ services:
       dockerfile: Dockerfile
     container_name: ohi-wikipedia-mcp
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080" # localhost only for dev
     environment:
       - PYTHONUNBUFFERED=1
       - MCP_LOG_LEVEL=WARNING
@@ -97,7 +102,7 @@ services:
       dockerfile: Dockerfile
     container_name: ohi-context7-mcp
     ports:
-      - "8082:3000"
+      - "127.0.0.1:8082:3000" # localhost only for dev
     environment:
       - CONTEXT7_API_KEY=${CONTEXT7_API_KEY}
     restart: unless-stopped
@@ -124,7 +129,7 @@ services:
 
       # Use in-network service names
       LLM_BASE_URL: "http://vllm:8000/v1"
-      LLM_MODEL: "Qwen/Qwen2.5-7B-Instruct-AWQ"
+      LLM_MODEL: "Qwen/Qwen2.5-14B-Instruct-AWQ"
       LLM_API_KEY: "${LLM_API_KEY:-no-key-required}"
       
       # Local embeddings (no OpenAI API needed)
@@ -189,6 +194,19 @@ services:
     command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
     restart: unless-stopped
 
+  # 8b. Cloudflare Tunnel (bypasses IPv6/Docker issues)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ohi-cloudflared
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - nginx
+    networks:
+      - ohi-net
+    restart: unless-stopped
+
   # 9. Certbot for Let's Encrypt certificates
   certbot:
     image: certbot/certbot:v5.2.2
@@ -207,16 +225,27 @@ services:
       dockerfile: Dockerfile
       cache_from:
         - ohi-frontend:local
+      args:
+        - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
+        - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+        - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-}
+        - DEFAULT_API_URL=${DEFAULT_API_URL:-}
+        - DEFAULT_API_KEY=${DEFAULT_API_KEY:-}
     image: ohi-frontend:local
     container_name: ohi-frontend
     expose:
       - "3000"
     environment:
       - NODE_ENV=production
-      - SUPABASE_URL=${SUPABASE_URL:-}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-}
       - DATABASE_URL=${DATABASE_URL:-}
-      - NEXT_PUBLIC_API_URL=http://ohi-api:8080
+      - DEFAULT_API_URL=${DEFAULT_API_URL:-}
+      - DEFAULT_API_KEY=${DEFAULT_API_KEY:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
     depends_on:
       - ohi-api
     networks:
