@@ -18,9 +18,10 @@ RUN useradd --create-home --uid 10001 mcpuser
 USER mcpuser
 WORKDIR /home/mcpuser
 
-# Health check
+# Health check - check if the server is accepting connections
+# Since context7-mcp doesn't have a /health endpoint, use a TCP check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+    CMD curl -sf http://localhost:3000/ 2>/dev/null || exit 1
 
 # Expose MCP port
 EXPOSE 3000
