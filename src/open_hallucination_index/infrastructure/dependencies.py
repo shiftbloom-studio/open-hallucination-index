@@ -8,7 +8,10 @@ Wires adapters to ports based on configuration.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
+import random
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
@@ -100,6 +103,13 @@ async def _initialize_adapters() -> None:
     global _mcp_sources
 
     settings = get_settings()
+    
+    # Add a small random delay to stagger worker startups and avoid
+    # overwhelming MCP servers with simultaneous connection attempts
+    worker_pid = os.getpid()
+    stagger_delay = random.uniform(0.5, 3.0)
+    logger.debug(f"Worker {worker_pid}: staggering startup by {stagger_delay:.1f}s")
+    await asyncio.sleep(stagger_delay)
 
     logger.info(f"Initializing DI container - Environment: {settings.environment}")
 

@@ -83,6 +83,7 @@ class PoolConfig:
     health_check_interval_seconds: float = 30.0
     reconnect_delay_seconds: float = 1.0
     max_reconnect_attempts: int = 3
+    session_init_timeout_seconds: float = 60.0  # Timeout for session initialization
 
 
 class MCPSessionPool:
@@ -156,6 +157,7 @@ class MCPSessionPool:
         Initialize the pool with minimum sessions.
         
         Creates initial connections and starts health monitoring.
+        Uses retry logic with exponential backoff if initial connections fail.
         """
         if self._initialized:
             return
@@ -163,27 +165,50 @@ class MCPSessionPool:
         logger.info(f"Initializing MCP session pool for {self._source_name}")
         
         async with self._lock:
-            # Create minimum number of sessions
-            for _ in range(self._config.min_sessions):
-                try:
-                    session = await self._create_session()
-                    if session:
-                        self._sessions.append(session)
-                        await self._available.put(session)
-                        self._is_healthy = True
-                except Exception as e:
-                    logger.warning(f"Failed to create initial session for {self._source_name}: {e}")
-                    self._last_error = str(e)
+            # Create minimum number of sessions with retry
+            max_retries = 3
+            retry_delay = 1.0
+            
+            for i in range(self._config.min_sessions):
+                session = None
+                for attempt in range(max_retries):
+                    try:
+                        session = await self._create_session()
+                        if session:
+                            self._sessions.append(session)
+                            await self._available.put(session)
+                            self._is_healthy = True
+                            break
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to create initial session for {self._source_name} "
+                            f"(attempt {attempt + 1}/{max_retries}): {e}"
+                        )
+                        self._last_error = str(e)
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(retry_delay * (attempt + 1))
+                
+                if not session:
+                    logger.warning(
+                        f"Could not create session {i + 1}/{self._config.min_sessions} "
+                        f"for {self._source_name} after {max_retries} attempts"
+                    )
             
             self._initialized = True
         
         # Start background health check
         self._health_check_task = asyncio.create_task(self._health_check_loop())
         
-        logger.info(
-            f"MCP pool for {self._source_name} initialized with "
-            f"{len(self._sessions)} sessions"
-        )
+        if len(self._sessions) == 0:
+            logger.warning(
+                f"MCP pool for {self._source_name} initialized with 0 sessions, "
+                f"health check loop will attempt to create sessions"
+            )
+        else:
+            logger.info(
+                f"MCP pool for {self._source_name} initialized with "
+                f"{len(self._sessions)} sessions"
+            )
 
     async def shutdown(self) -> None:
         """
@@ -226,6 +251,7 @@ class MCPSessionPool:
         This ensures the context manager lifecycle (AnyIO scopes)
         stays within a single task context.
         """
+        logger.debug(f"Creating new session for {self._source_name}...")
         pooled = PooledSession(
             session=None,  # Will be set by worker
             transport_type=self._transport_type,
@@ -237,37 +263,61 @@ class MCPSessionPool:
             self._session_worker(pooled),
             name=f"MCP-Worker-{self._source_name}-{uuid4().hex[:8]}"
         )
+        logger.debug(f"Worker task created: {pooled._worker_task.get_name()}")
         
         try:
             # Wait for session to be initialized or worker to fail
-            async with asyncio.timeout(30.0):
+            timeout = self._config.session_init_timeout_seconds
+            async with asyncio.timeout(timeout):
                 await pooled._init_event.wait()
             
             if pooled._worker_error:
+                logger.error(f"Worker error for {self._source_name}: {pooled._worker_error}")
                 raise pooled._worker_error
                 
             if pooled.session is None:
+                logger.error(f"Worker initialized but session is None for {self._source_name}")
                 raise RuntimeError("Worker initialized but session is None")
             
             self._total_creates += 1
-            logger.debug(f"Created new session worker for {self._source_name}")
+            logger.info(f"Created MCP session for {self._source_name}")
             return pooled
             
+        except asyncio.TimeoutError:
+            error_msg = f"Timeout waiting for session initialization ({timeout}s)"
+            logger.error(f"Failed to create session worker for {self._source_name}: {error_msg}")
+            pooled._stop_event.set()
+            if pooled._worker_task:
+                pooled._worker_task.cancel()
+            self._total_errors += 1
+            self._last_error = error_msg
+            return None
+        except asyncio.CancelledError:
+            error_msg = "Session creation was cancelled"
+            logger.error(f"Failed to create session worker for {self._source_name}: {error_msg}")
+            pooled._stop_event.set()
+            if pooled._worker_task:
+                pooled._worker_task.cancel()
+            self._total_errors += 1
+            self._last_error = error_msg
+            return None
         except Exception as e:
-            logger.error(f"Failed to create session worker for {self._source_name}: {e}")
+            error_msg = f"{type(e).__name__}: {e}" if str(e) else f"{type(e).__name__}"
+            logger.error(f"Failed to create session worker for {self._source_name}: {error_msg}")
             # Ensure worker is stopped
             pooled._stop_event.set()
             if pooled._worker_task:
                 pooled._worker_task.cancel()
             
             self._total_errors += 1
-            self._last_error = str(e)
+            self._last_error = error_msg
             return None
 
     async def _session_worker(self, pooled: PooledSession) -> None:
         """
         Worker task that owns the MCP session context managers.
         """
+        logger.debug(f"Starting session worker for {self._source_name}, URL: {self._mcp_url}")
         try:
             if self._transport_type == MCPTransportType.SSE:
                 async with sse_client(self._mcp_url) as (read, write):
@@ -275,6 +325,7 @@ class MCPSessionPool:
                         await session.initialize()
                         pooled.session = session
                         pooled._init_event.set()
+                        logger.debug(f"Session ready for {self._source_name}")
                         # Keep alive until signaled to stop
                         await pooled._stop_event.wait()
             else:
@@ -283,13 +334,14 @@ class MCPSessionPool:
                         await session.initialize()
                         pooled.session = session
                         pooled._init_event.set()
+                        logger.debug(f"Session ready for {self._source_name}")
                         # Keep alive until signaled to stop
                         await pooled._stop_event.wait()
                         
         except asyncio.CancelledError:
-            logger.debug(f"Session worker for {self._source_name} cancelled")
+            logger.debug(f"Session worker for {self._source_name} was cancelled")
         except Exception as e:
-            logger.warning(f"Session worker for {self._source_name} error: {e}")
+            logger.warning(f"Session worker for {self._source_name} error: {type(e).__name__}: {e}")
             pooled._worker_error = e
             if not pooled._init_event.is_set():
                 pooled._init_event.set()
@@ -479,10 +531,12 @@ class MCPSessionPool:
                     if pooled in self._sessions:
                         self._sessions.remove(pooled)
         
+        was_healthy = self._is_healthy
         self._is_healthy = healthy_count > 0
         
-        if not self._is_healthy:
-            logger.warning(f"No healthy sessions for {self._source_name}")
+        # Only log when transitioning from healthy to unhealthy
+        if was_healthy and not self._is_healthy:
+            logger.debug(f"Pool for {self._source_name} transitioning to unhealthy state")
 
     async def _cleanup_idle_sessions(self) -> None:
         """Remove sessions that have been idle too long."""
@@ -510,17 +564,34 @@ class MCPSessionPool:
     async def _ensure_minimum_sessions(self) -> None:
         """Ensure minimum number of sessions exist with retry logic."""
         async with self._lock:
-            while len(self._sessions) < self._config.min_sessions:
+            sessions_needed = self._config.min_sessions - len(self._sessions)
+            if sessions_needed <= 0:
+                return
+                
+            logger.debug(f"Need to create {sessions_needed} sessions for {self._source_name}")
+            
+            for _ in range(sessions_needed):
                 if self._shutting_down:
                     break
-                    
-                pooled = await self._create_session()
-                if pooled:
-                    self._sessions.append(pooled)
-                    await self._available.put(pooled)
-                else:
-                    # If creation fails, wait a bit before retrying in the NEXT loop iteration
-                    logger.warning(f"Failed to replenish session pool for {self._source_name}, will retry in next health loop")
+                
+                # Try up to 2 times per session
+                session = None
+                for attempt in range(2):
+                    session = await self._create_session()
+                    if session:
+                        self._sessions.append(session)
+                        await self._available.put(session)
+                        self._is_healthy = True
+                        break
+                    else:
+                        if attempt == 0:
+                            await asyncio.sleep(0.5)  # Brief delay before retry
+                
+                if not session:
+                    logger.warning(
+                        f"Failed to replenish session pool for {self._source_name}, "
+                        f"will retry in next health loop"
+                    )
                     break
 
     def get_stats(self) -> dict[str, Any]:
