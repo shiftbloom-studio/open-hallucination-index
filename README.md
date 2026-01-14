@@ -5,15 +5,15 @@
 <h1 align="center">Open Hallucination Index</h1>
 
 <p align="center">
-  <strong>🔍 Real-time fact-checking for LLM outputs</strong>
+  <strong>🔍 Wissenschaftlich fundiertes Fact-Checking für LLM-Ausgaben in Echtzeit</strong>
 </p>
 
 <p align="center">
-  <a href="#features">Features</a> •
-  <a href="#project-structure">Structure</a> •
-  <a href="#getting-started">Getting Started</a> •
-  <a href="#api-reference">API</a> •
-  <a href="#contributing">Contributing</a>
+  <a href="#project-overview">Projektüberblick</a> •
+  <a href="#documentation">Dokumentation</a> •
+  <a href="#project-structure">Struktur</a> •
+  <a href="#getting-started">Start</a> •
+  <a href="#contributing">Mitwirkung</a>
 </p>
 
 <p align="center">
@@ -24,7 +24,25 @@
 
 ---
 
-**Open Hallucination Index (OHI)** is a high-performance middleware API that verifies LLM-generated text against trusted knowledge sources. It detects hallucinations by decomposing text into atomic claims and validating each against multiple knowledge bases in real-time.
+**Open Hallucination Index (OHI)** ist eine hochperformante Middleware- und Analyseplattform, die LLM‑Ausgaben in atomic Claims zerlegt, diese gegen kuratierte Wissensquellen verifiziert und eine nachvollziehbare Vertrauensbewertung in Echtzeit berechnet. Der Fokus liegt auf reproduzierbarer, evidenzbasierter Halluzinationsdetektion mit klaren Schnittstellen für Forschung, Produktivbetrieb und Auditierbarkeit.
+
+## 🧭 Projektüberblick
+
+OHI verbindet **Claim‑Decomposition**, **Multi‑Source‑Evidenzsuche** und **quantitative Trust‑Scoring‑Modelle**. Die Architektur folgt einem hexagonalen Design, sodass Wissensquellen, Scoring‑Strategien und Retrieval‑Pipelines austauschbar bleiben. Das System besteht aus:
+
+- **API (FastAPI):** Orchestriert Verifikation, Evidence‑Aggregation und Scoring.
+- **Frontend (Next.js):** Wissenschaftlich orientierte UI für Analyse, Nachvollziehbarkeit und Reporting.
+- **Infrastruktur‑Layer:** Neo4j, Qdrant und optionale MCP‑Quellen für externe Evidenz.
+
+## 📚 Dokumentation
+
+Die detaillierte Dokumentation ist im Ordner docs abgelegt:
+
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) – Beitragspraxis, Konventionen und Review‑Prozess
+- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) – Community‑Standards
+- [docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md) – Öffentlicher Zugriff und Nutzungsrahmen
+- [docs/API.md](docs/API.md) – Vollständige API‑Spezifikation, Modelle, Beispiele
+- [docs/FRONTEND.md](docs/FRONTEND.md) – UI‑Architektur, Seitenstruktur, Designprinzipien
 
 ## ✨ Features
 
@@ -170,56 +188,7 @@ You can deploy these services using:
 
 ## 📖 API Reference
 
-### Verify Text
-
-```http
-POST /api/v1/verify
-```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `text` | string | ✅ | Text to verify (max 10,000 chars) |
-| `strategy` | string | ❌ | `hybrid`, `mcp_enhanced`, `graph_exact`, `vector_semantic`, `cascading` |
-| `use_cache` | boolean | ❌ | Use cached results (default: `true`) |
-
-**Example Request:**
-```bash
-curl -X POST http://localhost:8080/api/v1/verify \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"text": "The Eiffel Tower is located in Paris and was built in 1889."}'
-```
-
-**Example Response:**
-```json
-{
-  "id": "abc123...",
-  "trust_score": {
-    "overall": 0.988,
-    "claims_total": 2,
-    "claims_supported": 2,
-    "claims_refuted": 0,
-    "confidence": 0.92
-  },
-  "summary": "Analyzed 2 claim(s): 2 supported. Overall trust level: high (0.99)."
-}
-```
-
-### Batch Verification
-
-```http
-POST /api/v1/verify/batch
-```
-
-Verify multiple texts in parallel. Max 10 texts per request.
-
-### Health Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Full health status with component checks |
-| `GET /health/live` | Kubernetes liveness probe |
-| `GET /health/ready` | Kubernetes readiness probe |
+Die vollständige API‑Dokumentation mit Request/Response‑Schemas, Beispielaufrufen, Error‑Konzept und Strategien befindet sich in [docs/API.md](docs/API.md).
 
 ## 🧪 Development
 

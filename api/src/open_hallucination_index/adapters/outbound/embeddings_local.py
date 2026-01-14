@@ -32,10 +32,10 @@ def _get_model(model_name: str):
     logger.info(f"Loading embedding model: {model_name}")
 
     # Explicitly determine device
-    model_kwargs = {}
+    model_kwargs = {"low_cpu_mem_usage": False}
     if torch.cuda.is_available():
         device = "cuda"
-        model_kwargs = {"torch_dtype": torch.float16}
+        model_kwargs.update({"torch_dtype": torch.float16})
     elif torch.backends.mps.is_available():
         device = "mps"
     else:
@@ -49,10 +49,6 @@ def _get_model(model_name: str):
         trust_remote_code=False,
         model_kwargs=model_kwargs,
     )
-
-    # Ensure all parameters are actually on the right device and NOT on meta
-    # This specifically fixes the "Cannot copy out of meta tensor" error
-    model.to(device)
 
     dim = model.get_sentence_embedding_dimension()
     logger.info(f"Loaded embedding model on {device}, dim={dim}")

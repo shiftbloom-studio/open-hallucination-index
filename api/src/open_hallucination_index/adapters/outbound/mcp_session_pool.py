@@ -84,6 +84,8 @@ class PoolConfig:
     reconnect_delay_seconds: float = 1.0
     max_reconnect_attempts: int = 3
     session_init_timeout_seconds: float = 60.0  # Timeout for session initialization
+    sse_connect_timeout_seconds: float = 10.0  # Timeout for SSE connection setup
+    sse_read_timeout_seconds: float = 3600.0  # Timeout for SSE read (keep-alive)
 
 
 class MCPSessionPool:
@@ -320,7 +322,12 @@ class MCPSessionPool:
         logger.debug(f"Starting session worker for {self._source_name}, URL: {self._mcp_url}")
         try:
             if self._transport_type == MCPTransportType.SSE:
-                async with sse_client(self._mcp_url) as (read, write):
+                async with sse_client(
+                    self._mcp_url,
+                    headers=self._headers,
+                    timeout=self._config.sse_connect_timeout_seconds,
+                    sse_read_timeout=self._config.sse_read_timeout_seconds,
+                ) as (read, write):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
                         pooled.session = session
