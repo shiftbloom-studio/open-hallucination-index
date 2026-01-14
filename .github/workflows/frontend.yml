@@ -12,6 +12,9 @@ on:
       - 'frontend/**'
       - '.github/workflows/frontend.yml'
 
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: "22"
 
