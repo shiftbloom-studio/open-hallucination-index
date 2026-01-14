@@ -19,7 +19,8 @@ export async function POST(req: Request) {
       process.env.STRIPE_WEBHOOK_SECRET!
     );
   } catch (error) {
-    return new NextResponse(`Webhook Error: ${(error as Error).message}`, {
+    console.error("[STRIPE_WEBHOOK] Error constructing event:", error);
+    return new NextResponse("Webhook Error", {
       status: 400,
     });
   }
