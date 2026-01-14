@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Middleware API for LLM hallucination detection via claim verification against trusted knowledge graphs and vector stores"
 readme = "../README.md"
 license = "MIT"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 authors = [
     { name = "ShiftBloom", email = "dev@shiftbloom.com" }
 ]
@@ -18,7 +18,7 @@ classifiers = [
     "Framework :: FastAPI",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -57,7 +57,7 @@ ohi-server = "open_hallucination_index.infrastructure.entrypoint:main"
 packages = ["src/open_hallucination_index"]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
 
@@ -65,7 +65,7 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 

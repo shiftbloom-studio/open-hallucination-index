@@ -36,10 +36,14 @@ class WikidataAdapter(SPARQLKnowledgeSource):
         base_url: str = "https://query.wikidata.org",
         timeout: float = 30.0,
     ) -> None:
+        user_agent = (
+            "OpenHallucinationIndex/1.0 "
+            "(https://github.com/open-hallucination-index; mailto:info@example.com)"
+        )
         super().__init__(
             base_url=base_url,
             timeout=timeout,
-            user_agent="OpenHallucinationIndex/1.0 (https://github.com/open-hallucination-index; mailto:info@example.com)",
+            user_agent=user_agent,
         )
 
     @property
