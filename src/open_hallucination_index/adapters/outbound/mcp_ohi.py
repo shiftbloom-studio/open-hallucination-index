@@ -110,6 +110,8 @@ class OHIMCPAdapter(MCPKnowledgeSource):
         Test connection and list available tools.
 
         Initializes the session pool for persistent SSE connections.
+        Gracefully handles startup failures - the pool will attempt
+        to create sessions in the background health check loop.
         """
         try:
             if self._use_pool:
@@ -118,26 +120,54 @@ class OHIMCPAdapter(MCPKnowledgeSource):
                     mcp_url=self._mcp_url,
                     transport_type=MCPTransportType.SSE,
                     config=PoolConfig(
-                        min_sessions=2,
-                        max_sessions=5,
+                        min_sessions=1,  # Start with 1 to avoid overwhelming server on startup
+                        max_sessions=3,
                         session_ttl_seconds=300.0,
                         idle_timeout_seconds=60.0,
                         health_check_interval_seconds=30.0,
+                        session_init_timeout_seconds=60.0,
                     ),
                 )
                 await self._pool.initialize()
 
-                async with self._pool.acquire() as session:
-                    tools = await session.list_tools()
-                    self._tools = [t.name for t in tools.tools]
+                if not self._pool.is_healthy:
+                    logger.warning(
+                        "OHI MCP session pool failed to warm up; "
+                        "disabling pooling and falling back to per-request sessions"
+                    )
+                    await self._pool.shutdown()
+                    self._pool = None
+                    self._use_pool = False
+
+                if not self._use_pool:
+                    async with self._session_fallback() as session:
+                        tools = await session.list_tools()
+                        self._tools = [t.name for t in tools.tools]
+                        logger.info(f"Available tools ({len(self._tools)}): {self._tools}")
+                    self._available = True
+                    logger.info(f"Connected to OHI MCP at {self._mcp_url}")
+                    return
+
+                # Try to list tools, but don't fail if pool is empty
+                try:
+                    async with self._pool.acquire() as session:
+                        tools = await session.list_tools()
+                        self._tools = [t.name for t in tools.tools]
+                        logger.info(f"Available tools ({len(self._tools)}): {self._tools}")
+                except Exception as e:
+                    logger.warning(
+                        f"Could not list tools on startup (pool may be warming up): {e}"
+                    )
+                    # Set default tools - they'll be refreshed on first use
+                    self._tools = []
             else:
                 async with self._session_fallback() as session:
                     tools = await session.list_tools()
                     self._tools = [t.name for t in tools.tools]
+                    logger.info(f"Available tools ({len(self._tools)}): {self._tools}")
 
             self._available = True
             logger.info(f"Connected to OHI MCP at {self._mcp_url}")
-            logger.info(f"Available tools ({len(self._tools)}): {self._tools}")
             logger.info(f"Session pooling: {'enabled' if self._pool else 'disabled'}")
 
         except Exception as e:

@@ -29,7 +29,7 @@ class LLMSettings(BaseSettings):
         description="API key (some OpenAI-compatible servers require a value)",
     )
     model: str = Field(
-        default="mistralai/Mistral-7B-Instruct-v0.2",
+        default="Qwen/Qwen2.5-14B-Instruct",
         description="Model name/ID to use",
     )
     timeout_seconds: float = Field(default=60.0, ge=1.0)

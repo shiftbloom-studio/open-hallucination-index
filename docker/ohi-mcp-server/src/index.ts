@@ -350,26 +350,35 @@ async function main() {
     const transports = new Map<string, SSEServerTransport>();
 
     app.get("/sse", async (req: Request, res: Response) => {
+      // Create transport - it generates its own sessionId internally
+      // and will send endpoint event with ?sessionId=<internal-id>
       const transport = new SSEServerTransport("/messages", res);
-      const sessionId = crypto.randomUUID();
-      transports.set(sessionId, transport);
+      
+      // Store by the transport's internal session ID
+      transports.set(transport.sessionId, transport);
+      console.log(`New SSE connection established: ${transport.sessionId}`);
 
       res.on("close", () => {
-        transports.delete(sessionId);
+        console.log(`SSE connection closed: ${transport.sessionId}`);
+        transports.delete(transport.sessionId);
       });
 
       await server.connect(transport);
     });
 
     app.post("/messages", async (req: Request, res: Response) => {
-      // Find the transport for this session
-      const sessionId = req.headers["x-session-id"] as string;
+      // Get session ID from query parameter (SSE transport appends this)
+      const sessionId = req.query.sessionId as string;
+      console.log(`POST /messages received for session: ${sessionId}`);
+      
       const transport = transports.get(sessionId);
       
       if (transport) {
-        await transport.handlePostMessage(req, res);
+        // Pass req.body as the third parameter since express.json() already parsed it
+        await transport.handlePostMessage(req, res, req.body);
       } else {
-        res.status(404).json({ error: "Session not found" });
+        console.error(`Session not found: ${sessionId}, active sessions: ${Array.from(transports.keys()).join(", ")}`);
+        res.status(404).json({ error: "Session not found", sessionId });
       }
     });
 
