@@ -21,11 +21,11 @@ from open_hallucination_index.adapters.outbound.knowledge_sources.base import (
 )
 
 # Linked Data
-from open_hallucination_index.adapters.outbound.knowledge_sources.wikidata import (
-    WikidataAdapter,
-)
 from open_hallucination_index.adapters.outbound.knowledge_sources.dbpedia import (
     DBpediaAdapter,
+)
+from open_hallucination_index.adapters.outbound.knowledge_sources.wikidata import (
+    WikidataAdapter,
 )
 
 # Wiki
@@ -37,25 +37,25 @@ from open_hallucination_index.adapters.outbound.knowledge_sources.wikimedia_rest
 )
 
 # Academic
-from open_hallucination_index.adapters.outbound.knowledge_sources.openalex import (
-    OpenAlexAdapter,
-)
 from open_hallucination_index.adapters.outbound.knowledge_sources.crossref import (
     CrossrefAdapter,
 )
 from open_hallucination_index.adapters.outbound.knowledge_sources.europepmc import (
     EuropePMCAdapter,
 )
+from open_hallucination_index.adapters.outbound.knowledge_sources.openalex import (
+    OpenAlexAdapter,
+)
 from open_hallucination_index.adapters.outbound.knowledge_sources.opencitations import (
     OpenCitationsAdapter,
 )
 
 # Medical
-from open_hallucination_index.adapters.outbound.knowledge_sources.ncbi import (
-    NCBIAdapter,
-)
 from open_hallucination_index.adapters.outbound.knowledge_sources.clinicaltrials import (
     ClinicalTrialsAdapter,
+)
+from open_hallucination_index.adapters.outbound.knowledge_sources.ncbi import (
+    NCBIAdapter,
 )
 
 # News/Events

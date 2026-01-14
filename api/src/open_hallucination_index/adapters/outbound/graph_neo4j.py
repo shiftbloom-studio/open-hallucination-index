@@ -72,7 +72,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                     await self._driver.verify_connectivity()
                     logger.info(f"Connected to Neo4j at {self._settings.uri}")
                     return
-                except ServiceUnavailable as e:
+                except ServiceUnavailable:
                     if attempt >= max_attempts:
                         raise
                     # Only log every 2 attempts to reduce noise

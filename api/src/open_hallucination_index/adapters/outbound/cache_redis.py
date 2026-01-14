@@ -7,6 +7,7 @@ Adapter for Redis as a semantic cache for verification results.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -56,8 +57,6 @@ class RedisCacheAdapter(CacheProvider):
 
     async def connect(self) -> None:
         """Establish connection to Redis with retries."""
-        import time
-
         max_retries = 10
         retry_delay = 1.0
         last_error = None
@@ -78,7 +77,10 @@ class RedisCacheAdapter(CacheProvider):
                         max_connections=self._settings.max_connections,
                     )
                     if attempt == 0:
-                        logger.info(f"Connecting to Redis via Unix socket: {self._settings.socket_path}")
+                        logger.info(
+                            "Connecting to Redis via Unix socket: %s",
+                            self._settings.socket_path,
+                        )
                 else:
                     # Create a connection pool with IPv4-only socket
                     pool = redis.ConnectionPool(
@@ -95,7 +97,11 @@ class RedisCacheAdapter(CacheProvider):
                         {"socket_type": socket.AF_INET},
                     )
                     if attempt == 0:
-                        logger.info(f"Connecting to Redis via TCP: {self._settings.host}:{self._settings.port}")
+                        logger.info(
+                            "Connecting to Redis via TCP: %s:%s",
+                            self._settings.host,
+                            self._settings.port,
+                        )
 
                 self._client = redis.Redis(
                     connection_pool=pool,
@@ -105,16 +111,26 @@ class RedisCacheAdapter(CacheProvider):
                 await self._client.ping()  # type: ignore[misc]
                 
                 if self._settings.socket_path:
-                    logger.info(f"Connected to Redis via Unix socket: {self._settings.socket_path}")
+                    logger.info(
+                        "Connected to Redis via Unix socket: %s",
+                        self._settings.socket_path,
+                    )
                 else:
-                    logger.info(f"Connected to Redis at {self._settings.host}:{self._settings.port}")
+                    logger.info(
+                        "Connected to Redis at %s:%s",
+                        self._settings.host,
+                        self._settings.port,
+                    )
                 return
 
             except (redis.ConnectionError, FileNotFoundError) as e:
                 last_error = e
                 if attempt < max_retries - 1:
                     logger.warning(
-                        f"Redis connection attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s..."
+                        "Redis connection attempt %s failed: %s. Retrying in %ss...",
+                        attempt + 1,
+                        e,
+                        retry_delay,
                     )
                     await asyncio.sleep(retry_delay)
                 continue
@@ -368,7 +384,10 @@ class RedisCacheAdapter(CacheProvider):
 
         try:
             # Compute all keys
-            keys_map = {self._make_claim_key(claim_hash): claim_hash for claim_hash in claim_hashes}
+            keys_map = {
+                self._make_claim_key(claim_hash): claim_hash
+                for claim_hash in claim_hashes
+            }
             keys = list(keys_map.keys())
 
             # Batch fetch with MGET

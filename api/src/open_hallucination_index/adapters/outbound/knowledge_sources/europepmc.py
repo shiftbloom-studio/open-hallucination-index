@@ -156,7 +156,7 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
         """Get article by PubMed ID."""
         try:
             response = await self._client.get(
-                f"/search",
+                "/search",
                 params={
                     "query": f"EXT_ID:{pmid}",
                     "resultType": "core",

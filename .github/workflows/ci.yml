@@ -15,7 +15,7 @@ on:
       - '.github/workflows/ci.yml'
 
 env:
-  PYTHON_VERSION: "3.14"
+  PYTHON_VERSION: "3.12"
 
 defaults:
   run:
@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff mypy
+          pip install -e ".[dev]"
 
       - name: Run Ruff linter
         run: ruff check src tests --output-format=github
