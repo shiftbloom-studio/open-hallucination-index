@@ -10,17 +10,15 @@
 
 <p align="center">
   <a href="#features">Features</a> •
-  <a href="#quick-start">Quick Start</a> •
+  <a href="#project-structure">Structure</a> •
+  <a href="#getting-started">Getting Started</a> •
   <a href="#api-reference">API</a> •
-  <a href="#architecture">Architecture</a> •
-  <a href="#configuration">Config</a> •
   <a href="#contributing">Contributing</a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+" />
+  <img src="https://img.shields.io/badge/python-3.14+-blue.svg" alt="Python 3.14+" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License" />
-  <img src="https://img.shields.io/badge/docker-ready-2496ED.svg" alt="Docker Ready" />
   <a href="https://github.com/your-org/open-hallucination-index/actions"><img src="https://github.com/your-org/open-hallucination-index/workflows/CI/badge.svg" alt="CI Status" /></a>
 </p>
 
@@ -37,86 +35,138 @@
 | **⚡ High Performance** | Session pooling, batch processing, parallel verification, Redis caching |
 | **🎯 Trust Scoring** | Evidence-ratio based scoring with confidence intervals (0.0 - 1.0) |
 | **🔌 Pluggable Architecture** | Hexagonal design - easily swap knowledge sources and strategies |
-| **🐳 Docker Ready** | One-command deployment with docker-compose |
 
-## 🚀 Quick Start
+## 📁 Project Structure
+
+```
+open-hallucination-index/
+├── api/                    # Python FastAPI Backend
+│   ├── src/                # Main source code
+│   │   └── open_hallucination_index/
+│   │       ├── domain/     # Core entities (Claim, Evidence, TrustScore)
+│   │       ├── ports/      # Abstract interfaces
+│   │       ├── application/# Use-case orchestration
+│   │       ├── adapters/   # External service implementations
+│   │       ├── infrastructure/ # Config, DI, lifecycle
+│   │       └── api/        # FastAPI routes
+│   ├── tests/              # Unit & integration tests
+│   ├── scripts/            # Utility scripts
+│   └── pyproject.toml      # Python dependencies
+├── frontend/               # Next.js Frontend Application
+│   ├── src/                # React/Next.js source code
+│   ├── e2e/                # Playwright E2E tests
+│   └── package.json        # Node.js dependencies
+├── docs/                   # Documentation
+│   ├── CONTRIBUTING.md     # Contribution guidelines
+│   ├── CODE_OF_CONDUCT.md  # Community standards
+│   └── PUBLIC_ACCESS.md    # Public access documentation
+├── .github/                # GitHub configuration
+│   ├── workflows/          # CI/CD pipelines
+│   └── ISSUE_TEMPLATE/     # Issue templates
+├── README.md               # This file
+├── LICENSE                 # MIT License
+└── SECURITY.md             # Security policy
+```
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Docker & Docker Compose
-- 16GB+ RAM recommended (for local LLM)
-- NVIDIA GPU (optional, for faster inference)
+- **Python 3.14+** for the API
+- **Node.js 22+** for the frontend
+- **Your own infrastructure** for knowledge sources (see [Infrastructure](#infrastructure))
 
-### 1. Clone & Configure
-
-```bash
-git clone https://github.com/your-org/open-hallucination-index.git
-cd open-hallucination-index
-
-# Copy environment template
-cp .env.example .env
-
-# Edit with your settings (optional - defaults work for local development)
-nano .env
-```
-
-### 2. Start with Docker Compose
+### API Setup
 
 ```bash
-# Build and start all services
-docker compose up -d
+cd api
 
-# Check status
-docker compose ps
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# View logs
-docker compose logs -f ohi-api
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Start the API server
+ohi-server
 ```
 
-This starts:
-- **ohi-api** (port 8080) - Main verification API
-- **ohi-vllm** (port 8000) - Local LLM inference (vLLM)
-- **ohi-neo4j** (port 7474/7687) - Graph database
-- **ohi-qdrant** (port 6333) - Vector database
-- **ohi-redis** (port 6379) - Caching layer
-- **ohi-wikipedia-mcp** (port 3001) - Wikipedia knowledge source
-- **ohi-context7-mcp** (port 3002) - Technical documentation source
-
-### 3. Verify Installation
+### Frontend Setup
 
 ```bash
-# Health check
-curl http://localhost:8080/health
+cd frontend
 
-# Test verification (replace YOUR_API_KEY from .env)
-curl -X POST http://localhost:8080/api/v1/verify \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"text": "The Eiffel Tower is located in Paris and was built in 1889."}'
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Run tests
+npm run test
 ```
 
-**Expected Response:**
-```json
-{
-  "id": "abc123...",
-  "trust_score": {
-    "overall": 0.988,
-    "claims_total": 2,
-    "claims_supported": 2,
-    "claims_refuted": 0,
-    "confidence": 0.92
-  },
-  "summary": "Analyzed 2 claim(s): 2 supported. Overall trust level: high (0.99).",
-  "claims": [
-    {
-      "text": "The Eiffel Tower is located in Paris",
-      "status": "supported",
-      "confidence": 0.92,
-      "reasoning": "Strongly supported: 12 supporting vs 1 contradicting (ratio 12.0:1)."
-    }
-  ]
-}
+## 🏗️ Infrastructure
+
+> **⚠️ Important:** This repository contains only the **API and Frontend source code**. Users are responsible for deploying and managing their own infrastructure.
+
+### Required Services
+
+The OHI API requires the following external services:
+
+| Service | Purpose | Documentation |
+|---------|---------|---------------|
+| **Neo4j** | Graph database for structured knowledge | [neo4j.com](https://neo4j.com/) |
+| **Qdrant** | Vector database for semantic search | [qdrant.tech](https://qdrant.tech/) |
+| **Redis** | Caching layer (optional) | [redis.io](https://redis.io/) |
+| **LLM Service** | For claim decomposition (OpenAI, vLLM, etc.) | [vllm.ai](https://vllm.ai/) |
+
+### Configuration
+
+Create a `.env` file in the `api/` directory:
+
+```env
+# API Settings
+API_HOST=0.0.0.0
+API_PORT=8080
+API_API_KEY=your-secret-api-key
+
+# LLM Configuration
+LLM_BASE_URL=http://your-llm-service:8000/v1
+LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
+LLM_API_KEY=your-llm-api-key
+
+# Neo4j Graph Database
+NEO4J_URI=bolt://your-neo4j-host:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your-neo4j-password
+
+# Qdrant Vector Database
+QDRANT_HOST=your-qdrant-host
+QDRANT_PORT=6333
+
+# Redis Cache (optional)
+REDIS_HOST=your-redis-host
+REDIS_PORT=6379
+REDIS_ENABLED=true
+
+# MCP Sources (optional)
+MCP_WIKIPEDIA_ENABLED=true
+MCP_CONTEXT7_ENABLED=true
 ```
+
+### Deployment Options
+
+You can deploy these services using:
+
+- **Docker Compose** (create your own compose file)
+- **Kubernetes** (Helm charts recommended)
+- **Managed Services** (Neo4j Aura, Qdrant Cloud, Redis Cloud)
+- **Self-hosted** on bare metal or VMs
 
 ## 📖 API Reference
 
@@ -132,6 +182,29 @@ POST /api/v1/verify
 | `strategy` | string | ❌ | `hybrid`, `mcp_enhanced`, `graph_exact`, `vector_semantic`, `cascading` |
 | `use_cache` | boolean | ❌ | Use cached results (default: `true`) |
 
+**Example Request:**
+```bash
+curl -X POST http://localhost:8080/api/v1/verify \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{"text": "The Eiffel Tower is located in Paris and was built in 1889."}'
+```
+
+**Example Response:**
+```json
+{
+  "id": "abc123...",
+  "trust_score": {
+    "overall": 0.988,
+    "claims_total": 2,
+    "claims_supported": 2,
+    "claims_refuted": 0,
+    "confidence": 0.92
+  },
+  "summary": "Analyzed 2 claim(s): 2 supported. Overall trust level: high (0.99)."
+}
+```
+
 ### Batch Verification
 
 ```http
@@ -139,21 +212,6 @@ POST /api/v1/verify/batch
 ```
 
 Verify multiple texts in parallel. Max 10 texts per request.
-
-```json
-{
-  "texts": ["Text 1 to verify", "Text 2 to verify"],
-  "strategy": "mcp_enhanced"
-}
-```
-
-### List Strategies
-
-```http
-GET /api/v1/strategies
-```
-
-Returns available verification strategies with descriptions.
 
 ### Health Endpoints
 
@@ -163,38 +221,24 @@ Returns available verification strategies with descriptions.
 | `GET /health/live` | Kubernetes liveness probe |
 | `GET /health/ready` | Kubernetes readiness probe |
 
-## 🏗️ Architecture
+## 🧪 Development
 
-OHI follows **Hexagonal Architecture** (Ports and Adapters) for maximum flexibility:
+### Running Tests
 
+**API:**
+```bash
+cd api
+pytest tests/ -v
+mypy src
+ruff check src tests
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          API Layer (FastAPI)                         │
-│                    POST /verify, GET /health                         │
-└─────────────────────────────────┬───────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Application Layer                                 │
-│              VerifyTextUseCase (Orchestration)                       │
-└──────┬──────────────────┬───────────────────┬───────────────────────┘
-       │                  │                   │
-       ▼                  ▼                   ▼
-┌─────────────┐   ┌─────────────────┐   ┌───────────────┐
-│   Domain    │   │  Domain Services │   │    Ports      │
-│  Entities   │   │  - Scorer        │   │  (Interfaces) │
-│  - Claim    │   │  - Oracle        │   │  - LLMProvider│
-│  - Evidence │   │  - Decomposer    │   │  - KnowledgeStore
-│  - TrustScore│  └─────────────────┘   └───────────────┘
-└─────────────┘                                 │
-                                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Adapters (Outbound)                          │
-│  ┌───────────┐ ┌──────────┐ ┌───────────┐ ┌───────────┐ ┌─────────┐│
-│  │ OpenAI/   │ │  Neo4j   │ │  Qdrant   │ │  Redis    │ │  MCP    ││
-│  │ vLLM      │ │  Graph   │ │  Vector   │ │  Cache    │ │Wikipedia││
-│  └───────────┘ └──────────┘ └───────────┘ └───────────┘ └─────────┘│
-└─────────────────────────────────────────────────────────────────────┘
+
+**Frontend:**
+```bash
+cd frontend
+npm run test
+npm run lint
+npm run test:e2e
 ```
 
 ### Verification Strategies
@@ -207,103 +251,9 @@ OHI follows **Hexagonal Architecture** (Ports and Adapters) for maximum flexibil
 | `graph_exact` | Neo4j only | Known entity verification |
 | `vector_semantic` | Qdrant only | Semantic similarity matching |
 
-## ⚙️ Configuration
-
-### Environment Variables
-
-```env
-# API Settings
-API_HOST=0.0.0.0
-API_PORT=8080
-API_API_KEY=your-secret-api-key    # Required for production
-
-# LLM Configuration
-LLM_BASE_URL=http://ohi-vllm:8000/v1
-LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
-LLM_API_KEY=no-key-required        # For local vLLM
-
-# Neo4j Graph Database
-NEO4J_URI=bolt://ohi-neo4j:7687
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=your-neo4j-password
-
-# Qdrant Vector Database
-QDRANT_HOST=ohi-qdrant
-QDRANT_PORT=6333
-
-# Redis Cache
-REDIS_HOST=ohi-redis
-REDIS_PORT=6379
-REDIS_ENABLED=true
-
-# MCP Sources
-MCP_WIKIPEDIA_ENABLED=true
-MCP_WIKIPEDIA_URL=http://ohi-wikipedia-mcp:3001
-MCP_CONTEXT7_ENABLED=true
-MCP_CONTEXT7_URL=http://ohi-context7-mcp:3002
-
-# Verification
-VERIFICATION_DEFAULT_STRATEGY=mcp_enhanced
-VERIFICATION_PERSIST_MCP_EVIDENCE=true
-```
-
-### Docker Compose Profiles
-
-```bash
-# Full stack (default)
-docker compose up -d
-
-# API only (connect to external services)
-docker compose -f docker-compose.api.yml up -d
-
-# With GPU acceleration
-docker compose --profile gpu up -d
-```
-
-## 🧪 Development
-
-### Local Setup
-
-```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Type checking
-mypy src
-
-# Linting & formatting
-ruff check src tests
-ruff format src tests
-```
-
-### Project Structure
-
-```
-open-hallucination-index/
-├── src/open_hallucination_index/
-│   ├── domain/           # Core entities (Claim, Evidence, TrustScore)
-│   ├── ports/            # Abstract interfaces
-│   ├── application/      # Use-case orchestration
-│   ├── adapters/         # External service implementations
-│   │   └── outbound/     # Neo4j, Qdrant, Redis, MCP adapters
-│   ├── infrastructure/   # Config, DI, lifecycle
-│   └── api/              # FastAPI routes
-├── tests/                # Unit & integration tests
-├── docker/               # Docker configurations
-├── scripts/              # Utility scripts
-└── docs/                 # Documentation
-```
-
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
+Contributions are welcome! Please read our [Contributing Guide](docs/CONTRIBUTING.md) for details.
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -311,16 +261,18 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+Please also review our [Code of Conduct](docs/CODE_OF_CONDUCT.md).
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- [vLLM](https://github.com/vllm-project/vllm) - High-throughput LLM serving
+- [FastAPI](https://fastapi.tiangolo.com/) - Modern Python web framework
+- [Next.js](https://nextjs.org/) - React framework for the frontend
 - [Neo4j](https://neo4j.com/) - Graph database
 - [Qdrant](https://qdrant.tech/) - Vector search engine
-- [FastAPI](https://fastapi.tiangolo.com/) - Modern Python web framework
 - [MCP](https://modelcontextprotocol.io/) - Model Context Protocol
 
 ---

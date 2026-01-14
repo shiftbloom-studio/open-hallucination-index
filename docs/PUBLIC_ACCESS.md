@@ -1,13 +1,14 @@
-# Public Internet Access Setup
+# Public Internet Access Setup (HTTPS)
 
-This guide explains how to expose the Open Hallucination Index API to the public internet securely with HTTPS.
+This guide explains how to expose the Open Hallucination Index API to the public internet securely with HTTPS. It is written to work with most routers, OSes, and DNS providers.
 
 ## Prerequisites
 
-1. Fritz!Box router with internet access
-2. A domain name pointing to your public IP (or DynDNS like MyFRITZ!)
-3. API running on your local machine
-4. Ports 80 and 443 forwarded to your machine
+1. Router or gateway with port forwarding (any brand)
+2. A domain name pointing to your public IP (or dynamic DNS)
+3. API running on your local machine (Docker Compose recommended)
+4. Ports 80 and 443 reachable from the internet
+5. No CGNAT, or an alternative tunnel/VPS setup (see below)
 
 ## Quick Start (HTTPS with Let's Encrypt)
 
@@ -23,7 +24,7 @@ Add to your `.env` file:
 API_KEY=your_generated_api_key_here
 ```
 
-### Step 2: Configure Fritz!Box Port Forwarding
+### Step 2: Configure Router Port Forwarding
 
 Forward **both** ports to your PC:
 
@@ -32,11 +33,11 @@ Forward **both** ports to your PC:
 | TCP | 80 | 80 |
 | TCP | 443 | 443 |
 
-See [Fritz!Box Configuration](#fritzbox-port-forwarding) below for detailed steps.
+See [Router Port Forwarding](#router-port-forwarding) below for detailed steps and Fritz!Box notes.
 
-### Step 3: Set Up DynDNS Domain
+### Step 3: Set Up DNS (Static or Dynamic)
 
-Use MyFRITZ! or another DynDNS service to get a stable domain name.
+Use any DNS provider or dynamic DNS service (e.g., Cloudflare, DuckDNS, No-IP, DynDNS, MyFRITZ!). Point your domain to your **public** IP address.
 
 ### Step 4: Initialize Let's Encrypt Certificate
 
@@ -45,7 +46,7 @@ Use MyFRITZ! or another DynDNS service to get a stable domain name.
 chmod +x scripts/init-letsencrypt.sh
 
 # Run the setup (replace with your domain and email)
-./scripts/init-letsencrypt.sh yourdomain.myfritz.net your@email.com
+./scripts/init-letsencrypt.sh yourdomain.example.com your@email.com
 ```
 
 ### Step 5: Start All Services
@@ -54,52 +55,45 @@ chmod +x scripts/init-letsencrypt.sh
 docker-compose up -d
 ```
 
-Your API is now available at: `https://yourdomain.myfritz.net`
+Your API is now available at: `https://yourdomain.example.com`
 
 ---
 
-## Fritz!Box Port Forwarding
+## Router Port Forwarding
 
-### Access Fritz!Box Admin Interface
+### Access Router Admin Interface
 
-1. Open browser: `http://fritz.box` or `http://192.168.178.1`
-2. Login with your Fritz!Box password
+1. Open your router admin page (often `http://192.168.0.1` or `http://192.168.1.1`)
+2. Log in with your router credentials
 
 ### Configure Port Forwarding
 
-1. Navigate to: **Internet** → **Freigaben** → **Portfreigaben**
+1. Find **Port Forwarding**, **NAT**, or **Virtual Server** settings
+2. Create two TCP rules that forward to your machine's local IP:
 
-2. Click **Gerät für Freigaben hinzufügen**
+  **Port 80 (HTTP - for Let's Encrypt):**
+  | Setting | Value |
+  |---------|-------|
+  | Name | OHI-HTTP |
+  | Protocol | TCP |
+  | External Port | 80 |
+  | Internal IP | your PC IP |
+  | Internal Port | 80 |
 
-3. Select your computer from the list
+  **Port 443 (HTTPS):**
+  | Setting | Value |
+  |---------|-------|
+  | Name | OHI-HTTPS |
+  | Protocol | TCP |
+  | External Port | 443 |
+  | Internal IP | your PC IP |
+  | Internal Port | 443 |
 
-4. Add two port forwards:
+3. Save/apply the configuration
 
-   **Port 80 (HTTP - for Let's Encrypt):**
-   | Setting | Value |
-   |---------|-------|
-   | Anwendung | Other application |
-   | Bezeichnung | OHI-HTTP |
-   | Protokoll | TCP |
-   | Port an Gerät | 80 |
-   | Port extern | 80 |
+### Fritz!Box Notes (Optional)
 
-   **Port 443 (HTTPS):**
-   | Setting | Value |
-   |---------|-------|
-   | Anwendung | Other application |
-   | Bezeichnung | OHI-HTTPS |
-   | Protokoll | TCP |
-   | Port an Gerät | 443 |
-   | Port extern | 443 |
-
-5. Click **Übernehmen**
-
-### Configure MyFRITZ! (Recommended)
-
-1. Go to: **Internet** → **MyFRITZ!-Konto**
-2. Register or login with your AVM account
-3. Your domain: `yourusername.myfritz.net`
+If you use a Fritz!Box, navigate to **Internet** → **Freigaben** → **Portfreigaben** and add two TCP rules for ports 80 and 443. For DynDNS, **Internet** → **MyFRITZ!-Konto**.
 
 ---
 
@@ -110,7 +104,7 @@ Internet
     │
     ▼
 ┌─────────────┐
-│  Fritz!Box  │  Port 80/443 forwarded
+│   Router    │  Port 80/443 forwarded
 └─────────────┘
     │
     ▼
@@ -234,8 +228,8 @@ console.log(result);
 ### Certificate Request Failed
 
 ```bash
-# Check if port 80 is reachable from internet
-# Use a service like https://portchecker.co/
+# Check if port 80 is reachable from the internet
+# Use a service like https://portchecker.co/ or https://canyouseeme.org/
 
 # Check nginx logs
 docker-compose logs nginx
@@ -251,7 +245,7 @@ docker-compose logs certbot
 ls -la data/certbot/live/ohi/
 
 # Re-run certificate setup
-./scripts/init-letsencrypt.sh yourdomain.myfritz.net your@email.com
+./scripts/init-letsencrypt.sh yourdomain.example.com your@email.com
 ```
 
 ### 502 Bad Gateway
@@ -266,6 +260,18 @@ docker-compose logs ohi-api
 
 ### Connection Timeout
 
-- Verify Fritz!Box port forwarding is active
-- Check Windows Firewall allows ports 80 and 443
+- Verify router port forwarding is active
+- Check OS firewall allows ports 80 and 443
 - Confirm Docker containers are running: `docker-compose ps`
+
+---
+
+## If You Are Behind CGNAT (No Public IP)
+
+If your ISP uses CGNAT, inbound port forwarding will not work. Use one of these options:
+
+1. **Reverse tunnel** (e.g., Cloudflare Tunnel)
+2. **Public VPS** as a reverse proxy
+3. **DNS-01 validation** for TLS and expose via tunnel/VPN
+
+These options require additional setup outside this guide.

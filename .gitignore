@@ -120,12 +120,25 @@ data/
 cache/
 
 # ==============================================================================
-# Docker (local volumes)
+# Lock Files (users generate their own)
 # ==============================================================================
+uv.lock
+
+# ==============================================================================
+# Docker (excluded from repository - users manage their own hosting)
+# ==============================================================================
+docker/
+docker-compose*.yml
+Dockerfile
+.dockerignore
 docker-data/
 neo4j-data/
 qdrant-data/
 redis-data/
+data/neo4j/
+data/qdrant/
+data/redis/
+data/certbot/
 
 # ==============================================================================
 # Model Files (too large for git)
