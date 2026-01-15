@@ -8,10 +8,10 @@ import time
 from unittest.mock import MagicMock
 
 from open_hallucination_index.adapters.outbound.mcp_session_pool import (
+    SESSION_VALIDATION_TIMEOUT_SECONDS,
     MCPPoolManager,
     MCPTransportType,
     PooledSession,
-    SESSION_VALIDATION_TIMEOUT_SECONDS,
 )
 
 
