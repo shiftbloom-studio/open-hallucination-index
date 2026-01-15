@@ -381,47 +381,51 @@ class Neo4jGraphStore:
             self._run_with_retry(session, see_also_query, batch_data, "See also relationships")
 
             # 6. Disambiguation relationships
-            disambig_query = """
-            UNWIND $batch AS data
-            MATCH (source:Article {id: data.id})
-            WHERE size(data.disambiguation) > 0
-            WITH source, data
-            UNWIND data.disambiguation AS linkTitle
-            MERGE (target:Article {title: linkTitle})
-            ON CREATE SET target.stub = true
-            MERGE (source)-[:DISAMBIGUATES]->(target)
-            """
-            self._run_with_retry(session, disambig_query, batch_data, "Disambiguation relationships")
+            if any(d.get("disambiguation") for d in batch_data):
+                disambig_query = """
+                UNWIND $batch AS data
+                MATCH (source:Article {id: data.id})
+                WHERE size(data.disambiguation) > 0
+                WITH source, data
+                UNWIND data.disambiguation AS linkTitle
+                MERGE (target:Article {title: linkTitle})
+                ON CREATE SET target.stub = true
+                MERGE (source)-[:DISAMBIGUATES]->(target)
+                """
+                self._run_with_retry(session, disambig_query, batch_data, "Disambiguation relationships")
 
             # 7. Location relationships
-            location_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.location IS NOT NULL
-            MERGE (l:Location {name: data.location})
-            MERGE (a)-[:LOCATED_IN]->(l)
-            """
-            self._run_with_retry(session, location_query, batch_data, "Location relationships")
+            if any(d.get("location") for d in batch_data):
+                location_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.location IS NOT NULL
+                MERGE (l:Location {name: data.location})
+                MERGE (a)-[:LOCATED_IN]->(l)
+                """
+                self._run_with_retry(session, location_query, batch_data, "Location relationships")
 
             # 8. Occupation relationships
-            occupation_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.occupation IS NOT NULL
-            MERGE (o:Occupation {name: data.occupation})
-            MERGE (a)-[:HAS_OCCUPATION]->(o)
-            """
-            self._run_with_retry(session, occupation_query, batch_data, "Occupation relationships")
+            if any(d.get("occupation") for d in batch_data):
+                occupation_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.occupation IS NOT NULL
+                MERGE (o:Occupation {name: data.occupation})
+                MERGE (a)-[:HAS_OCCUPATION]->(o)
+                """
+                self._run_with_retry(session, occupation_query, batch_data, "Occupation relationships")
 
             # 9. Nationality relationships
-            nationality_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.nationality IS NOT NULL
-            MERGE (n:Nationality {name: data.nationality})
-            MERGE (a)-[:HAS_NATIONALITY]->(n)
-            """
-            self._run_with_retry(session, nationality_query, batch_data, "Nationality relationships")
+            if any(d.get("nationality") for d in batch_data):
+                nationality_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.nationality IS NOT NULL
+                MERGE (n:Nationality {name: data.nationality})
+                MERGE (a)-[:HAS_NATIONALITY]->(n)
+                """
+                self._run_with_retry(session, nationality_query, batch_data, "Nationality relationships")
 
             # 10. Category co-occurrence (articles sharing categories are related)
             # This creates implicit relationships between categories
@@ -447,207 +451,226 @@ class Neo4jGraphStore:
             # =================================================================
 
             # 11. Spouse relationships (MARRIED_TO)
-            spouse_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.spouse IS NOT NULL
-            MERGE (spouse:Person {name: data.spouse})
-            MERGE (a)-[:MARRIED_TO]->(spouse)
-            """
-            self._run_with_retry(session, spouse_query, batch_data, "Spouse relationships")
+            if any(d.get("spouse") for d in batch_data):
+                spouse_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.spouse IS NOT NULL
+                MERGE (spouse:Person {name: data.spouse})
+                MERGE (a)-[:MARRIED_TO]->(spouse)
+                """
+                self._run_with_retry(session, spouse_query, batch_data, "Spouse relationships")
 
             # 12. Children relationships (PARENT_OF)
-            children_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WITH a, data
-            UNWIND data.children AS childName
-            MERGE (child:Person {name: childName})
-            MERGE (a)-[:PARENT_OF]->(child)
-            """
-            self._run_with_retry(session, children_query, batch_data, "Children relationships")
+            if any(d.get("children") for d in batch_data):
+                children_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WITH a, data
+                UNWIND data.children AS childName
+                MERGE (child:Person {name: childName})
+                MERGE (a)-[:PARENT_OF]->(child)
+                """
+                self._run_with_retry(session, children_query, batch_data, "Children relationships")
 
             # 13. Parent relationships (CHILD_OF)
-            parents_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WITH a, data
-            UNWIND data.parents AS parentName
-            MERGE (parent:Person {name: parentName})
-            MERGE (a)-[:CHILD_OF]->(parent)
-            """
-            self._run_with_retry(session, parents_query, batch_data, "Parents relationships")
+            if any(d.get("parents") for d in batch_data):
+                parents_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WITH a, data
+                UNWIND data.parents AS parentName
+                MERGE (parent:Person {name: parentName})
+                MERGE (a)-[:CHILD_OF]->(parent)
+                """
+                self._run_with_retry(session, parents_query, batch_data, "Parents relationships")
 
             # 14. Education relationships (EDUCATED_AT)
-            education_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WITH a, data
-            UNWIND data.education AS schoolName
-            MERGE (school:EducationalInstitution {name: schoolName})
-            MERGE (a)-[:EDUCATED_AT]->(school)
-            """
-            self._run_with_retry(session, education_query, batch_data, "Education relationships")
+            if any(d.get("education") for d in batch_data):
+                education_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WITH a, data
+                UNWIND data.education AS schoolName
+                MERGE (school:EducationalInstitution {name: schoolName})
+                MERGE (a)-[:EDUCATED_AT]->(school)
+                """
+                self._run_with_retry(session, education_query, batch_data, "Education relationships")
 
             # 15. Employer relationships (EMPLOYED_BY)
-            employer_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WITH a, data
-            UNWIND data.employer AS employerName
-            MERGE (employer:Organization {name: employerName})
-            MERGE (a)-[:EMPLOYED_BY]->(employer)
-            """
-            self._run_with_retry(session, employer_query, batch_data, "Employer relationships")
+            if any(d.get("employer") for d in batch_data):
+                employer_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WITH a, data
+                UNWIND data.employer AS employerName
+                MERGE (employer:Organization {name: employerName})
+                MERGE (a)-[:EMPLOYED_BY]->(employer)
+                """
+                self._run_with_retry(session, employer_query, batch_data, "Employer relationships")
 
             # 16. Award relationships (WON_AWARD)
-            awards_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WITH a, data
-            UNWIND data.awards AS awardName
-            MERGE (award:Award {name: awardName})
-            MERGE (a)-[:WON_AWARD]->(award)
-            """
-            self._run_with_retry(session, awards_query, batch_data, "Awards relationships")
+            if any(d.get("awards") for d in batch_data):
+                awards_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WITH a, data
+                UNWIND data.awards AS awardName
+                MERGE (award:Award {name: awardName})
+                MERGE (a)-[:WON_AWARD]->(award)
+                """
+                self._run_with_retry(session, awards_query, batch_data, "Awards relationships")
 
             # 17. Author relationships (AUTHORED)
-            author_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WITH a, data
-            UNWIND data.author_of AS workName
-            MERGE (work:CreativeWork {name: workName})
-            MERGE (a)-[:AUTHORED]->(work)
-            """
-            self._run_with_retry(session, author_query, batch_data, "Author relationships")
+            if any(d.get("author_of") for d in batch_data):
+                author_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WITH a, data
+                UNWIND data.author_of AS workName
+                MERGE (work:CreativeWork {name: workName})
+                MERGE (a)-[:AUTHORED]->(work)
+                """
+                self._run_with_retry(session, author_query, batch_data, "Author relationships")
 
             # 18. Genre relationships (HAS_GENRE)
-            genre_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WITH a, data
-            UNWIND data.genre AS genreName
-            MERGE (genre:Genre {name: genreName})
-            MERGE (a)-[:HAS_GENRE]->(genre)
-            """
-            self._run_with_retry(session, genre_query, batch_data, "Genre relationships")
+            if any(d.get("genre") for d in batch_data):
+                genre_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WITH a, data
+                UNWIND data.genre AS genreName
+                MERGE (genre:Genre {name: genreName})
+                MERGE (a)-[:HAS_GENRE]->(genre)
+                """
+                self._run_with_retry(session, genre_query, batch_data, "Genre relationships")
 
             # 19. Influenced by relationships (INFLUENCED_BY)
-            influenced_by_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WITH a, data
-            UNWIND data.influenced_by AS influencerName
-            MERGE (influencer:Article {title: influencerName})
-            ON CREATE SET influencer.stub = true
-            MERGE (a)-[:INFLUENCED_BY]->(influencer)
-            """
-            self._run_with_retry(session, influenced_by_query, batch_data, "Influenced by relationships")
+            if any(d.get("influenced_by") for d in batch_data):
+                influenced_by_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WITH a, data
+                UNWIND data.influenced_by AS influencerName
+                MERGE (influencer:Article {title: influencerName})
+                ON CREATE SET influencer.stub = true
+                MERGE (a)-[:INFLUENCED_BY]->(influencer)
+                """
+                self._run_with_retry(session, influenced_by_query, batch_data, "Influenced by relationships")
 
             # 20. Influenced relationships (INFLUENCED)
-            influenced_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WITH a, data
-            UNWIND data.influenced AS influencedName
-            MERGE (influenced:Article {title: influencedName})
-            ON CREATE SET influenced.stub = true
-            MERGE (a)-[:INFLUENCED]->(influenced)
-            """
-            self._run_with_retry(session, influenced_query, batch_data, "Influenced relationships")
+            if any(d.get("influenced") for d in batch_data):
+                influenced_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WITH a, data
+                UNWIND data.influenced AS influencedName
+                MERGE (influenced:Article {title: influencedName})
+                ON CREATE SET influenced.stub = true
+                MERGE (a)-[:INFLUENCED]->(influenced)
+                """
+                self._run_with_retry(session, influenced_query, batch_data, "Influenced relationships")
 
             # 21. Founded by relationships (FOUNDED_BY)
-            founded_by_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.founded_by IS NOT NULL
-            MERGE (founder:Person {name: data.founded_by})
-            MERGE (a)-[:FOUNDED_BY]->(founder)
-            """
-            self._run_with_retry(session, founded_by_query, batch_data, "Founded by relationships")
+            if any(d.get("founded_by") for d in batch_data):
+                founded_by_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.founded_by IS NOT NULL
+                MERGE (founder:Person {name: data.founded_by})
+                MERGE (a)-[:FOUNDED_BY]->(founder)
+                """
+                self._run_with_retry(session, founded_by_query, batch_data, "Founded by relationships")
 
             # 22. Headquarters relationships (HEADQUARTERED_IN)
-            headquarters_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.headquarters IS NOT NULL
-            MERGE (hq:Location {name: data.headquarters})
-            MERGE (a)-[:HEADQUARTERED_IN]->(hq)
-            """
-            self._run_with_retry(session, headquarters_query, batch_data, "Headquarters relationships")
+            if any(d.get("headquarters") for d in batch_data):
+                headquarters_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.headquarters IS NOT NULL
+                MERGE (hq:Location {name: data.headquarters})
+                MERGE (a)-[:HEADQUARTERED_IN]->(hq)
+                """
+                self._run_with_retry(session, headquarters_query, batch_data, "Headquarters relationships")
 
             # 23. Industry relationships (IN_INDUSTRY)
-            industry_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.industry IS NOT NULL
-            MERGE (ind:Industry {name: data.industry})
-            MERGE (a)-[:IN_INDUSTRY]->(ind)
-            """
-            self._run_with_retry(session, industry_query, batch_data, "Industry relationships")
+            if any(d.get("industry") for d in batch_data):
+                industry_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.industry IS NOT NULL
+                MERGE (ind:Industry {name: data.industry})
+                MERGE (a)-[:IN_INDUSTRY]->(ind)
+                """
+                self._run_with_retry(session, industry_query, batch_data, "Industry relationships")
 
             # 24. Country relationships (IN_COUNTRY)
-            country_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.country IS NOT NULL
-            MERGE (country:Country {name: data.country})
-            MERGE (a)-[:IN_COUNTRY]->(country)
-            """
-            self._run_with_retry(session, country_query, batch_data, "Country relationships")
+            if any(d.get("country") for d in batch_data):
+                country_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.country IS NOT NULL
+                MERGE (country:Country {name: data.country})
+                MERGE (a)-[:IN_COUNTRY]->(country)
+                """
+                self._run_with_retry(session, country_query, batch_data, "Country relationships")
 
             # 25. Part of relationships (PART_OF) - geographic hierarchy
-            part_of_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.part_of IS NOT NULL
-            MERGE (parent:Location {name: data.part_of})
-            MERGE (a)-[:PART_OF]->(parent)
-            """
-            self._run_with_retry(session, part_of_query, batch_data, "Part of relationships")
+            if any(d.get("part_of") for d in batch_data):
+                part_of_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.part_of IS NOT NULL
+                MERGE (parent:Location {name: data.part_of})
+                MERGE (a)-[:PART_OF]->(parent)
+                """
+                self._run_with_retry(session, part_of_query, batch_data, "Part of relationships")
 
             # 26. Predecessor relationships (PRECEDED_BY)
-            predecessor_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.predecessor IS NOT NULL
-            MERGE (pred:Article {title: data.predecessor})
-            ON CREATE SET pred.stub = true
-            MERGE (a)-[:PRECEDED_BY]->(pred)
-            """
-            self._run_with_retry(session, predecessor_query, batch_data, "Predecessor relationships")
+            if any(d.get("predecessor") for d in batch_data):
+                predecessor_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.predecessor IS NOT NULL
+                MERGE (pred:Article {title: data.predecessor})
+                ON CREATE SET pred.stub = true
+                MERGE (a)-[:PRECEDED_BY]->(pred)
+                """
+                self._run_with_retry(session, predecessor_query, batch_data, "Predecessor relationships")
 
             # 27. Successor relationships (SUCCEEDED_BY)
-            successor_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.successor IS NOT NULL
-            MERGE (succ:Article {title: data.successor})
-            ON CREATE SET succ.stub = true
-            MERGE (a)-[:SUCCEEDED_BY]->(succ)
-            """
-            self._run_with_retry(session, successor_query, batch_data, "Successor relationships")
+            if any(d.get("successor") for d in batch_data):
+                successor_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.successor IS NOT NULL
+                MERGE (succ:Article {title: data.successor})
+                ON CREATE SET succ.stub = true
+                MERGE (a)-[:SUCCEEDED_BY]->(succ)
+                """
+                self._run_with_retry(session, successor_query, batch_data, "Successor relationships")
 
             # 28. Instance of relationships (INSTANCE_OF) - type classification
-            instance_of_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.instance_of IS NOT NULL
-            MERGE (type:Type {name: data.instance_of})
-            MERGE (a)-[:INSTANCE_OF]->(type)
-            """
-            self._run_with_retry(session, instance_of_query, batch_data, "Instance of relationships")
+            if any(d.get("instance_of") for d in batch_data):
+                instance_of_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.instance_of IS NOT NULL
+                MERGE (type:Type {name: data.instance_of})
+                MERGE (a)-[:INSTANCE_OF]->(type)
+                """
+                self._run_with_retry(session, instance_of_query, batch_data, "Instance of relationships")
 
             # 29. Capital of relationships (CAPITAL_OF) - capital cities
-            capital_of_query = """
-            UNWIND $batch AS data
-            MATCH (a:Article {id: data.id})
-            WHERE data.capital_of IS NOT NULL
-            MERGE (region:Location {name: data.capital_of})
-            MERGE (a)-[:CAPITAL_OF]->(region)
-            """
-            self._run_with_retry(session, capital_of_query, batch_data, "Capital of relationships")
+            if any(d.get("capital_of") for d in batch_data):
+                capital_of_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.capital_of IS NOT NULL
+                MERGE (region:Location {name: data.capital_of})
+                MERGE (a)-[:CAPITAL_OF]->(region)
+                """
+                self._run_with_retry(session, capital_of_query, batch_data, "Capital of relationships")
 
     def upload_batch_async(self, articles: list[ProcessedArticle]) -> threading.Event:
         """

@@ -12,7 +12,7 @@ services:
       - "127.0.0.1:7687:7687" # Bolt - localhost only for dev
     environment:
       - NEO4J_AUTH=neo4j/password123
-      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      - NEO4J_PLUGINS=["apoc", "graph-data-science", "bloom"]
       - NEO4J_server_memory_heap_initial__size=4G
       - NEO4J_server_memory_heap_max__size=16G  
       - NEO4J_server_memory_pagecache_size=8G  
