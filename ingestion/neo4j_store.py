@@ -4,7 +4,7 @@ Neo4j graph store with rich relationship modeling.
 Features:
 - Optimized batch writes with UNWIND
 - Rich relationship types for knowledge graph
-- Async upload support
+- Async upload support with deadlock retry
 - Connection pooling for throughput
 - Full-text search indexes
 """
@@ -12,14 +12,22 @@ Features:
 from __future__ import annotations
 
 import logging
+import random
 import threading
+import time
 from queue import Empty, Queue
 
 from neo4j import GraphDatabase
+from neo4j.exceptions import TransientError
 
 from ingestion.models import ProcessedArticle
 
 logger = logging.getLogger("ingestion.neo4j")
+
+# Retry settings for deadlock handling
+MAX_RETRIES = 5
+BASE_RETRY_DELAY = 0.1  # seconds
+MAX_RETRY_DELAY = 2.0  # seconds
 
 
 class Neo4jGraphStore:
@@ -258,8 +266,38 @@ class Neo4jGraphStore:
 
         return batch_data
 
+    def _run_with_retry(self, session, query: str, batch: list[dict], operation_name: str) -> bool:
+        """
+        Execute a Neo4j query with exponential backoff retry on deadlock.
+        
+        Returns True if successful, False if all retries exhausted.
+        """
+        for attempt in range(MAX_RETRIES):
+            try:
+                session.run(query, batch=batch)
+                return True
+            except TransientError as e:
+                # Deadlock detected - retry with exponential backoff + jitter
+                if attempt < MAX_RETRIES - 1:
+                    delay = min(
+                        BASE_RETRY_DELAY * (2 ** attempt) + random.uniform(0, 0.1),
+                        MAX_RETRY_DELAY
+                    )
+                    logger.debug(
+                        f"Deadlock in {operation_name}, retry {attempt + 1}/{MAX_RETRIES} "
+                        f"after {delay:.2f}s"
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.warning(f"{operation_name} failed after {MAX_RETRIES} retries: {e}")
+                    return False
+            except Exception as e:
+                logger.error(f"{operation_name} error: {e}")
+                return False
+        return False
+
     def _do_upload(self, batch_data: list[dict]):
-        """Execute the actual upload queries."""
+        """Execute the actual upload queries with deadlock retry."""
         if not batch_data:
             return
 
@@ -279,10 +317,7 @@ class Neo4jGraphStore:
                 a.death_date = data.death_date,
                 a.last_updated = datetime()
             """
-            try:
-                session.run(article_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Article creation error: {e}")
+            self._run_with_retry(session, article_query, batch_data, "Article creation")
 
             # 2. Category relationships (most common)
             category_query = """
@@ -293,10 +328,7 @@ class Neo4jGraphStore:
             MERGE (c:Category {name: catName})
             MERGE (a)-[:IN_CATEGORY]->(c)
             """
-            try:
-                session.run(category_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Category relationship error: {e}")
+            self._run_with_retry(session, category_query, batch_data, "Category relationships")
 
             # 3. Entity relationships
             entity_query = """
@@ -307,10 +339,7 @@ class Neo4jGraphStore:
             MERGE (e:Entity {name: entityName})
             MERGE (a)-[:MENTIONS]->(e)
             """
-            try:
-                session.run(entity_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Entity relationship error: {e}")
+            self._run_with_retry(session, entity_query, batch_data, "Entity relationships")
 
             # 4. Article-to-Article links (LINKS_TO)
             links_query = """
@@ -322,10 +351,7 @@ class Neo4jGraphStore:
             ON CREATE SET target.stub = true
             MERGE (source)-[:LINKS_TO]->(target)
             """
-            try:
-                session.run(links_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Links relationship error: {e}")
+            self._run_with_retry(session, links_query, batch_data, "Links relationships")
 
             # 5. See Also relationships (explicit related content)
             see_also_query = """
@@ -337,10 +363,7 @@ class Neo4jGraphStore:
             ON CREATE SET target.stub = true
             MERGE (source)-[:SEE_ALSO]->(target)
             """
-            try:
-                session.run(see_also_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"See also relationship error: {e}")
+            self._run_with_retry(session, see_also_query, batch_data, "See also relationships")
 
             # 6. Disambiguation relationships
             disambig_query = """
@@ -353,10 +376,7 @@ class Neo4jGraphStore:
             ON CREATE SET target.stub = true
             MERGE (source)-[:DISAMBIGUATES]->(target)
             """
-            try:
-                session.run(disambig_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Disambiguation relationship error: {e}")
+            self._run_with_retry(session, disambig_query, batch_data, "Disambiguation relationships")
 
             # 7. Location relationships
             location_query = """
@@ -366,10 +386,7 @@ class Neo4jGraphStore:
             MERGE (l:Location {name: data.location})
             MERGE (a)-[:LOCATED_IN]->(l)
             """
-            try:
-                session.run(location_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Location relationship error: {e}")
+            self._run_with_retry(session, location_query, batch_data, "Location relationships")
 
             # 8. Occupation relationships
             occupation_query = """
@@ -379,10 +396,7 @@ class Neo4jGraphStore:
             MERGE (o:Occupation {name: data.occupation})
             MERGE (a)-[:HAS_OCCUPATION]->(o)
             """
-            try:
-                session.run(occupation_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Occupation relationship error: {e}")
+            self._run_with_retry(session, occupation_query, batch_data, "Occupation relationships")
 
             # 9. Nationality relationships
             nationality_query = """
@@ -392,10 +406,7 @@ class Neo4jGraphStore:
             MERGE (n:Nationality {name: data.nationality})
             MERGE (a)-[:HAS_NATIONALITY]->(n)
             """
-            try:
-                session.run(nationality_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Nationality relationship error: {e}")
+            self._run_with_retry(session, nationality_query, batch_data, "Nationality relationships")
 
             # 10. Category co-occurrence (articles sharing categories are related)
             # This creates implicit relationships between categories
@@ -411,13 +422,10 @@ class Neo4jGraphStore:
             MERGE (c2:Category {name: cat2})
             MERGE (c1)-[:RELATED_TO]-(c2)
             """
-            try:
-                # Only run for subset to avoid explosion
-                subset = [d for d in batch_data if len(d.get("categories", [])) >= 2][:50]
-                if subset:
-                    session.run(category_cooccur_query, batch=subset)
-            except Exception as e:
-                logger.error(f"Category co-occurrence error: {e}")
+            # Only run for subset to avoid explosion
+            subset = [d for d in batch_data if len(d.get("categories", [])) >= 2][:50]
+            if subset:
+                self._run_with_retry(session, category_cooccur_query, subset, "Category co-occurrence")
 
             # =================================================================
             # NEW RELATIONSHIPS (11-25): 15 additional relationship types
@@ -431,10 +439,7 @@ class Neo4jGraphStore:
             MERGE (spouse:Person {name: data.spouse})
             MERGE (a)-[:MARRIED_TO]->(spouse)
             """
-            try:
-                session.run(spouse_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Spouse relationship error: {e}")
+            self._run_with_retry(session, spouse_query, batch_data, "Spouse relationships")
 
             # 12. Children relationships (PARENT_OF)
             children_query = """
@@ -445,10 +450,7 @@ class Neo4jGraphStore:
             MERGE (child:Person {name: childName})
             MERGE (a)-[:PARENT_OF]->(child)
             """
-            try:
-                session.run(children_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Children relationship error: {e}")
+            self._run_with_retry(session, children_query, batch_data, "Children relationships")
 
             # 13. Parent relationships (CHILD_OF)
             parents_query = """
@@ -459,10 +461,7 @@ class Neo4jGraphStore:
             MERGE (parent:Person {name: parentName})
             MERGE (a)-[:CHILD_OF]->(parent)
             """
-            try:
-                session.run(parents_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Parents relationship error: {e}")
+            self._run_with_retry(session, parents_query, batch_data, "Parents relationships")
 
             # 14. Education relationships (EDUCATED_AT)
             education_query = """
@@ -473,10 +472,7 @@ class Neo4jGraphStore:
             MERGE (school:EducationalInstitution {name: schoolName})
             MERGE (a)-[:EDUCATED_AT]->(school)
             """
-            try:
-                session.run(education_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Education relationship error: {e}")
+            self._run_with_retry(session, education_query, batch_data, "Education relationships")
 
             # 15. Employer relationships (EMPLOYED_BY)
             employer_query = """
@@ -487,10 +483,7 @@ class Neo4jGraphStore:
             MERGE (employer:Organization {name: employerName})
             MERGE (a)-[:EMPLOYED_BY]->(employer)
             """
-            try:
-                session.run(employer_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Employer relationship error: {e}")
+            self._run_with_retry(session, employer_query, batch_data, "Employer relationships")
 
             # 16. Award relationships (WON_AWARD)
             awards_query = """
@@ -501,10 +494,7 @@ class Neo4jGraphStore:
             MERGE (award:Award {name: awardName})
             MERGE (a)-[:WON_AWARD]->(award)
             """
-            try:
-                session.run(awards_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Awards relationship error: {e}")
+            self._run_with_retry(session, awards_query, batch_data, "Awards relationships")
 
             # 17. Author relationships (AUTHORED)
             author_query = """
@@ -515,10 +505,7 @@ class Neo4jGraphStore:
             MERGE (work:CreativeWork {name: workName})
             MERGE (a)-[:AUTHORED]->(work)
             """
-            try:
-                session.run(author_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Author relationship error: {e}")
+            self._run_with_retry(session, author_query, batch_data, "Author relationships")
 
             # 18. Genre relationships (HAS_GENRE)
             genre_query = """
@@ -529,10 +516,7 @@ class Neo4jGraphStore:
             MERGE (genre:Genre {name: genreName})
             MERGE (a)-[:HAS_GENRE]->(genre)
             """
-            try:
-                session.run(genre_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Genre relationship error: {e}")
+            self._run_with_retry(session, genre_query, batch_data, "Genre relationships")
 
             # 19. Influenced by relationships (INFLUENCED_BY)
             influenced_by_query = """
@@ -544,10 +528,7 @@ class Neo4jGraphStore:
             ON CREATE SET influencer.stub = true
             MERGE (a)-[:INFLUENCED_BY]->(influencer)
             """
-            try:
-                session.run(influenced_by_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Influenced by relationship error: {e}")
+            self._run_with_retry(session, influenced_by_query, batch_data, "Influenced by relationships")
 
             # 20. Influenced relationships (INFLUENCED)
             influenced_query = """
@@ -559,10 +540,7 @@ class Neo4jGraphStore:
             ON CREATE SET influenced.stub = true
             MERGE (a)-[:INFLUENCED]->(influenced)
             """
-            try:
-                session.run(influenced_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Influenced relationship error: {e}")
+            self._run_with_retry(session, influenced_query, batch_data, "Influenced relationships")
 
             # 21. Founded by relationships (FOUNDED_BY)
             founded_by_query = """
@@ -572,10 +550,7 @@ class Neo4jGraphStore:
             MERGE (founder:Person {name: data.founded_by})
             MERGE (a)-[:FOUNDED_BY]->(founder)
             """
-            try:
-                session.run(founded_by_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Founded by relationship error: {e}")
+            self._run_with_retry(session, founded_by_query, batch_data, "Founded by relationships")
 
             # 22. Headquarters relationships (HEADQUARTERED_IN)
             headquarters_query = """
@@ -585,10 +560,7 @@ class Neo4jGraphStore:
             MERGE (hq:Location {name: data.headquarters})
             MERGE (a)-[:HEADQUARTERED_IN]->(hq)
             """
-            try:
-                session.run(headquarters_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Headquarters relationship error: {e}")
+            self._run_with_retry(session, headquarters_query, batch_data, "Headquarters relationships")
 
             # 23. Industry relationships (IN_INDUSTRY)
             industry_query = """
@@ -598,10 +570,7 @@ class Neo4jGraphStore:
             MERGE (ind:Industry {name: data.industry})
             MERGE (a)-[:IN_INDUSTRY]->(ind)
             """
-            try:
-                session.run(industry_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Industry relationship error: {e}")
+            self._run_with_retry(session, industry_query, batch_data, "Industry relationships")
 
             # 24. Country relationships (IN_COUNTRY)
             country_query = """
@@ -611,10 +580,7 @@ class Neo4jGraphStore:
             MERGE (country:Country {name: data.country})
             MERGE (a)-[:IN_COUNTRY]->(country)
             """
-            try:
-                session.run(country_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Country relationship error: {e}")
+            self._run_with_retry(session, country_query, batch_data, "Country relationships")
 
             # 25. Part of relationships (PART_OF) - geographic hierarchy
             part_of_query = """
@@ -624,10 +590,7 @@ class Neo4jGraphStore:
             MERGE (parent:Location {name: data.part_of})
             MERGE (a)-[:PART_OF]->(parent)
             """
-            try:
-                session.run(part_of_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Part of relationship error: {e}")
+            self._run_with_retry(session, part_of_query, batch_data, "Part of relationships")
 
             # 26. Predecessor relationships (PRECEDED_BY)
             predecessor_query = """
@@ -638,10 +601,7 @@ class Neo4jGraphStore:
             ON CREATE SET pred.stub = true
             MERGE (a)-[:PRECEDED_BY]->(pred)
             """
-            try:
-                session.run(predecessor_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Predecessor relationship error: {e}")
+            self._run_with_retry(session, predecessor_query, batch_data, "Predecessor relationships")
 
             # 27. Successor relationships (SUCCEEDED_BY)
             successor_query = """
@@ -652,10 +612,7 @@ class Neo4jGraphStore:
             ON CREATE SET succ.stub = true
             MERGE (a)-[:SUCCEEDED_BY]->(succ)
             """
-            try:
-                session.run(successor_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Successor relationship error: {e}")
+            self._run_with_retry(session, successor_query, batch_data, "Successor relationships")
 
             # 28. Instance of relationships (INSTANCE_OF) - type classification
             instance_of_query = """
@@ -665,10 +622,7 @@ class Neo4jGraphStore:
             MERGE (type:Type {name: data.instance_of})
             MERGE (a)-[:INSTANCE_OF]->(type)
             """
-            try:
-                session.run(instance_of_query, batch=batch_data)
-            except Exception as e:
-                logger.error(f"Instance of relationship error: {e}")
+            self._run_with_retry(session, instance_of_query, batch_data, "Instance of relationships")
 
     def upload_batch_async(self, articles: list[ProcessedArticle]) -> threading.Event:
         """

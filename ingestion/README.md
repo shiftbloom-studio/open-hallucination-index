@@ -5,9 +5,10 @@ High-performance Wikipedia ingestion pipeline for the Open Hallucination Index p
 ## Features
 
 - **10-50x faster** than the original monolithic script
+- **Parallel dump processing** with configurable worker count
 - **Producer-consumer architecture** with non-blocking queues
 - **Parallel downloads** with resume support for Wikipedia dumps
-- **GPU-accelerated embeddings** with large batch sizes (512)
+- **GPU-accelerated embeddings** with dedicated embedding workers
 - **Async uploads** to both Qdrant and Neo4j
 - **10+ relationship types** in Neo4j knowledge graph
 - **Resumable checkpoints** for crash recovery
@@ -17,14 +18,25 @@ High-performance Wikipedia ingestion pipeline for the Open Hallucination Index p
 
 ```
 ┌─────────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Download   │───▶│  Preprocess  │───▶│   Embed     │───▶│   Upload    │
-│  (4 threads)│    │  (8 threads) │    │  (GPU batch)│    │  (8 threads)│
+│  Download   │───▶│ Dump Workers │───▶│   Embed     │───▶│   Upload    │
+│  (4 threads)│    │ (2 workers)  │    │ (2 workers) │    │ (4 threads) │
 └─────────────┘    └──────────────┘    └─────────────┘    └─────────────┘
       │                  │                   │                   │
       ▼                  ▼                   ▼                   ▼
-   Wikipedia         Text Clean          GPU Encode        Qdrant + Neo4j
-    Dumps            + Chunking          + BM25 Sparse     Parallel Upload
+   Wikipedia         Parallel Parse      GPU Encode        Qdrant + Neo4j
+    Dumps            + Preprocess        + BM25 Sparse     Parallel Upload
 ```
+
+### Multi-Worker Architecture
+
+The pipeline now supports **parallel dump file processing**:
+
+- **Dump Workers** (`--dump-workers`): Multiple dump files are processed simultaneously
+- **Embedding Workers** (`--embedding-workers`): Dedicated GPU threads for embedding computation
+- **Preprocess Workers** (`--preprocess-workers`): Parallel text preprocessing
+- **Upload Workers** (`--upload-workers`): Async database uploads
+
+This eliminates freezing during batch processing by decoupling all stages.
 
 ## Quick Start
 
@@ -33,20 +45,20 @@ High-performance Wikipedia ingestion pipeline for the Open Hallucination Index p
 python -m ingestion --help
 
 # Basic usage with defaults
-python -m ingestion \
-    --wiki-dump ~/downloads/enwiki-pages-articles.xml.bz2 \
-    --qdrant-url http://localhost:6333 \
-    --neo4j-uri bolt://localhost:7687
+python -m ingestion --limit 10000
 
-# High-performance settings
+# High-performance settings (recommended for 64GB RAM + GPU)
 python -m ingestion \
-    --wiki-dump ~/downloads/enwiki-pages-articles.xml.bz2 \
     --batch-size 512 \
-    --max-articles 1000000 \
-    --download-workers 4 \
-    --preprocess-workers 8 \
+    --dump-workers 4 \
+    --preprocess-workers 12 \
+    --embedding-workers 4 \
     --upload-workers 8 \
-    --gpu
+    --embedding-batch-size 1024 \
+    --embedding-device cuda
+
+# Endless mode with auto-retry on network errors
+python -m ingestion --endless --keep-downloads
 ```
 
 ## Module Structure
@@ -85,17 +97,36 @@ The pipeline creates rich relationships between articles:
 
 ```python
 IngestionConfig(
-    batch_size=512,           # GPU embedding batch size
-    chunk_size=400,           # Words per chunk
-    chunk_overlap=50,         # Overlap between chunks
-    download_workers=4,       # Parallel download threads
-    preprocess_workers=8,     # Text processing threads
-    upload_workers=4,         # Upload threads per store
-    download_queue_size=8,    # Pending downloads
-    preprocess_queue_size=2048,  # Pending chunks
-    upload_queue_size=16,     # Pending uploads
+    batch_size=256,              # Articles per batch
+    chunk_size=512,              # Characters per chunk
+    chunk_overlap=64,            # Overlap between chunks
+    
+    # Worker configuration
+    dump_workers=2,              # Parallel dump file workers
+    download_workers=4,          # Parallel download threads
+    preprocess_workers=8,        # Text processing threads
+    embedding_workers=2,         # GPU embedding workers
+    upload_workers=4,            # Upload threads per store
+    
+    # Queue sizes
+    download_queue_size=8,       # Pending downloads
+    preprocess_queue_size=2048,  # Pending articles
+    upload_queue_size=16,        # Pending batches
+    
+    # Embedding settings
+    embedding_batch_size=512,    # GPU batch size
+    embedding_device="cuda",     # "cuda", "cpu", or "auto"
 )
 ```
+
+### Recommended Settings by Hardware
+
+| RAM | GPU | dump_workers | embedding_workers | batch_size |
+|-----|-----|--------------|-------------------|------------|
+| 16GB | None | 1 | 1 | 128 |
+| 32GB | 8GB | 2 | 2 | 256 |
+| 64GB | 12GB+ | 4 | 4 | 512 |
+| 128GB | 24GB+ | 8 | 8 | 1024 |
 
 ### Database Settings
 

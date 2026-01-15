@@ -2,23 +2,25 @@
 High-performance ingestion pipeline with producer-consumer architecture.
 
 Features:
+- Parallel dump file processing with configurable workers
 - Separate threads for download, preprocess, embed, and upload
 - Queue-based communication between stages
 - Non-blocking progress updates
-- Real-time statistics
+- Real-time statistics with thread-safe counters
 - Graceful shutdown handling
 
 Architecture:
     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-    │  Download    │────▶│  Preprocess  │────▶│   Embed +    │────▶│   Upload     │
-    │  (N threads) │     │  (M threads) │     │   Prepare    │     │  (async)     │
+    │  Download    │────▶│  Dump Worker │────▶│   Embed +    │────▶│   Upload     │
+    │  (N threads) │     │  (K workers) │     │   Prepare    │     │  (async)     │
     └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
            │                    │                    │                    │
            ▼                    ▼                    ▼                    ▼
-      Parts Queue          Article Queue        Batch Queue          Done Events
+      Parts Queue          Preprocess Pool       Batch Queue          Done Events
 
 This design ensures:
 - Downloads run ahead of processing (prefetch)
+- Multiple dump files are processed in parallel
 - Preprocessing is parallelized across CPU cores
 - GPU is always busy with embedding work
 - Database uploads happen async, don't block pipeline
@@ -26,11 +28,12 @@ This design ensures:
 
 from __future__ import annotations
 
+import itertools
 import logging
 import queue
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -115,6 +118,7 @@ class IngestionPipeline:
             embedding_model=config.embedding_model,
             embedding_batch_size=config.embedding_batch_size,
             upload_workers=config.upload_workers,
+            embedding_workers=config.embedding_workers,
             embedding_device=config.embedding_device,
         )
 
@@ -140,8 +144,21 @@ class IngestionPipeline:
             thread_name_prefix="preprocess",
         )
 
+        # Thread pool for parallel dump file processing
+        self._dump_executor = ThreadPoolExecutor(
+            max_workers=config.dump_workers,
+            thread_name_prefix="dump_worker",
+        )
+
         # Pending upload events to track
         self._pending_uploads: list[BatchResult] = []
+
+        # Thread-safe synchronization
+        self._stats_lock = threading.Lock()
+        self._checkpoint_lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._batch_id_counter = itertools.count()
+        self._last_progress_update = 0.0
 
         # Shutdown flag
         self._shutdown = False
@@ -227,12 +244,13 @@ class IngestionPipeline:
         pbar: tqdm,
         progress_callback: Callable[[PipelineStats], None] | None,
     ) -> None:
-        """Main pipeline execution loop."""
+        """Main pipeline execution loop with parallel dump workers."""
         download_queue = list(need_download)
-        # Already downloaded files are immediately ready to process
         ready_to_process: list[DumpFile] = list(already_downloaded)
-        current_batch: list[ProcessedArticle] = []
-        batch_id = 0
+        part_futures: dict[Future, DumpFile] = {}
+
+        self._stop_event.clear()
+        self._last_progress_update = time.time()
 
         if ready_to_process:
             logger.info(
@@ -248,123 +266,198 @@ class IngestionPipeline:
             self.downloader.start_download(part)
             logger.info(f"📥 Started download: part {part.index}")
 
-        # Main loop
-        last_progress_update = time.time()
-
+        # Main coordination loop
         while not self._shutdown and not is_shutdown_requested():
             # Check for completed downloads
             completed = self.downloader.get_completed_downloads()
             ready_to_process.extend(completed)
-            self.stats.parts_downloaded += len(completed)
+            with self._stats_lock:
+                self.stats.parts_downloaded += len(completed)
 
-            # Start new downloads if slots available
+            # Start new downloads if slots available and not stopping
+            if not self._stop_event.is_set():
+                while (
+                    download_queue
+                    and self.downloader.active_download_count() < self.config.max_concurrent_downloads
+                ):
+                    part = download_queue.pop(0)
+                    self.downloader.start_download(part)
+
+            # Schedule dump workers for ready files
             while (
-                download_queue
-                and self.downloader.active_download_count() < self.config.max_concurrent_downloads
+                ready_to_process
+                and len(part_futures) < self.config.dump_workers
+                and not self._stop_event.is_set()
             ):
-                part = download_queue.pop(0)
-                self.downloader.start_download(part)
-
-            # Process ready files
-            if ready_to_process:
                 part = ready_to_process.pop(0)
-
                 if part.download_complete and part.local_path:
-                    try:
-                        # Process all articles in this part
-                        for article in LocalFileParser.parse_file(
-                            part.local_path,
-                            skip_ids=self.checkpoint.processed_ids,
-                        ):
-                            if is_shutdown_requested():
-                                break
+                    future = self._dump_executor.submit(
+                        self._process_dump_part, part, limit, pbar, progress_callback
+                    )
+                    part_futures[future] = part
 
-                            # Preprocess article
-                            processed = self.preprocessor.process_article(article)
-
-                            if processed.chunks:
-                                current_batch.append(processed)
-                                self.stats.chunks_created += len(processed.chunks)
-
-                            self.stats.links_extracted += len(article.links)
-                            self.stats.categories_extracted += len(article.categories)
-                            self.stats.entities_extracted += len(article.entities)
-
-                            # Process batch when full
-                            if len(current_batch) >= self.config.batch_size:
-                                self._process_batch(current_batch, batch_id)
-                                batch_id += 1
-
-                                # Update progress
-                                pbar.update(len(current_batch))
-                                self.stats.articles_processed += len(current_batch)
-
-                                # Record in checkpoint
-                                article_ids = [a.article.id for a in current_batch]
-                                chunk_count = sum(len(a.chunks) for a in current_batch)
-                                self.checkpoint.record_batch(article_ids, chunk_count)
-
-                                current_batch = []
-
-                                # Check limit
-                                if limit and self.stats.articles_processed >= limit:
-                                    logger.info("✅ Limit reached")
-                                    return
-
-                            # Periodic progress update
-                            now = time.time()
-                            if now - last_progress_update > 1.0:
-                                self._update_progress(pbar)
-                                if progress_callback:
-                                    progress_callback(self.stats)
-                                last_progress_update = now
-
-                        # Part complete
-                        self.checkpoint.record_part_complete(part.index)
-                        self.stats.parts_processed += 1
-
-                        # Delete file if configured
-                        if not self.config.keep_downloads and part.local_path.exists():
-                            try:
-                                part.local_path.unlink()
-                                logger.debug(f"🗑️  Deleted {part.local_path.name}")
-                            except Exception as e:
-                                logger.warning(f"Could not delete {part.local_path}: {e}")
-
-                        logger.info(
-                            f"✅ Part {part.index} complete. "
-                            f"Progress: {self.stats.parts_processed}/{self.stats.parts_total}"
-                        )
-
-                    except Exception as e:
-                        logger.error(f"Error processing part {part.index}: {e}")
+            # Handle completed futures
+            completed_futures = [f for f in part_futures if f.done()]
+            for future in completed_futures:
+                part = part_futures.pop(future)
+                try:
+                    future.result()  # Raises exception if worker failed
+                except Exception as e:
+                    logger.error(f"Worker error for part {part.index}: {e}")
+                    with self._stats_lock:
                         self.stats.errors += 1
 
-            else:
-                # No files ready, wait a bit for downloads
-                time.sleep(0.1)
+            # Periodic progress update from main thread
+            now = time.time()
+            if now - self._last_progress_update > 1.0:
+                self._update_progress(pbar)
+                if progress_callback:
+                    with self._stats_lock:
+                        progress_callback(self.stats)
+                self._last_progress_update = now
 
             # Check if done
             has_work = (
                 ready_to_process
                 or download_queue
                 or self.downloader.active_download_count() > 0
+                or part_futures
             )
             if not has_work:
                 break
 
-        # Process final batch
-        if current_batch:
-            self._process_batch(current_batch, batch_id)
-            pbar.update(len(current_batch))
-            self.stats.articles_processed += len(current_batch)
-
-            article_ids = [a.article.id for a in current_batch]
-            chunk_count = sum(len(a.chunks) for a in current_batch)
-            self.checkpoint.record_batch(article_ids, chunk_count)
+            time.sleep(0.05)  # Small sleep to prevent busy-waiting
 
         # Wait for pending uploads
         self._wait_for_uploads()
+
+    def _process_dump_part(
+        self,
+        part: DumpFile,
+        limit: int | None,
+        pbar: tqdm,
+        progress_callback: Callable[[PipelineStats], None] | None,
+    ) -> None:
+        """
+        Process a single dump part in a worker thread.
+
+        This method is designed to run in parallel with other dump workers.
+        All shared state access is thread-safe.
+        """
+        if not part.download_complete or not part.local_path:
+            return
+
+        try:
+            # Get snapshot of processed IDs for skip checking
+            with self._checkpoint_lock:
+                skip_ids = set(self.checkpoint.processed_ids)
+
+            article_batch: list[WikiArticle] = []
+
+            for article in LocalFileParser.parse_file(
+                part.local_path,
+                skip_ids=skip_ids,
+            ):
+                if self._shutdown or self._stop_event.is_set() or is_shutdown_requested():
+                    break
+
+                article_batch.append(article)
+
+                # Process batch when full
+                if len(article_batch) >= self.config.batch_size:
+                    self._process_article_batch(
+                        article_batch, limit, pbar, progress_callback
+                    )
+                    article_batch = []
+
+                    # Check if limit reached
+                    if self._stop_event.is_set():
+                        break
+
+            # Process remaining articles in partial batch
+            if article_batch and not self._stop_event.is_set():
+                self._process_article_batch(
+                    article_batch, limit, pbar, progress_callback
+                )
+
+            # Mark part complete (thread-safe)
+            with self._checkpoint_lock:
+                self.checkpoint.record_part_complete(part.index)
+            with self._stats_lock:
+                self.stats.parts_processed += 1
+
+            # Delete file if configured
+            if not self.config.keep_downloads and part.local_path.exists():
+                try:
+                    part.local_path.unlink()
+                    logger.debug(f"🗑️  Deleted {part.local_path.name}")
+                except Exception as e:
+                    logger.warning(f"Could not delete {part.local_path}: {e}")
+
+            with self._stats_lock:
+                parts_done = self.stats.parts_processed
+                parts_total = self.stats.parts_total
+            logger.info(
+                f"✅ Part {part.index} complete. Progress: {parts_done}/{parts_total}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error processing part {part.index}: {e}")
+            with self._stats_lock:
+                self.stats.errors += 1
+            raise  # Re-raise so future.result() captures it
+
+    def _process_article_batch(
+        self,
+        articles: list[WikiArticle],
+        limit: int | None,
+        pbar: tqdm,
+        progress_callback: Callable[[PipelineStats], None] | None,
+    ) -> None:
+        """
+        Preprocess a batch of articles and enqueue for upload.
+
+        Uses the preprocessor's thread pool for parallel preprocessing,
+        then enqueues for async embedding and upload.
+        """
+        # Parallel preprocessing
+        processed = self.preprocessor.process_batch(articles)
+        if not processed:
+            return
+
+        # Filter articles with chunks for upload
+        upload_batch = [pa for pa in processed if pa.chunks]
+        if upload_batch:
+            batch_id = next(self._batch_id_counter)
+            self._process_batch(upload_batch, batch_id)
+
+        # Update stats and checkpoint (thread-safe)
+        with self._stats_lock:
+            processed_count = len(processed)
+            chunk_count = sum(len(pa.chunks) for pa in processed)
+
+            self.stats.articles_processed += processed_count
+            self.stats.articles_skipped += processed_count - len(upload_batch)
+            self.stats.chunks_created += chunk_count
+            self.stats.links_extracted += sum(len(pa.article.links) for pa in processed)
+            self.stats.categories_extracted += sum(
+                len(pa.article.categories) for pa in processed
+            )
+            self.stats.entities_extracted += sum(
+                len(pa.article.entities) for pa in processed
+            )
+
+            pbar.update(processed_count)
+
+            # Check limit
+            if limit and self.stats.articles_processed >= limit:
+                logger.info("✅ Limit reached")
+                self._stop_event.set()
+
+        # Record in checkpoint (thread-safe)
+        with self._checkpoint_lock:
+            article_ids = [pa.article.id for pa in processed]
+            self.checkpoint.record_batch(article_ids, chunk_count)
 
     def _process_batch(self, batch: list[ProcessedArticle], batch_id: int) -> None:
         """Process a batch: compute embeddings and upload."""
@@ -437,6 +530,7 @@ class IngestionPipeline:
         self.neo4j.close()
 
         self._preprocess_executor.shutdown(wait=False)
+        self._dump_executor.shutdown(wait=False)
 
     def get_stats(self) -> PipelineStats:
         """Get current pipeline statistics."""
@@ -477,7 +571,12 @@ def run_ingestion(
         logging.getLogger(name).setLevel(logging.WARNING)
 
     logger.info("🚀 Starting high-performance Wikipedia ingestion pipeline")
-    logger.info(f"📊 Config: batch_size={config.batch_size}, workers={config.preprocess_workers}")
+    logger.info(
+        f"📊 Config: batch_size={config.batch_size}, "
+        f"dump_workers={config.dump_workers}, "
+        f"preprocess_workers={config.preprocess_workers}, "
+        f"embedding_workers={config.embedding_workers}"
+    )
 
     pipeline = IngestionPipeline(config)
     pipeline.load_checkpoint(no_resume=no_resume, clear=clear_checkpoint)
