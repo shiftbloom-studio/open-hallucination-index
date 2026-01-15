@@ -128,5 +128,21 @@ class TestEvidence:
     def test_evidence_sources(self) -> None:
         """Test all evidence source types."""
         sources = [s.value for s in EvidenceSource]
-        expected = ["graph_exact", "graph_inferred", "vector_semantic", "external_api", "cached"]
+        expected = [
+            "graph_exact",
+            "graph_inferred",
+            "vector_semantic",
+            "external_api",
+            "cached",
+            "mcp_wikipedia",
+            "mcp_context7",
+            "wikipedia",
+            "knowledge_graph",
+            "academic",
+            "pubmed",
+            "clinical_trials",
+            "news",
+            "world_bank",
+            "osv",
+        ]
         assert sources == expected

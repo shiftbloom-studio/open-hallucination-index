@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -175,7 +175,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                             "object_properties": r.get("o_props", {}),
                         },
                         match_type="exact",
-                        retrieved_at=datetime.utcnow(),
+                        retrieved_at=datetime.now(timezone.utc),
                     )
                     for r in records
                 ]
@@ -252,7 +252,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                             content=f"{r['entity']} {r['relation']} {r['related']}",
                             structured_data=r,
                             match_type="entity_search",
-                            retrieved_at=datetime.utcnow(),
+                            retrieved_at=datetime.now(timezone.utc),
                         )
                     )
         except Exception as e:
@@ -294,7 +294,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                             content=path_str,
                             structured_data=rec,
                             match_type="path",
-                            retrieved_at=datetime.utcnow(),
+                            retrieved_at=datetime.now(timezone.utc),
                         )
                     )
                 return evidence
@@ -460,7 +460,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                             content=node.get("content", ""),
                             similarity_score=node.get("similarity_score"),
                             match_type="persisted",
-                            retrieved_at=datetime.utcnow(),
+                            retrieved_at=datetime.now(timezone.utc),
                             source_uri=node.get("source_uri"),
                         )
                     )

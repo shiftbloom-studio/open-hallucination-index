@@ -35,7 +35,7 @@ class TestHealthEndpoints:
         # Import here to avoid import errors during collection
         from open_hallucination_index.api.app import create_app
 
-        app = create_app()
+        app = create_app(enable_lifespan=False)
 
         # Create test client without running lifespan (skip DI)
         with TestClient(app, raise_server_exceptions=True) as client:
@@ -47,7 +47,7 @@ class TestHealthEndpoints:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "alive"
+        assert data["status"] == "healthy"
 
     def test_readiness_check_no_deps(self, client: TestClient) -> None:
         """Test readiness endpoint (may fail without real dependencies)."""
@@ -117,7 +117,7 @@ class TestVerificationEndpoints:
         from open_hallucination_index.api.app import create_app
         from open_hallucination_index.infrastructure import dependencies
 
-        app = create_app()
+        app = create_app(enable_lifespan=False)
 
         # Override the dependency
         async def mock_get_verify_use_case():

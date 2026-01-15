@@ -133,6 +133,7 @@ class TestClaimVerification:
             claim=claim,
             status=VerificationStatus.SUPPORTED,
             trace=trace,
+            score_contribution=0.8,
         )
 
         assert verification.claim == claim
@@ -146,10 +147,8 @@ class TestVerificationResult:
     def test_verification_result(self) -> None:
         """Test creating a full verification result."""
         result = VerificationResult(
-            input_text="Paris is the capital of France.",
             input_hash="abc123",
-            claims=[],
-            verifications=[],
+            input_length=31,
             trust_score=TrustScore(
                 overall=1.0,
                 claims_total=0,
@@ -159,9 +158,11 @@ class TestVerificationResult:
                 confidence=0.0,
                 scoring_method="weighted_average",
             ),
+            claim_verifications=[],
             summary="No claims extracted.",
+            processing_time_ms=10.0,
+            cached=False,
         )
 
-        assert result.input_text == "Paris is the capital of France."
         assert result.input_hash == "abc123"
         assert result.summary == "No claims extracted."

@@ -41,7 +41,7 @@ async def verify_api_key(api_key: str | None = Depends(api_key_header)):
     return True
 
 
-def create_app() -> FastAPI:
+def create_app(*, enable_lifespan: bool = True) -> FastAPI:
     """
     Create and configure the FastAPI application.
 
@@ -59,7 +59,7 @@ def create_app() -> FastAPI:
             "claims and validating each against graph and vector knowledge stores."
         ),
         debug=settings.api.debug,
-        lifespan=lifespan_manager,
+        lifespan=lifespan_manager if enable_lifespan else None,
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",

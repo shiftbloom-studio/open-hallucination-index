@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -381,7 +381,7 @@ class Context7MCPAdapter(MCPKnowledgeSource):
                             },
                             similarity_score=0.9,  # High confidence for docs
                             match_type="mcp_docs",
-                            retrieved_at=datetime.utcnow(),
+                            retrieved_at=datetime.now(timezone.utc),
                             source_uri=f"https://context7.com{library_id}",
                         )
                     )
