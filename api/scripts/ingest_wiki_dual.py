@@ -1328,7 +1328,21 @@ class CheckpointManager:
                 temp_file.unlink()
 
     def should_skip(self, article_id: int) -> bool:
-        """Check if article has already been processed."""
+        """
+        Check if article has already been processed.
+        
+        This is the PRIMARY mechanism for preventing duplicate imports.
+        Even though the stream always starts from the beginning after
+        a reconnection, already-processed articles are tracked in the
+        checkpoint file and will be skipped.
+        
+        Secondary protections:
+        - Qdrant: Uses upsert() with deterministic IDs (same article = same ID)
+        - Neo4j: Uses MERGE instead of CREATE (idempotent operations)
+        
+        This means even if an article somehow bypasses this check,
+        it would simply overwrite the existing data, not create duplicates.
+        """
         return article_id in self.processed_ids
 
     def record_batch(
@@ -1564,6 +1578,13 @@ def main():
         if remaining_limit == 0:
             logger.info("✅ Limit already reached from previous run")
             return
+
+    # Show duplicate prevention info
+    if checkpoint.processed_ids:
+        logger.info(
+            f"🛡️  Duplicate prevention active: {len(checkpoint.processed_ids):,} "
+            f"article IDs will be skipped if encountered again"
+        )
 
     pbar = tqdm(
         total=remaining_limit or args.limit,
