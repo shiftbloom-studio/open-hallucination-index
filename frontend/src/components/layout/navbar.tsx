@@ -8,7 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { type AuthChangeEvent, type Session, type User } from "@supabase/supabase-js";
-import { Coins, LogOut, LayoutDashboard, Sparkles } from "lucide-react";
+import { Coins, LogOut, LayoutDashboard } from "lucide-react";
 import { toast } from "sonner";
 
 export function Navbar() {

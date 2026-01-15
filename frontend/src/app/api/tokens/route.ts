@@ -4,6 +4,21 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 const INITIAL_TOKENS = 5;
+const DAILY_TOKENS = 5;
+
+// Helper function to check if a day has passed since last claim
+function canClaimDailyTokens(lastClaimDate: string | null): boolean {
+  if (!lastClaimDate) return true;
+  
+  const lastClaim = new Date(lastClaimDate);
+  const now = new Date();
+  
+  // Reset at midnight UTC
+  const lastClaimDay = new Date(lastClaim.getFullYear(), lastClaim.getMonth(), lastClaim.getDate());
+  const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  return todayDay > lastClaimDay;
+}
 
 // GET /api/tokens - Get current user's token balance
 export async function GET() {
@@ -21,7 +36,7 @@ export async function GET() {
     // Get or create user profile in Supabase
     const { data: fetchedProfile, error: profileError } = await supabase
       .from("profiles")
-      .select("tokens")
+      .select("tokens, last_daily_claim")
       .eq("id", user.id)
       .single();
 
@@ -31,8 +46,13 @@ export async function GET() {
       // Profile doesn't exist, create it with initial tokens
       const { data: newProfile, error: createError } = await supabase
         .from("profiles")
-        .insert({ id: user.id, email: user.email, tokens: INITIAL_TOKENS })
-        .select("tokens")
+        .insert({ 
+          id: user.id, 
+          email: user.email, 
+          tokens: INITIAL_TOKENS,
+          last_daily_claim: new Date().toISOString()
+        })
+        .select("tokens, last_daily_claim")
         .single();
 
       if (createError) {
@@ -49,6 +69,25 @@ export async function GET() {
         { error: "Failed to fetch profile" },
         { status: 500 }
       );
+    }
+
+    // Check if user can claim daily tokens
+    if (profile && canClaimDailyTokens(profile.last_daily_claim)) {
+      const newTokenBalance = (profile.tokens ?? 0) + DAILY_TOKENS;
+      
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from("profiles")
+        .update({ 
+          tokens: newTokenBalance,
+          last_daily_claim: new Date().toISOString()
+        })
+        .eq("id", user.id)
+        .select("tokens, last_daily_claim")
+        .single();
+
+      if (!updateError && updatedProfile) {
+        profile = updatedProfile;
+      }
     }
 
     return NextResponse.json({

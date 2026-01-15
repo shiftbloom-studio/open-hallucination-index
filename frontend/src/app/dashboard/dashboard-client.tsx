@@ -109,12 +109,6 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                 {tokensLoading ? "..." : userTokens} tokens
               </span>
             </div>
-            <Link href="/pricing">
-              <Button variant="outline" size="sm" className="border-slate-700 hover:border-slate-600">
-                <Sparkles className="h-4 w-4 mr-2 text-amber-400" />
-                Buy Tokens
-              </Button>
-            </Link>
             <span className="text-sm text-muted-foreground">{user.email}</span>
             <Button variant="outline" size="sm" onClick={handleLogout} className="border-slate-700 hover:border-slate-600">
               <LogOut className="h-4 w-4 mr-2" />
@@ -197,25 +191,21 @@ export default function DashboardClient({ user }: DashboardClientProps) {
           onTokensUpdated={handleTokensUpdated}
         />
 
-        {/* Help Card */}
+        {/* Daily Tokens Info */}
         <Card className="mt-8 border-slate-800/50 bg-slate-900/30">
           <CardHeader>
-            <CardTitle className="text-lg">Need More Tokens?</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-amber-400" />
+              Free Daily Tokens
+            </CardTitle>
             <CardDescription>
-              Each token allows you to verify up to 1,000 characters of AI-generated text.
+              Every day you can claim 5 free tokens to verify your AI-generated content.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-4">
-              <Link href="/pricing">
-                <Button className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600">
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Purchase Tokens
-                </Button>
-              </Link>
-              <span className="text-sm text-muted-foreground">
-                Starting at just €1.49 for 10 tokens
-              </span>
+            <div className="text-sm text-muted-foreground">
+              <p>Each token allows you to verify up to 1,000 characters of AI-generated text.</p>
+              <p className="mt-2 text-amber-300">Come back daily to collect your free tokens!</p>
             </div>
           </CardContent>
         </Card>
