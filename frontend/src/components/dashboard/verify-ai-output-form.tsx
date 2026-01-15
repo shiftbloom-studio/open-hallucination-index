@@ -18,9 +18,21 @@ import { toast } from "sonner";
 import { ClaimSummary, createApiClient, VerifyTextResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+const CHARACTERS_PER_TOKEN = 1000;
+const STANDARD_TARGET_SOURCES = 6;
+const EXPERT_TARGET_SOURCES = 18;
+
 interface VerifyAIOutputFormProps {
   userTokens: number;
   onTokensUpdated: (newBalance: number) => void;
+}
+
+function extractTrustScore(verificationResult: VerifyTextResponse): number {
+  const trustScore =
+    verificationResult.trust_score.overall ??
+    verificationResult.trust_score.score ??
+    0;
+  return trustScore;
 }
 
 export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: VerifyAIOutputFormProps) {
@@ -31,9 +43,9 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
   const [verificationResult, setVerificationResult] = useState<VerifyTextResponse | null>(null);
 
   const textLength = text.length;
-  const tokensNeeded = Math.max(1, Math.ceil(textLength / 1000));
+  const tokensNeeded = Math.max(1, Math.ceil(textLength / CHARACTERS_PER_TOKEN));
   const hasEnoughTokens = userTokens >= tokensNeeded;
-  const targetSources = analysisMode === "expert" ? 18 : 6;
+  const targetSources = analysisMode === "expert" ? EXPERT_TARGET_SOURCES : STANDARD_TARGET_SOURCES;
 
   const handleVerify = useCallback(async () => {
     if (!text.trim()) {
@@ -224,27 +236,31 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
       </Card>
 
       {verificationResult && (
-        <Card className="border-none bg-gradient-to-br from-slate-900/50 to-slate-800/50 backdrop-blur-md shadow-xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BadgeCheck className="h-6 w-6 text-primary" />
-              Verification Results
-            </CardTitle>
-            <CardDescription>
-              Processed in {verificationResult.processing_time_ms.toFixed(0)}ms
-              {verificationResult.cached && " (cached)"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+        <>
+          {(() => {
+            const trustScore = extractTrustScore(verificationResult);
+            return (
+              <Card className="border-none bg-gradient-to-br from-slate-900/50 to-slate-800/50 backdrop-blur-md shadow-xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BadgeCheck className="h-6 w-6 text-primary" />
+                    Verification Results
+                  </CardTitle>
+                  <CardDescription>
+                    Processed in {verificationResult.processing_time_ms.toFixed(0)}ms
+                    {verificationResult.cached && " (cached)"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
             {/* Trust Score */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
                 <p className="text-sm text-muted-foreground mb-1">Trust Score</p>
                 <p className={cn(
                   "text-3xl font-bold",
-                  getTrustScoreColor(verificationResult.trust_score.overall ?? verificationResult.trust_score.score ?? 0)
+                  getTrustScoreColor(trustScore)
                 )}>
-                  {((verificationResult.trust_score.overall ?? verificationResult.trust_score.score ?? 0) * 100).toFixed(1)}%
+                  {(trustScore * 100).toFixed(1)}%
                 </p>
               </div>
               <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
@@ -312,6 +328,9 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
             </div>
           </CardContent>
         </Card>
+      );
+    })()}
+        </>
       )}
     </div>
   );
