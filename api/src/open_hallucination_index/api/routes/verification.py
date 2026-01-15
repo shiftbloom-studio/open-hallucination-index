@@ -251,6 +251,13 @@ async def verify_text(
         f"- SOURCES: {_count_evidence(result)}"
     )
 
+    # Verification response trace logging
+    for cv in result.claim_verifications:
+        if cv.trace:
+            logger.debug(f"Claim {cv.claim.id} has trace with {len(cv.trace.supporting_evidence)} supporting items")
+        else:
+            logger.warning(f"Claim {cv.claim.id} has NO TRACE")
+
     # Transform to API response
     claims = [
         ClaimSummary(

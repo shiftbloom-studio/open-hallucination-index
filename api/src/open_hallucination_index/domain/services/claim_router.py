@@ -366,7 +366,7 @@ Return valid JSON only:
                 content = content[3:-3]
             
             # Log the raw response for debugging
-            logger.error(f"LLM Routing Response: {content}")
+            logger.debug(f"LLM Routing Response: {content}")
             
             data = json.loads(content)
             
