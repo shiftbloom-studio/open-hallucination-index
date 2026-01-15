@@ -40,21 +40,23 @@ Rules:
 - Normalize entity names (e.g., "he" -> the actual person's name if known from context)
 - For dates, use ISO format where possible
 
-Output as JSON array:
+Output as a JSON object with a "claims" array:
 ```json
-[
-  {
-    "text": "The claim as a complete sentence",
-    "subject": "Entity name",
-    "predicate": "relationship",
-    "object": "value or entity",
-    "claim_type": "type",
-    "confidence": 0.0-1.0
-  }
-]
+{
+    "claims": [
+        {
+            "text": "The claim as a complete sentence",
+            "subject": "Entity name",
+            "predicate": "relationship",
+            "object": "value or entity",
+            "claim_type": "type",
+            "confidence": 0.0-1.0
+        }
+    ]
+}
 ```
 
-Only output the JSON array, nothing else."""
+Only output the JSON object, nothing else."""
 
 
 class DecompositionError(Exception):
@@ -124,10 +126,7 @@ class LLMClaimDecomposer(ClaimDecomposer):
         if context:
             user_content = f"Context: {context}\n\n{user_content}"
 
-        system_content = (
-            DECOMPOSITION_PROMPT
-            + "\nRespond strictly with a JSON object containing a 'claims' list."
-        )
+        system_content = DECOMPOSITION_PROMPT
         messages = [
             LLMMessage(role="system", content=system_content),
             LLMMessage(role="user", content=user_content),
@@ -154,21 +153,43 @@ class LLMClaimDecomposer(ClaimDecomposer):
         # Extract JSON from response (handle markdown code blocks)
         json_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", response)
         if json_match:
-            json_str = json_match.group(1)
+            json_str = json_match.group(1).strip()
         else:
-            # Try to find JSON array directly
             json_str = response.strip()
-            # Find the JSON array
-            start = json_str.find("[")
-            end = json_str.rfind("]") + 1
-            if start != -1 and end > start:
-                json_str = json_str[start:end]
 
+        data = None
+
+        # Try parsing full response first
         try:
             data = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse LLM response as JSON: {e}")
-            # Fall back to simple sentence splitting
+        except json.JSONDecodeError:
+            # Fallback: extract the first JSON object/array substring
+            start_obj = json_str.find("{")
+            end_obj = json_str.rfind("}") + 1
+            start_arr = json_str.find("[")
+            end_arr = json_str.rfind("]") + 1
+
+            candidate = None
+            if start_obj != -1 and end_obj > start_obj:
+                candidate = json_str[start_obj:end_obj]
+            elif start_arr != -1 and end_arr > start_arr:
+                candidate = json_str[start_arr:end_arr]
+
+            if candidate:
+                try:
+                    data = json.loads(candidate)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse LLM response as JSON: {e}")
+                    return self._fallback_decomposition(original_text)
+            else:
+                logger.warning("Failed to locate JSON in LLM response")
+                return self._fallback_decomposition(original_text)
+
+        # Normalize to list of claim dicts
+        if isinstance(data, dict):
+            data = data.get("claims", [])
+        if not isinstance(data, list):
+            logger.warning("LLM response JSON did not contain a claims list")
             return self._fallback_decomposition(original_text)
 
         claims = []

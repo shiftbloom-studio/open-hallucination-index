@@ -399,3 +399,23 @@ id,domain,difficulty,label,text,notes
 398,academical,hard,False,The placebo effect occurs only in animals and never in humans.,False restriction
 399,academical,medium,True,In economics, opportunity cost is the value of the next best alternative foregone when making a choice.,Definition
 400,academical,medium,False,Opportunity cost is the amount of money printed by a government in one day.,Misdefinition
+401,science,medium,True,The Pacific Ocean is the largest ocean and covers more area than the Atlantic Ocean.,Multi-claim true
+402,science,medium,True,The Amazon River has the greatest discharge and flows through Brazil.,Multi-claim true
+403,science,medium,True,Jupiter is the largest planet in the Solar System and has a Great Red Spot storm.,Multi-claim true
+404,medical,medium,True,The human heart has four chambers and pumps blood through the body.,Multi-claim true
+405,science,medium,True,Water freezes at 0°C and boils at 100°C at sea level.,Multi-claim true
+406,science,medium,True,Earth has one natural moon and its axial tilt causes seasons.,Multi-claim true
+407,science,hard,True,The speed of sound in air at 20°C is about 343 m/s and it is faster in water than in air.,Multi-claim true
+408,history,medium,True,The Great Wall of China is in China and was built over multiple dynasties.,Multi-claim true
+409,science,medium,True,Photosynthesis uses sunlight to convert carbon dioxide and water into glucose and oxygen.,Multi-claim true
+410,general,medium,True,Mount Everest is the highest mountain above sea level and lies in the Himalayas.,Multi-claim true
+411,science,medium,False,Venus is the closest planet to the Sun and has a day longer than its year.,Multi-claim mixed (first false)
+412,history,medium,False,The Nile River is the longest river in the world and flows through India.,Multi-claim mixed (second false)
+413,history,medium,False,The Statue of Liberty is in New York Harbor and was a gift from Germany.,Multi-claim mixed (second false)
+414,science,medium,False,Light travels faster than sound and its speed in vacuum is about 150000 kilometers per second.,Multi-claim mixed (second false)
+415,medical,medium,False,Humans have 46 chromosomes and DNA is made of amino acids.,Multi-claim mixed (second false)
+416,science,medium,False,The Pacific Ocean is the smallest ocean and borders Africa.,Multi-claim false
+417,science,medium,False,Mars has two moons and is the closest planet to the Sun.,Multi-claim mixed (second false)
+418,history,medium,False,William Shakespeare wrote Hamlet and was born in Paris.,Multi-claim mixed (second false)
+419,science,medium,False,The chemical symbol for gold is Au and its atomic number is 47.,Multi-claim mixed (second false)
+420,science,medium,False,The Great Barrier Reef is off the coast of Australia and is made of volcanic rock.,Multi-claim mixed (second false)

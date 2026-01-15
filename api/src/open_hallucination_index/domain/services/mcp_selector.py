@@ -172,6 +172,12 @@ class SmartMCPSelector:
                     if key in source_name or source_name in key:
                         sources.append(source)
                         break
+        if not sources and self._mcp_sources:
+            # Fallback: use any available MCP sources (e.g., unified OHI MCP adapter)
+            logger.debug(
+                "No MCP source name matched selection; falling back to available MCP sources."
+            )
+            sources = list(self._mcp_sources)
         return sources
 
     def _is_source_available(self, source_name: str) -> bool:
