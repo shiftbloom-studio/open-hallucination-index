@@ -47,14 +47,14 @@ python -m ingestion --help
 # Basic usage with defaults
 python -m ingestion --limit 10000
 
-# High-performance settings (recommended for 64GB RAM + GPU)
+# Balanced settings (recommended for 64GB RAM + RTX 4090)
 python -m ingestion \
-    --batch-size 512 \
-    --dump-workers 4 \
+    --batch-size 384 \
+    --dump-workers 3 \
     --preprocess-workers 12 \
-    --embedding-workers 4 \
-    --upload-workers 8 \
-    --embedding-batch-size 1024 \
+    --embedding-workers 3 \
+    --upload-workers 2 \
+    --embedding-batch-size 768 \
     --embedding-device cuda
 
 # Endless mode with auto-retry on network errors
@@ -125,7 +125,7 @@ IngestionConfig(
 |-----|-----|--------------|-------------------|------------|
 | 16GB | None | 1 | 1 | 128 |
 | 32GB | 8GB | 2 | 2 | 256 |
-| 64GB | 12GB+ | 4 | 4 | 512 |
+| 64GB | 12GB+ | 3 | 3 | 384 |
 | 128GB | 24GB+ | 8 | 8 | 1024 |
 
 ### Database Settings

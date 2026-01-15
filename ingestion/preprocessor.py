@@ -370,6 +370,11 @@ class AdvancedTextPreprocessor:
         r"\{\{disambiguation\}\}|\{\{disambig\}\}", re.IGNORECASE
     )
     EXTERNAL_LINKS_PATTERN = re.compile(r"\[https?://[^\s\]]+(?:\s+[^\]]+)?\]")
+    BR_TAG_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
+    LIST_TEMPLATE_PATTERN = re.compile(
+        r"\{\{\s*(?:hlist|plainlist|flatlist|ubl|unbulleted\s*list|bulleted\s*list)\b(.*?)\}\}",
+        re.IGNORECASE | re.DOTALL,
+    )
 
     # Infobox field patterns for structured extraction
     DATE_PATTERN = re.compile(
@@ -455,15 +460,37 @@ class AdvancedTextPreprocessor:
         for line in fields[1:]:
             if "=" in line:
                 key, _, value = line.partition("=")
-                key = key.strip().lower()
+                key = self._normalize_infobox_key(key)
                 value = value.strip()
                 # Clean wiki markup from value
-                value = self.LINK_PATTERN.sub(r"\1", value)
-                value = re.sub(r"\[\[|\]\]", "", value)
+                value = self._normalize_infobox_value(value)
                 if key and value and len(key) < 50 and len(value) < 500:
-                    properties[key] = value
+                    if key in properties:
+                        if value not in properties[key]:
+                            properties[key] = f"{properties[key]} | {value}"
+                    else:
+                        properties[key] = value
 
         return WikiInfobox(type=infobox_type, properties=properties)
+
+    def _normalize_infobox_key(self, key: str) -> str:
+        """Normalize infobox keys to improve structured extraction."""
+        key = key.strip().lower()
+        key = re.sub(r"\s+", "_", key)
+        key = re.sub(r"[\-/]", "_", key)
+        key = re.sub(r"__+", "_", key)
+        key = re.sub(r"\d+$", "", key)
+        return key.strip("_")
+
+    def _normalize_infobox_value(self, value: str) -> str:
+        """Normalize infobox values by stripping templates and markup."""
+        value = self.LINK_PATTERN.sub(r"\1", value)
+        value = re.sub(r"\[\[|\]\]", "", value)
+        value = self.BR_TAG_PATTERN.sub(" | ", value)
+        value = re.sub(r"'{2,}", "", value)
+        value = re.sub(r"<[^>]+>", "", value)
+        value = re.sub(r"\{\{[^}]+\}\}", "", value)
+        return value.strip()
 
     def _extract_infobox_block(self, text: str) -> str | None:
         """Extract the full infobox template block using linear scanning."""
@@ -778,6 +805,53 @@ class AdvancedTextPreprocessor:
     def _extract_list_from_value(self, value: str) -> set[str]:
         """Extract multiple items from a comma/newline separated value."""
         items: set[str] = set()
+        value = value.strip()
+
+        # Handle common list templates like {{hlist|A|B}} or {{plainlist|* A * B}}
+        template_match = self.LIST_TEMPLATE_PATTERN.search(value)
+        if template_match:
+            template_body = template_match.group(1)
+            # Split template arguments on top-level pipes
+            parts: list[str] = []
+            current: list[str] = []
+            depth = 0
+            i = 0
+            while i < len(template_body):
+                two = template_body[i : i + 2]
+                if two == "{{":
+                    depth += 1
+                    current.append(two)
+                    i += 2
+                    continue
+                if two == "}}":
+                    depth = max(0, depth - 1)
+                    current.append(two)
+                    i += 2
+                    continue
+                if template_body[i] == "|" and depth == 0:
+                    parts.append("".join(current).strip())
+                    current = []
+                    i += 1
+                    continue
+                current.append(template_body[i])
+                i += 1
+            if current:
+                parts.append("".join(current).strip())
+
+            # Remove template name if present
+            if parts and parts[0].lower().startswith(
+                ("hlist", "plainlist", "flatlist", "ubl", "unbulleted", "bulleted")
+            ):
+                parts = parts[1:]
+
+            for part in parts:
+                for sub in re.split(r"[\n\r]+|\*", part):
+                    cleaned = self._clean_link_text(sub).strip()
+                    if cleaned and len(cleaned) > 1 and len(cleaned) < 100:
+                        items.add(cleaned)
+
+            if items:
+                return items
         # First extract wiki links
         for match in self.LINK_PATTERN.finditer(value):
             link = match.group(1).strip()
@@ -787,6 +861,7 @@ class AdvancedTextPreprocessor:
         # If no links found, try splitting by common separators
         if not items:
             cleaned = self._clean_link_text(value)
+            cleaned = self.BR_TAG_PATTERN.sub("\n", cleaned)
             for sep in [",", "\n", ";", " and "]:
                 if sep in cleaned:
                     for part in cleaned.split(sep):

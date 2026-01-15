@@ -315,6 +315,13 @@ class Neo4jGraphStore:
                 a.chunk_count = data.chunk_count,
                 a.birth_date = data.birth_date,
                 a.death_date = data.death_date,
+                a.location = data.location,
+                a.occupation = data.occupation,
+                a.nationality = data.nationality,
+                a.instance_of = data.instance_of,
+                a.country = data.country,
+                a.industry = data.industry,
+                a.headquarters = data.headquarters,
                 a.last_updated = datetime()
             """
             self._run_with_retry(session, article_query, batch_data, "Article creation")
