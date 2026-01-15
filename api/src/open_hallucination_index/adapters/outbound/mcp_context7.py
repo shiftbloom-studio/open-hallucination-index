@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -233,10 +233,12 @@ class Context7MCPAdapter(MCPKnowledgeSource):
     async def _session_fallback(self):
         """Create a new MCP session (non-pooled, for fallback)."""
         if self._transport_type == MCPTransportType.SSE:
-            async with sse_client(self._mcp_url) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    yield session
+            async with (
+                sse_client(self._mcp_url) as (read, write),
+                ClientSession(read, write) as session,
+            ):
+                await session.initialize()
+                yield session
         else:
             async with (
                 streamablehttp_client(self._mcp_url, headers=self._headers) as (read, write, _),
@@ -381,7 +383,7 @@ class Context7MCPAdapter(MCPKnowledgeSource):
                             },
                             similarity_score=0.9,  # High confidence for docs
                             match_type="mcp_docs",
-                            retrieved_at=datetime.now(timezone.utc),
+                            retrieved_at=datetime.now(UTC),
                             source_uri=f"https://context7.com{library_id}",
                         )
                     )

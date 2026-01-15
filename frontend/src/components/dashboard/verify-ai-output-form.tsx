@@ -15,7 +15,7 @@ import {
   Coins
 } from "lucide-react";
 import { toast } from "sonner";
-import { createApiClient, VerifyTextResponse } from "@/lib/api";
+import { ClaimSummary, createApiClient, VerifyTextResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface VerifyAIOutputFormProps {
@@ -256,7 +256,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
               <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
                 <p className="text-sm text-muted-foreground mb-1">Verified</p>
                 <p className="text-3xl font-bold text-green-500">
-                  {verificationResult.claims.filter(c => 
+                  {verificationResult.claims.filter((c: ClaimSummary) => 
                     c.status.toLowerCase() === "verified" || c.status.toLowerCase() === "supported"
                   ).length}
                 </p>
@@ -264,7 +264,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
               <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
                 <p className="text-sm text-muted-foreground mb-1">Issues Found</p>
                 <p className="text-3xl font-bold text-red-500">
-                  {verificationResult.claims.filter(c => 
+                  {verificationResult.claims.filter((c: ClaimSummary) => 
                     c.status.toLowerCase() === "refuted"
                   ).length}
                 </p>
@@ -282,7 +282,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
             {/* Claims List */}
             <div className="space-y-3">
               <h4 className="text-sm font-medium text-muted-foreground">Analyzed Claims</h4>
-              {verificationResult.claims.map((claim) => (
+              {verificationResult.claims.map((claim: ClaimSummary) => (
                 <div
                   key={claim.id}
                   className={cn(
