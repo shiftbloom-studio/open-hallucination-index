@@ -224,15 +224,81 @@ class HybridVerificationOracle(VerificationOracle):
         return final_results
 
     async def _graph_evidence(self, claim: Claim) -> list[Evidence]:
-        """Gather evidence from graph store."""
+        """
+        Gather evidence from graph store.
+        
+        Optimized to use relationship-aware queries from Neo4j adapter:
+        - Detects entity types and uses specialized query methods
+        - Leverages 27 relationship types from ingestion
+        """
         if self._graph_store is None:
             return []
 
         try:
+            # Try relationship-aware queries if Neo4j adapter supports them
+            if hasattr(self._graph_store, "query_by_relationship_type"):
+                # Extract entity hints from claim text
+                entity = self._extract_entity_from_claim(claim)
+                
+                if entity:
+                    # Use specialized queries based on claim type
+                    if self._looks_like_person_claim(claim):
+                        person_evidence = await self._graph_store.query_person_facts(entity)
+                        if person_evidence:
+                            return person_evidence
+                    
+                    elif self._looks_like_org_claim(claim):
+                        org_evidence = await self._graph_store.query_organization_facts(entity)
+                        if org_evidence:
+                            return org_evidence
+                    
+                    elif self._looks_like_place_claim(claim):
+                        place_evidence = await self._graph_store.query_geographic_facts(entity)
+                        if place_evidence:
+                            return place_evidence
+            
+            # Fallback to standard graph query
             return await self._graph_store.find_evidence_for_claim(claim)
         except Exception as e:
             logger.warning(f"Graph evidence lookup failed: {e}")
             return []
+    
+    def _extract_entity_from_claim(self, claim: Claim) -> str | None:
+        """Extract the main entity from a claim (first capitalized phrase)."""
+        if claim.subject:
+            return claim.subject
+        
+        # Simple heuristic: find first capitalized word sequence
+        words = claim.text.split()
+        entity_words = []
+        for word in words:
+            if word and word[0].isupper():
+                entity_words.append(word)
+            elif entity_words:
+                break
+        
+        return " ".join(entity_words) if entity_words else None
+    
+    def _looks_like_person_claim(self, claim: Claim) -> bool:
+        """Check if claim is about a person."""
+        person_keywords = ["born", "died", "married", "spouse", "child", "parent", 
+                          "educated", "studied", "works", "worked", "founded", "won award"]
+        text_lower = claim.text.lower()
+        return any(kw in text_lower for kw in person_keywords)
+    
+    def _looks_like_org_claim(self, claim: Claim) -> bool:
+        """Check if claim is about an organization."""
+        org_keywords = ["company", "corporation", "organization", "founded", "headquarters",
+                       "headquartered", "industry", "ceo", "employees"]
+        text_lower = claim.text.lower()
+        return any(kw in text_lower for kw in org_keywords)
+    
+    def _looks_like_place_claim(self, claim: Claim) -> bool:
+        """Check if claim is about a place."""
+        place_keywords = ["city", "country", "located", "capital", "region", "part of",
+                         "population", "area", "geography"]
+        text_lower = claim.text.lower()
+        return any(kw in text_lower for kw in place_keywords)
 
     async def _vector_evidence(self, claim: Claim) -> list[Evidence]:
         """Gather evidence from vector store."""

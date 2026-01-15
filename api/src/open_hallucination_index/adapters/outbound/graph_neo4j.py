@@ -3,7 +3,43 @@ Neo4j Graph Knowledge Store Adapter
 ===================================
 
 Adapter for Neo4j graph database as a knowledge store.
-Supports 25 relationship types for rich knowledge graph queries.
+Supports 27 relationship types for rich knowledge graph queries.
+
+INGESTION COMPATIBILITY
+-----------------------
+This adapter is fully aligned with the ingestion pipeline structure:
+
+Ingestion Structure (ingestion/neo4j_store.py):
+- 27 Relationship Types created during ingestion:
+  Core: LINKS_TO, IN_CATEGORY, MENTIONS, SEE_ALSO, DISAMBIGUATES, RELATED_TO
+  Person: LOCATED_IN, HAS_OCCUPATION, HAS_NATIONALITY, MARRIED_TO, PARENT_OF,
+          CHILD_OF, EDUCATED_AT, EMPLOYED_BY, WON_AWARD
+  Creative: AUTHORED, HAS_GENRE, INFLUENCED_BY, INFLUENCED
+  Organization: FOUNDED_BY, HEADQUARTERED_IN, IN_INDUSTRY
+  Geographic: IN_COUNTRY, PART_OF
+  Temporal: PRECEDED_BY, SUCCEEDED_BY
+  Classification: INSTANCE_OF
+
+- 15 Node Types:
+  Article, Category, Entity, Person, Location, Country, Occupation,
+  Nationality, EducationalInstitution, Organization, Award, CreativeWork,
+  Genre, Industry, Type
+
+- Article Properties:
+  id, title, url, word_count, first_paragraph, infobox_type,
+  birth_date, death_date, location, occupation, nationality,
+  country, industry, headquarters, instance_of, vector_chunk_ids
+
+API Compatibility:
+- All 27 relationship types are defined and usable
+- Specialized query methods for relationship categories:
+  * query_person_facts() - family, education, career, awards
+  * query_organization_facts() - founders, HQ, industry, employees
+  * query_geographic_facts() - location hierarchy, country
+  * query_creative_facts() - works, genres, influences
+- Relationship-aware verification in VerificationOracle
+
+Version: 2025-01-15 - Aligned with ingestion v2 (27 relationships)
 """
 
 from __future__ import annotations

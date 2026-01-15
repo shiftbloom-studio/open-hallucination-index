@@ -39,10 +39,11 @@ def _get_model(model_name: str):
         model_name,
         device=device,
         trust_remote_code=False,
+        model_kwargs={
+            "low_cpu_mem_usage": False,
+            "device_map": None,
+        },
     )
-
-    # Ensure all parameters are on the correct device (not meta)
-    model = model.to(device)
 
     # Verify model is ready
     model.eval()

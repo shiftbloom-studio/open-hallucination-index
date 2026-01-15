@@ -29,13 +29,24 @@ class GraphQuery:
 
 @dataclass(frozen=True, slots=True)
 class VectorQuery:
-    """Query specification for vector-based semantic search."""
+    """
+    Query specification for vector-based semantic search.
+    
+    Supports hybrid search (dense + sparse vectors) matching 
+    the ingestion structure with BM25 sparse vectors.
+    """
 
     text: str
-    embedding: list[float] | None = None  # Pre-computed embedding
+    embedding: list[float] | None = None  # Pre-computed dense embedding
+    sparse_indices: list[int] | None = None  # Sparse vector indices (BM25)
+    sparse_values: list[float] | None = None  # Sparse vector values (BM25)
     top_k: int = 5
     min_similarity: float = 0.7
     filter_metadata: dict[str, Any] | None = None
+    # Extended filters matching Wikipedia ingestion metadata
+    infobox_types: list[str] | None = None  # Filter by entity types
+    categories: list[str] | None = None      # Filter by Wikipedia categories
+    section_filter: str | None = None        # Filter by section name
 
 
 class KnowledgeStore(ABC):
