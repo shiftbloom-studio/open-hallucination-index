@@ -61,7 +61,8 @@ def run_test():
         payload = {
             "text": test["text"],
             "strategy": "adaptive", 
-            "target_sources": 6
+            "target_sources": 6,
+            "use_cache": False
         }
         
         try:
@@ -72,16 +73,43 @@ def run_test():
             
             if res.status_code == 200:
                 data = res.json()
+                # Handle nested trust_score object
                 score = data.get("overall_score")
+                if score is None and "trust_score" in data:
+                    score = data["trust_score"].get("overall")
                 
                 # Collect sources from evidence
                 found_sources = set()
                 evidence_count = 0
                 
-                for verification in data.get("claim_verifications", []):
+                # Check for 'claims' (new API) or 'claim_verifications' (old API or domain model)
+                verifications = data.get("claims", []) or data.get("claim_verifications", [])
+                
+                # Debug print
+                with open("/tmp/debug.json", "w") as f:
+                    f.write(json.dumps(data, indent=2))
+                
+                for verification in verifications:
                     trace = verification.get("trace", {})
+                    # If trace is missing, maybe it's flattened? 
+                    # No, we expect trace to be passed.
+                    
                     for ev in trace.get("supporting_evidence", []) + trace.get("refuting_evidence", []):
                         evidence_count += 1
+                        # Check structured_data first
+                        details = ev.get("structured_data", {})
+                        orig = details.get("original_source")
+                        if orig:
+                            found_sources.add(str(orig).lower())
+                        
+                        # Also check the main source field
+                        src = ev.get("source", "")
+                        if src:
+                            found_sources.add(str(src).lower())
+                        
+                        # Debug evidence
+                        # print(f"DEBUG EV: {src} / {orig}")
+
                         # Check structured_data first
                         details = ev.get("structured_data", {})
                         orig = details.get("original_source")

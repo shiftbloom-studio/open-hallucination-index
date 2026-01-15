@@ -134,6 +134,7 @@ class TargetedOHISource(OHIMCPAdapter):
         return self._source_name_override
 
     async def find_evidence(self, claim: Claim) -> list[Evidence]:
+        logger.error(f"TargetedOHISource.find_evidence for {self._source_name_override}, search_type={self._search_type}")
         return await self.search_for_evidence(claim, max_results=5, search_type=self._search_type)
 
     async def search_for_evidence(

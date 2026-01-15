@@ -416,26 +416,34 @@ class AdaptiveEvidenceCollector:
 
         Returns (evidence_list, pending_background_tasks_count).
         """
+        logger.error(f"Entering _collect_mcp, mcp_sources count: {len(mcp_sources) if mcp_sources else 'None'}")
         # Get MCP sources to query
         if mcp_sources:
             sources = mcp_sources
         elif self._mcp_selector:
+            logger.error("Using selector to find sources in collector")
             selection = await self._mcp_selector.select(claim)
             sources = self._mcp_selector.get_sources_for_selection(selection)
         else:
+            logger.error("No sources and no selector")
             return [], 0
+
+        logger.error(f"Effective sources to query: {[s.source_name for s in sources]}")
 
         if not sources:
             return [], 0
-
+            
         # Create tasks for each source
         tasks: dict[asyncio.Task[list[Evidence]], str] = {}
         for source in sources:
             if source.is_available:
+                logger.error(f"Creating task for available source: {source.source_name}")
                 task = asyncio.create_task(
                     self._timed_query(source.source_name, source.find_evidence(claim))
                 )
                 tasks[task] = source.source_name
+            else:
+                logger.error(f"Source {source.source_name} is NOT available")
 
         if not tasks:
             return [], 0

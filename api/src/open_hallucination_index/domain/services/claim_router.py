@@ -327,6 +327,7 @@ class ClaimRouter:
 
     async def _route_with_llm(self, claim: Claim) -> RoutingDecision:
         """Route claim using LLM analysis."""
+        logger.info(f"Routing claim '{claim.text[:50]}...' with LLM")
         prompt = f"""Analyze this claim for fact-checking source selection.
 Claim: "{claim.text}"
 
@@ -363,6 +364,9 @@ Return valid JSON only:
                 content = content[7:-3]
             elif content.startswith("```"):
                 content = content[3:-3]
+            
+            # Log the raw response for debugging
+            logger.error(f"LLM Routing Response: {content}")
             
             data = json.loads(content)
             

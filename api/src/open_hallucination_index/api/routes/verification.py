@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from open_hallucination_index.application.verify_text import VerifyTextUseCase
 from open_hallucination_index.domain.results import (
+    CitationTrace,
     TrustScore,
     VerificationResult,
     VerificationStatus,
@@ -113,6 +114,7 @@ class ClaimSummary(BaseModel):
     status: VerificationStatus
     confidence: float = Field(..., ge=0.0, le=1.0)
     reasoning: str
+    trace: CitationTrace | None = None
 
 
 class VerifyTextResponse(BaseModel):
@@ -257,6 +259,7 @@ async def verify_text(
             status=cv.status,
             confidence=cv.trace.confidence,
             reasoning=cv.trace.reasoning,
+            trace=cv.trace,
         )
         for cv in result.claim_verifications
     ]
@@ -348,6 +351,7 @@ async def verify_batch(
                 status=cv.status,
                 confidence=cv.trace.confidence,
                 reasoning=cv.trace.reasoning,
+                trace=cv.trace,
             )
             for cv in item.claim_verifications
         ]

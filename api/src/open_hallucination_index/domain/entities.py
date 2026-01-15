@@ -48,6 +48,9 @@ class Claim(BaseModel):
     object: str | None = Field(default=None, description="Object entity or value")
 
     # Metadata
+    context: str | None = Field(
+        default=None, description="Contextual text around the claim"
+    )
     source_span: tuple[int, int] | None = Field(
         default=None, description="Character offsets in original text"
     )

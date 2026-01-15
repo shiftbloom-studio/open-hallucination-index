@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from open_hallucination_index.domain.results import TrustScore, VerificationStatus
+from open_hallucination_index.domain.results import TrustScore, VerificationStatus, CitationTrace
 
 
 class ClaimSummary(BaseModel):
@@ -15,6 +15,7 @@ class ClaimSummary(BaseModel):
     status: VerificationStatus
     confidence: float = Field(..., ge=0.0, le=1.0)
     reasoning: str
+    trace: CitationTrace | None = None
 
 
 class VerifyTextResponse(BaseModel):

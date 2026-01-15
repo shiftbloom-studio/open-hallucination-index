@@ -145,8 +145,21 @@ class LLMClaimDecomposer(ClaimDecomposer):
             return claims[:limit]
 
         except Exception as e:
-            logger.error(f"Claim decomposition failed: {e}")
-            raise DecompositionError(f"Failed to decompose text: {e}") from e
+            logger.error(f"Claim decomposition failed: {e}. Falling back to single-claim mode.")
+            # Fallback: Treat the whole text as one unclassified claim
+            # This ensures robustness even if LLM is down
+            return [
+                Claim(
+                    id=str(uuid4()),
+                    text=text.strip(),
+                    subject="Unknown",
+                    predicate="is",
+                    object="Unknown",
+                    claim_type=ClaimType.UNCLASSIFIED,
+                    confidence=0.5,
+                    context=context
+                )
+            ]
 
     def _parse_response(self, response: str, original_text: str) -> list[Claim]:
         """Parse LLM response into Claim objects."""
