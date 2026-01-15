@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -260,7 +260,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
                                 },
                                 similarity_score=0.85,  # Base confidence
                                 match_type="mcp_search",
-                                retrieved_at=datetime.utcnow(),
+                                retrieved_at=datetime.now(timezone.utc),
                                 source_uri=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
                             )
                     except Exception as e:

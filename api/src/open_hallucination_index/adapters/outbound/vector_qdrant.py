@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Coroutine
 from uuid import uuid4
 
@@ -230,7 +230,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                         structured_data=hit.payload,
                         similarity_score=hit.score,
                         match_type="semantic",
-                        retrieved_at=datetime.utcnow(),
+                        retrieved_at=datetime.now(timezone.utc),
                         source_uri=hit.payload.get("source_uri") if hit.payload else None,
                     )
                 )

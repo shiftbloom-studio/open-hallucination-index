@@ -43,6 +43,7 @@ def create_verification(
         claim=claim,
         status=status,
         trace=trace,
+        score_contribution=0.0,
     )
 
 

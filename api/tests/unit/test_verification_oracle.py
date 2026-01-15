@@ -79,6 +79,9 @@ class MockVectorStore(VectorKnowledgeStore):
     async def find_evidence_for_claim(self, claim: Claim) -> list[Evidence]:
         return self._evidence
 
+    async def embed_text(self, text: str) -> list[float]:
+        return [0.0]
+
 
 class TestHybridVerificationOracle:
     """Tests for the HybridVerificationOracle."""

@@ -15,7 +15,7 @@ on:
       - '.github/workflows/ci.yml'
 
 env:
-  PYTHON_VERSION: "3.12"
+  PYTHON_VERSION: "3.14"
 
 defaults:
   run:
