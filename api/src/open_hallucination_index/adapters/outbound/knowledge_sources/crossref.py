@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class CrossrefAdapter(HTTPKnowledgeSource):
     """
     Adapter for Crossref REST API.
-    
+
     Crossref is a DOI registration agency providing metadata
     for scholarly publications.
     """
@@ -68,56 +68,59 @@ class CrossrefAdapter(HTTPKnowledgeSource):
         """Find scholarly evidence for a claim."""
         if not self._available:
             return []
-        
+
         evidences: list[Evidence] = []
         search_term = claim.subject or claim.text[:100]
-        
+
         try:
             works = await self._search_works(search_term, limit=5)
-            
+
             for work in works:
                 title = self._get_title(work)
                 if not title:
                     continue
-                
+
                 # Build content
                 authors = self._format_authors(work.get("author", []))
                 content = f"{title}\n\nAuthors: {authors}"
-                
+
                 abstract = work.get("abstract", "")
                 if abstract:
                     # Strip JATS XML tags if present
                     import re
-                    abstract = re.sub(r'<[^>]+>', '', abstract)
+
+                    abstract = re.sub(r"<[^>]+>", "", abstract)
                     content += f"\n\nAbstract: {abstract[:800]}"
-                
+
                 published = self._get_publication_date(work)
                 if published:
                     content += f"\n\nPublished: {published}"
-                
+
                 container = work.get("container-title", [])
                 if container:
                     content += f"\nJournal: {container[0]}"
-                
+
                 doi = work.get("DOI", "")
-                
-                evidences.append(self._create_evidence(
-                    content=content,
-                    source_id=f"crossref:{doi}",
-                    source_uri=f"https://doi.org/{doi}" if doi else "",
-                    similarity_score=0.85,
-                    structured_data={
-                        "title": title,
-                        "doi": doi,
-                        "type": work.get("type", ""),
-                        "publisher": work.get("publisher", ""),
-                        "is_referenced_by_count": work.get("is-referenced-by-count", 0),
-                    },
-                ))
-            
+
+                evidences.append(
+                    self._create_evidence(
+                        content=content,
+                        source_id=f"crossref:{doi}",
+                        source_uri=f"https://doi.org/{doi}" if doi else "",
+                        similarity_score=0.85,
+                        structured_data={
+                            "title": title,
+                            "doi": doi,
+                            "type": work.get("type", ""),
+                            "publisher": work.get("publisher", ""),
+                            "is_referenced_by_count": work.get("is-referenced-by-count", 0),
+                        },
+                    )
+                )
+
             logger.debug(f"Found {len(evidences)} Crossref evidences")
             return evidences
-            
+
         except Exception as e:
             logger.warning(f"Crossref search failed: {e}")
             return []
@@ -128,9 +131,7 @@ class CrossrefAdapter(HTTPKnowledgeSource):
             return []
         return await self._search_works(query, limit)
 
-    async def _search_works(
-        self, query: str, limit: int = 5
-    ) -> list[dict[str, Any]]:
+    async def _search_works(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for works via Crossref."""
         try:
             response = await self._client.get(
@@ -174,10 +175,10 @@ class CrossrefAdapter(HTTPKnowledgeSource):
             if family:
                 name = f"{given} {family}".strip() if given else family
                 names.append(name)
-        
+
         if len(authors) > 5:
             names.append(f"and {len(authors) - 5} more")
-        
+
         return ", ".join(names) if names else "Unknown"
 
     def _get_publication_date(self, work: dict[str, Any]) -> str:

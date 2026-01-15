@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class MediaWikiAdapter(HTTPKnowledgeSource):
     """
     Adapter for MediaWiki Action API.
-    
+
     Provides access to Wikipedia articles, search, and metadata
     via the standard MediaWiki API.
     """
@@ -68,40 +68,42 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
         """Find Wikipedia evidence for a claim via Action API."""
         if not self._available:
             return []
-        
+
         evidences: list[Evidence] = []
         search_term = claim.subject or claim.text[:100]
-        
+
         try:
             # Search for articles
             search_results = await self._search(search_term, limit=3)
-            
+
             for result in search_results:
                 title = result.get("title", "")
                 if not title:
                     continue
-                
+
                 # Get article extract (summary)
                 extract = await self._get_extract(title)
                 if not extract:
                     continue
-                
+
                 page_id = result.get("pageid", "")
-                evidences.append(self._create_evidence(
-                    content=f"{title}\n\n{extract}",
-                    source_id=f"wikipedia:{page_id}",
-                    source_uri=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
-                    similarity_score=0.85,
-                    structured_data={
-                        "title": title,
-                        "pageid": page_id,
-                        "snippet": result.get("snippet", ""),
-                    },
-                ))
-            
+                evidences.append(
+                    self._create_evidence(
+                        content=f"{title}\n\n{extract}",
+                        source_id=f"wikipedia:{page_id}",
+                        source_uri=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                        similarity_score=0.85,
+                        structured_data={
+                            "title": title,
+                            "pageid": page_id,
+                            "snippet": result.get("snippet", ""),
+                        },
+                    )
+                )
+
             logger.debug(f"Found {len(evidences)} MediaWiki evidences for claim")
             return evidences
-            
+
         except Exception as e:
             logger.warning(f"MediaWiki search failed: {e}")
             return []
@@ -150,7 +152,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            
+
             pages = data.get("query", {}).get("pages", {})
             for page in pages.values():
                 return page.get("extract", "")
@@ -174,7 +176,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            
+
             pages = data.get("query", {}).get("pages", {})
             for page in pages.values():
                 return page

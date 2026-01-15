@@ -7,7 +7,7 @@ Liveness and readiness probes for Kubernetes/container orchestration.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, status
@@ -22,7 +22,7 @@ class HealthStatus(BaseModel):
     """Health check response model."""
 
     status: Literal["healthy", "degraded", "unhealthy"]
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     version: str
     environment: str
     checks: dict[str, bool] = Field(default_factory=dict)
@@ -32,7 +32,7 @@ class ReadinessStatus(BaseModel):
     """Readiness check response with service details."""
 
     ready: bool
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     services: dict[str, dict[str, bool | str]] = Field(default_factory=dict)
 
 

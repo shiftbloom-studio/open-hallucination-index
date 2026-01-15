@@ -19,14 +19,17 @@ class VerifyTextRequest(BaseModel):
         max_length=10_000,
         description="Optional context to help with claim disambiguation.",
     )
-    strategy: Literal[
-        "graph_exact",
-        "vector_semantic",
-        "hybrid",
-        "cascading",
-        "mcp_enhanced",
-        "adaptive",
-    ] | None = Field(
+    strategy: (
+        Literal[
+            "graph_exact",
+            "vector_semantic",
+            "hybrid",
+            "cascading",
+            "mcp_enhanced",
+            "adaptive",
+        ]
+        | None
+    ) = Field(
         default=None,
         description="Verification strategy override.",
     )
@@ -43,12 +46,15 @@ class BatchVerifyRequest(BaseModel):
     """Request for batch verification."""
 
     texts: list[str] = Field(..., min_length=1, max_length=50)
-    strategy: Literal[
-        "graph_exact",
-        "vector_semantic",
-        "hybrid",
-        "cascading",
-        "mcp_enhanced",
-        "adaptive",
-    ] | None = None
+    strategy: (
+        Literal[
+            "graph_exact",
+            "vector_semantic",
+            "hybrid",
+            "cascading",
+            "mcp_enhanced",
+            "adaptive",
+        ]
+        | None
+    ) = None
     use_cache: bool = True

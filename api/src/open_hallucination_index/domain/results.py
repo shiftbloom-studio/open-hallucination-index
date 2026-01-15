@@ -43,9 +43,7 @@ class CitationTrace(BaseModel):
     refuting_evidence: list[Evidence] = Field(default_factory=list)
 
     # Confidence in this specific verification
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Confidence in verification outcome"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence in verification outcome")
 
     # Strategy used
     verification_strategy: str = Field(
@@ -126,9 +124,7 @@ class VerificationResult(BaseModel):
     claim_verifications: list[ClaimVerification] = Field(default_factory=list)
 
     # Summary
-    summary: str | None = Field(
-        default=None, description="Human-readable summary of findings"
-    )
+    summary: str | None = Field(default=None, description="Human-readable summary of findings")
 
     # Metadata
     processing_time_ms: float = Field(..., ge=0.0)

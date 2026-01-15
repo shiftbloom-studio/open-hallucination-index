@@ -618,9 +618,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                 stats["relationship_count"] = record["count"] if record else 0
 
                 # External evidence count
-                result = await session.run(
-                    "MATCH (e:ExternalEvidence) RETURN count(e) AS count"
-                )
+                result = await session.run("MATCH (e:ExternalEvidence) RETURN count(e) AS count")
                 record = await result.single()
                 stats["external_evidence_count"] = record["count"] if record else 0
 

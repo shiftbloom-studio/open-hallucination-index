@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import httpx
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter
+from qdrant_client.models import Distance, Filter, PointStruct, VectorParams
 
 from open_hallucination_index.domain.entities import Evidence, EvidenceSource
 from open_hallucination_index.ports.knowledge_store import VectorKnowledgeStore, VectorQuery
@@ -116,11 +117,11 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             try:
                 config = await self._client.get_collection(collection_name)
                 exists = True
-                
+
                 # Check for dimension mismatch
                 existing_size = 0
                 vectors_params = config.config.params.vectors
-                
+
                 if hasattr(vectors_params, "size"):
                     existing_size = vectors_params.size
                 elif isinstance(vectors_params, dict) and "size" in vectors_params:
@@ -155,8 +156,12 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                     logger.info(f"Created Qdrant collection: {collection_name}")
                 except Exception as e:
                     # If 409 Conflict, it means another worker created it in the meantime
-                    if "already exists" in str(e) or (hasattr(e, "status_code") and getattr(e, "status_code") == 409):
-                        logger.info(f"Collection {collection_name} already exists (created by another worker)")
+                    status_code = e.status_code if hasattr(e, "status_code") else None
+                    if "already exists" in str(e) or status_code == 409:
+                        logger.info(
+                            "Collection %s already exists (created by another worker)",
+                            collection_name,
+                        )
                     else:
                         raise e
         except Exception as e:
@@ -230,8 +235,8 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                         structured_data=hit.payload,
                         similarity_score=hit.score,
                         match_type="semantic",
-                        retrieved_at=datetime.now(timezone.utc),
-                        source_uri=hit.payload.get("source_uri") if hit.payload else None,
+                        retrieved_at=datetime.now(UTC),
+                        source_uri=(hit.payload.get("source_uri") if hit.payload else None),
                     )
                 )
 
@@ -323,9 +328,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 return await self._embedding_func(text)  # type: ignore[misc]
 
         # Run all embeddings in parallel with concurrency limit
-        embeddings = await asyncio.gather(
-            *[embed_with_semaphore(text) for text in texts]
-        )
+        embeddings = await asyncio.gather(*[embed_with_semaphore(text) for text in texts])
         return list(embeddings)
 
     async def add_facts(

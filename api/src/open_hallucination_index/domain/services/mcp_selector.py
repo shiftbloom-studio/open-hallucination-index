@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 
 from open_hallucination_index.domain.services.claim_router import (
     ClaimDomain,
-    ClaimRouter,
     RoutingDecision,
     SourceTier,
     get_claim_router,
@@ -101,7 +100,8 @@ class SmartMCPSelector:
 
         # Filter to MCP sources only (exclude local)
         mcp_recommendations = [
-            r for r in decision.recommendations
+            r
+            for r in decision.recommendations
             if r.tier in (SourceTier.MCP_MEDIUM, SourceTier.MCP_SLOW)
         ]
 
@@ -152,9 +152,7 @@ class SmartMCPSelector:
         """
         return {str(claim.id): self.select(claim) for claim in claims}
 
-    def get_sources_for_selection(
-        self, selection: MCPSelection
-    ) -> list[MCPKnowledgeSource]:
+    def get_sources_for_selection(self, selection: MCPSelection) -> list[MCPKnowledgeSource]:
         """
         Get actual MCP source objects for a selection.
 

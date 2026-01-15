@@ -119,7 +119,9 @@ class VerifyTextUseCase:
 
         # Step 2b: Claim-level cache lookup (by claim hash)
         claim_hashes = [self._compute_claim_hash(claim.text) for claim in claims]
-        claim_hash_by_id = {claim.id: claim_hash for claim, claim_hash in zip(claims, claim_hashes, strict=True)}
+        claim_hash_by_id = {
+            claim.id: claim_hash for claim, claim_hash in zip(claims, claim_hashes, strict=True)
+        }
         cached_claims: dict[str, ClaimVerification] = {}
 
         if use_cache and self._cache is not None and claim_hashes:
@@ -238,20 +240,12 @@ class VerifyTextUseCase:
             return "No verifiable claims found in the input text."
 
         total = len(verifications)
-        supported = sum(
-            1 for v in verifications if v.status == VerificationStatus.SUPPORTED
-        )
-        refuted = sum(
-            1 for v in verifications if v.status == VerificationStatus.REFUTED
-        )
-        unverifiable = sum(
-            1 for v in verifications if v.status == VerificationStatus.UNVERIFIABLE
-        )
+        supported = sum(1 for v in verifications if v.status == VerificationStatus.SUPPORTED)
+        refuted = sum(1 for v in verifications if v.status == VerificationStatus.REFUTED)
+        unverifiable = sum(1 for v in verifications if v.status == VerificationStatus.UNVERIFIABLE)
 
         trust_level = (
-            "high" if score.overall >= 0.8
-            else "moderate" if score.overall >= 0.5
-            else "low"
+            "high" if score.overall >= 0.8 else "moderate" if score.overall >= 0.5 else "low"
         )
 
         return (

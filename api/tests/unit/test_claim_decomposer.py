@@ -4,14 +4,13 @@ Tests for LLM-Based Claim Decomposer
 """
 
 from unittest.mock import AsyncMock
-from uuid import uuid4
 
 import pytest
 
 from open_hallucination_index.domain.entities import ClaimType
 from open_hallucination_index.domain.services.claim_decomposer import (
-    LLMClaimDecomposer,
     DecompositionError,
+    LLMClaimDecomposer,
 )
 from open_hallucination_index.ports.llm_provider import LLMResponse
 
@@ -35,18 +34,14 @@ class TestLLMClaimDecomposer:
         )
 
     @pytest.mark.asyncio
-    async def test_decompose_empty_text(
-        self, decomposer: LLMClaimDecomposer
-    ) -> None:
+    async def test_decompose_empty_text(self, decomposer: LLMClaimDecomposer) -> None:
         """Test decomposing empty text returns empty list."""
         claims = await decomposer.decompose("")
 
         assert claims == []
 
     @pytest.mark.asyncio
-    async def test_decompose_whitespace_only(
-        self, decomposer: LLMClaimDecomposer
-    ) -> None:
+    async def test_decompose_whitespace_only(self, decomposer: LLMClaimDecomposer) -> None:
         """Test decomposing whitespace-only text returns empty list."""
         claims = await decomposer.decompose("   \n\t  ")
 
@@ -142,7 +137,7 @@ class TestLLMClaimDecomposer:
             usage={},
         )
 
-        claims = await decomposer.decompose_with_context(
+        await decomposer.decompose_with_context(
             text="He founded the company in 2020.",
             context="Article about Elon Musk",
         )
@@ -174,6 +169,7 @@ class TestLLMClaimDecomposer:
         ]
 
         import json
+
         mock_llm_provider.complete.return_value = LLMResponse(
             content=json.dumps(claims_json),
             model="test-model",
