@@ -47,10 +47,10 @@ class IngestionConfig:
     # Parallelism settings - aggressive defaults for maximum throughput
     download_workers: int = 4  # Parallel downloads
     dump_workers: int = 4  # Parallel dump file processing workers
-    preprocess_workers: int = 12  # Text preprocessing threads
-    embedding_workers: int = 4  # GPU embedding workers
+    preprocess_workers: int = 8  # Text preprocessing threads
+    embedding_workers: int = 2  # GPU embedding workers
     upload_workers: int = 2  # Parallel DB uploads (reduced to avoid Neo4j deadlocks)
-    embedding_batch_size: int = 512  # Large batches for GPU efficiency
+    embedding_batch_size: int = 512  # Balanced batch size for GPU efficiency
 
     # Queue sizes for producer-consumer pattern
     download_queue_size: int = 8  # Downloaded files awaiting processing
@@ -79,7 +79,7 @@ class IngestionConfig:
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dim: int = 384
     # Embedding device selection: "auto" | "cuda" | "cpu"
-    embedding_device: str = "cuda"
+    embedding_device: str = "auto"
 
 
 # =============================================================================
