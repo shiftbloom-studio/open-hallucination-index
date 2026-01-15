@@ -14,6 +14,12 @@ from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 
 from open_hallucination_index.infrastructure.config import get_settings
+from open_hallucination_index.infrastructure.dependencies import (
+    get_cache_provider,
+    get_graph_store,
+    get_llm_provider,
+    get_vector_store,
+)
 
 router = APIRouter()
 
@@ -70,22 +76,57 @@ async def readiness() -> ReadinessStatus:
 
     Returns ready=True only if all critical services are available.
     """
-    # TODO: Implement actual health checks for each adapter
-    # This is a stub that reports the expected services
-    services = {
-        "llm": {"connected": False, "status": "not_configured"},
-        "neo4j": {"connected": False, "status": "not_configured"},
-        "qdrant": {"connected": False, "status": "not_configured"},
-        "redis": {"connected": False, "status": "not_configured"},
-    }
+    settings = get_settings()
 
-    # All services must be connected for readiness
-    all_ready = all(svc.get("connected", False) for svc in services.values())
+    async def check_service(
+        getter,
+        *,
+        enabled: bool = True,
+    ) -> tuple[dict[str, bool | str], bool]:
+        if not enabled:
+            return {"connected": False, "status": "disabled"}, True
 
-    return ReadinessStatus(
-        ready=all_ready,
-        services=services,
+        try:
+            instance = await getter()
+        except Exception:
+            return {"connected": False, "status": "not_initialized"}, False
+
+        if instance is None:
+            return {"connected": False, "status": "not_initialized"}, False
+
+        try:
+            is_healthy = await instance.health_check()
+            return (
+                {"connected": bool(is_healthy), "status": "healthy" if is_healthy else "unhealthy"},
+                bool(is_healthy),
+            )
+        except Exception:
+            return {"connected": False, "status": "error"}, False
+
+    services: dict[str, dict[str, bool | str]] = {}
+    ready = True
+
+    llm_status, llm_ready = await check_service(get_llm_provider)
+    services["llm"] = llm_status
+    ready = ready and llm_ready
+
+    neo4j_status, neo4j_ready = await check_service(get_graph_store)
+    services["neo4j"] = neo4j_status
+    ready = ready and neo4j_ready
+
+    qdrant_status, qdrant_ready = await check_service(get_vector_store)
+    services["qdrant"] = qdrant_status
+    ready = ready and qdrant_ready
+
+    redis_status, redis_ready = await check_service(
+        get_cache_provider,
+        enabled=settings.redis.enabled,
     )
+    services["redis"] = redis_status
+    if settings.redis.enabled:
+        ready = ready and redis_ready
+
+    return ReadinessStatus(ready=ready, services=services)
 
 
 @router.get(
