@@ -14,7 +14,7 @@ This project includes comprehensive unit tests and end-to-end (E2E) tests to ens
 ### Unit Tests
 
 ```bash
-# Run all unit tests
+# Run unit tests (watch mode)
 npm run test
 
 # Run tests in watch mode

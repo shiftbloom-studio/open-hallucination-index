@@ -22,12 +22,12 @@ This project and everyone participating in it is governed by our commitment to c
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/YOUR-USERNAME/open-hallucination-index.git
+   git clone https://github.com/shiftbloom-studio/open-hallucination-index.git
    cd open-hallucination-index
    ```
 3. **Add the upstream remote**:
    ```bash
-   git remote add upstream https://github.com/ORIGINAL-OWNER/open-hallucination-index.git
+   git remote add upstream https://github.com/shiftbloom-studio/open-hallucination-index.git
    ```
 
 ## Development Setup
@@ -77,7 +77,13 @@ pytest
 pytest --cov=src/open_hallucination_index --cov-report=term-missing
 
 # Run specific test file
-pytest tests/test_scorer.py -v
+pytest tests/integration/test_api.py -v
+```
+
+**Core/Repo Tests (root):**
+```bash
+# From repository root
+pytest tests/ -v
 ```
 
 **Frontend:**

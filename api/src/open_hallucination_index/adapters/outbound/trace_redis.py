@@ -330,7 +330,7 @@ class RedisTraceAdapter(KnowledgeTracker):
 
         Args:
             claim_id: UUID of the claim to build mesh for.
-            depth: Relationship hops to traverse (1-5, default 2).
+            depth: Depth of the mesh to build.
 
         Returns:
             KnowledgeMesh or None if trace not found.
@@ -441,9 +441,7 @@ class RedisTraceAdapter(KnowledgeTracker):
             edges=edges,
             depth_levels=depth,
             total_sources_queried=len(trace.sources_queried),
-            total_evidence_found=(
-                len(trace.supporting_evidence) + len(trace.refuting_evidence)
-            ),
+            total_evidence_found=(len(trace.supporting_evidence) + len(trace.refuting_evidence)),
         )
 
     def _truncate_label(self, text: str, max_len: int = 50) -> str:

@@ -59,11 +59,11 @@ POST /api/v1/verify
 
 | Feld | Typ | Pflicht | Beschreibung |
 |------|-----|---------|--------------|
-| `text` | string | ✅ | Text zur Verifikation (max. 10.000 Zeichen) |
-| `strategy` | string | ❌ | `mcp_enhanced`  `hybrid`  `cascading`  `graph_exact`  `vector_semantic` |
+| `text` | string | ✅ | Text zur Verifikation (max. 100.000 Zeichen) |
+| `context` | string | ❌ | Optionaler Kontext zur Disambiguierung |
+| `strategy` | string | ❌ | `mcp_enhanced` · `hybrid` · `cascading` · `graph_exact` · `vector_semantic` · `adaptive` |
 | `use_cache` | boolean | ❌ | Cache‑Nutzung (default: `true`) |
-| `language` | string | ❌ | ISO‑Code, z. B. `de`, `en` |
-| `trace` | boolean | ❌ | Zusätzliche Pipeline‑Metadaten |
+| `target_sources` | integer | ❌ | Zielanzahl geprüfter Quellen (1–20) |
 
 **Beispiel**
 ```
@@ -82,16 +82,22 @@ curl -X POST http://localhost:8080/api/v1/verify \
     "claims_total": 2,
     "claims_supported": 2,
     "claims_refuted": 0,
-    "confidence": 0.92
+    "claims_unverifiable": 0,
+    "confidence": 0.92,
+    "scoring_method": "weighted_average"
   },
   "claims": [
     {
-      "claim": "Der Eiffelturm steht in Paris.",
-      "verdict": "supported",
-      "evidence": ["..."]
+      "id": "f5a1...",
+      "text": "Der Eiffelturm steht in Paris.",
+      "status": "supported",
+      "confidence": 0.91,
+      "reasoning": "Found supporting evidence in sources."
     }
   ],
-  "summary": "2 Claims analysiert, 2 gestützt. Vertrauensniveau: hoch (0.99)."
+  "summary": "2 Claims analysiert, 2 gestützt. Vertrauensniveau: hoch (0.99).",
+  "processing_time_ms": 42.3,
+  "cached": false
 }
 ```
 
@@ -110,10 +116,11 @@ POST /api/v1/verify/batch
 
 | Feld | Typ | Pflicht | Beschreibung |
 |------|-----|---------|--------------|
-| `items` | array | ✅ | Liste von Textobjekten (`text`, optional `strategy`) |
+| `texts` | array | ✅ | Liste von Texten (max. 50) |
+| `strategy` | string | ❌ | Verifikationsstrategie (optional) |
 | `use_cache` | boolean | ❌ | Cache‑Nutzung |
 
-**Hinweis**: Max. 10 Items pro Anfrage.
+**Hinweis**: Max. 50 Texte pro Anfrage.
 
 ---
 
@@ -121,9 +128,9 @@ POST /api/v1/verify/batch
 
 | Endpoint | Zweck |
 |----------|------|
-| `GET /health` | Gesamte Systemgesundheit |
+| `GET /health` | Basic Health (Alias für Liveness) |
 | `GET /health/live` | Liveness‑Probe |
-| `GET /health/ready` | Readiness‑Probe |
+| `GET /health/ready` | Readiness‑Probe inkl. Dependency‑Status |
 
 ---
 
@@ -136,6 +143,7 @@ POST /api/v1/verify/batch
 | `cascading` | Graph zuerst, Vektor fallback | Präzision vor Recall |
 | `graph_exact` | Neo4j‑exact matching | Entity‑Konsistenz |
 | `vector_semantic` | Qdrant‑Semantik | Inhaltliche Ähnlichkeit |
+| `adaptive` | Stufenweises Retrieval mit Early‑Exit | Balanciert Speed & Coverage |
 
 ---
 
@@ -167,9 +175,11 @@ Fehler werden als strukturierte JSON‑Antwort geliefert:
 
 **Claim**
 
-- `claim`: string
-- `verdict`: `supported` | `refuted` | `unknown`
-- `evidence`: Evidence[]
+- `id`: UUID
+- `text`: string
+- `status`: `supported` | `refuted` | `partially_supported` | `unverifiable` | `uncertain`
+- `confidence`: float
+- `reasoning`: string
 
 **Evidence**
 
@@ -184,7 +194,9 @@ Fehler werden als strukturierte JSON‑Antwort geliefert:
 - `claims_total`: int
 - `claims_supported`: int
 - `claims_refuted`: int
+- `claims_unverifiable`: int
 - `confidence`: float
+- `scoring_method`: string
 
 ---
 
@@ -194,7 +206,21 @@ Für wissenschaftliche Reproduzierbarkeit sollten Sie:
 
 1. Strategien und Quellen konfigurativ fixieren.
 2. Versionsstände der Wissensquellen dokumentieren.
-3. Den `trace`‑Modus aktivieren und archivieren.
+3. Requests und Antworten versionieren und archivieren.
+
+---
+
+## 🧭 Knowledge Track (Provenienz)
+
+Zusätzliche Endpunkte liefern Provenienz und Quellenlisten für Claims:
+
+- `GET /api/v1/knowledge-track/{claim_id}` – vollständiger Knowledge Track inkl. Mesh
+- `HEAD /api/v1/knowledge-track/{claim_id}` – Existenzprüfung
+- `GET /api/v1/knowledge-track/sources/available` – verfügbare MCP‑Quellen
+
+Parameter:
+- `depth` (1–5)
+- `generate_detail` (bool, default: true)
 
 ---
 

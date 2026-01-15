@@ -26,14 +26,13 @@ _executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="embedding")
 @lru_cache(maxsize=1)
 def _get_model(model_name: str):
     """Load and cache the sentence transformer model."""
-    import torch
     from sentence_transformers import SentenceTransformer
 
     logger.info(f"Loading embedding model: {model_name}")
 
     # Explicitly determine device - CPU for API containers (GPU is for vLLM)
     device = "cpu"
-    
+
     # Load model without problematic kwargs that can cause meta tensor issues
     # Force CPU to avoid GPU memory conflicts with vLLM
     model = SentenceTransformer(
@@ -41,10 +40,10 @@ def _get_model(model_name: str):
         device=device,
         trust_remote_code=False,
     )
-    
+
     # Ensure all parameters are on the correct device (not meta)
     model = model.to(device)
-    
+
     # Verify model is ready
     model.eval()
 

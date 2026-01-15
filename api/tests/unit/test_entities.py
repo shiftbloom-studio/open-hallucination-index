@@ -6,6 +6,7 @@ Tests for Domain Entities
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from open_hallucination_index.domain.entities import (
     Claim,
@@ -78,7 +79,7 @@ class TestClaim:
             claim_type=ClaimType.UNCLASSIFIED,
         )
 
-        with pytest.raises(TypeError):
+        with pytest.raises(ValidationError):
             claim.text = "Modified claim"  # type: ignore[misc]
 
 

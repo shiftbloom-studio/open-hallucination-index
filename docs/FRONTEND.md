@@ -8,9 +8,10 @@
 
 Die UI folgt einer klaren Hierarchie:
 
-1. **Eingabe‑/Analyse‑Fluss** (Text → Claims → Evidenz → Trust‑Score)
-2. **Ergebnis‑Validierung** (verifizierte vs. widerlegte Claims)
-3. **Reproduzierbarkeit** (Export, Trace‑Konfiguration, Quellen)
+1. **Landing & Produktstory** (Problem → Architektur → Features → CTA)
+2. **Analyse‑Fluss** (Text → Claims → Evidenz → Trust‑Score)
+3. **Ergebnis‑Validierung** (verifizierte vs. widerlegte Claims)
+4. **Reproduzierbarkeit** (Export, Quellen, Knowledge‑Track‑Einblicke)
 
 **Primäre Ziele**
 
@@ -32,10 +33,11 @@ Die UI folgt einer klaren Hierarchie:
 
 | Komponente | Aufgabe |
 |-----------|---------|
-| **Claim List** | Aggregierte Anzeige aller Claims mit Verdicts |
+| **Landing Sections** | Hero, Problem, Architekturfluss, Feature‑Grid, CTA |
+| **Claim List** | Aggregierte Anzeige aller Claims mit Status |
 | **Evidence Panel** | Quellen‑Snippets, Scores, Links |
 | **Trust Score Card** | Gesamt‑Score + Confidence |
-| **Trace View** | Pipeline‑Details und Strategien |
+| **Knowledge Track View** | Provenienz‑Mesh & Quellenliste (API‑gestützt) |
 | **Export/Report** | CSV/JSON/Markdown Export |
 
 ---
@@ -48,6 +50,7 @@ Die UI folgt einer klaren Hierarchie:
 - `analysisResult`: API‑Response
 - `activeClaim`: aktuell selektierter Claim
 - `showTrace`: Pipeline‑Metadaten
+- `knowledgeTrack`: Provenienz‑Response zu Claim‑ID
 
 **Empfohlenes Muster**: Server‑driven Rendering mit asynchroner Hydration
 
@@ -86,6 +89,24 @@ Empfohlene Testpyramide:
 3. **E2E Tests** (Kritische Journeys)
 
 Beispiele und Konfigurationen befinden sich im Frontend‑Ordner.
+
+## 🔌 API‑Proxy (Frontend)
+
+Das Frontend nutzt eine serverseitige Proxy‑Route:
+
+- `GET/POST /api/ohi/*` → leitet an `DEFAULT_API_URL` weiter
+- Header `X-API-KEY` wird automatisch mit `DEFAULT_API_KEY` gesetzt
+- Optional wird `X-User-Id` aus Supabase ergänzt
+
+Damit können UI‑Requests ohne direkte API‑Key‑Weitergabe an den Client erfolgen.
+
+## ⚙️ Relevante Umgebungsvariablen
+
+- `DEFAULT_API_URL` (Backend‑Base‑URL)
+- `DEFAULT_API_KEY` (Server‑seitiger API‑Key)
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_APP_URL`
 
 ---
 

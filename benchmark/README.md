@@ -7,9 +7,11 @@ of the **Open Hallucination Index (OHI)** API against VectorRAG and GraphRAG sys
 
 ### 🧪 Multi-Strategy Comparison
 - **Vector Semantic**: Pure vector similarity search
-- **Graph Semantic**: Knowledge graph-based verification
-- **Vector Graph Fusion**: Hybrid approach combining both
+- **Graph Exact**: Knowledge graph exact matching
+- **Hybrid**: Graph + vector parallel
+- **Cascading**: Graph first, vector fallback
 - **MCP Enhanced**: Model Context Protocol-augmented verification
+- **Adaptive**: Tiered retrieval with early-exit heuristics
 
 ### 📊 Research-Grade Statistical Analysis
 - **Bootstrap Confidence Intervals**: For all metrics with configurable iterations
@@ -52,7 +54,7 @@ python -m benchmark
 python -m benchmark --strategies vector_semantic,mcp_enhanced
 
 # Custom configuration
-python -m benchmark --threshold 0.6 --concurrency 5 --verbose
+python -m benchmark --threshold 0.7 --concurrency 3 --verbose
 
 # Full options
 python -m benchmark --help
@@ -88,8 +90,12 @@ asyncio.run(run_benchmark())
 | `OHI_API_PORT` | API port | `8080` |
 | `BENCHMARK_DATASET` | Path to CSV dataset | `benchmark_dataset.csv` |
 | `BENCHMARK_OUTPUT_DIR` | Output directory | `benchmark_results` |
-| `BENCHMARK_CONCURRENCY` | Parallel requests | `10` |
-| `BENCHMARK_THRESHOLD` | Decision threshold | `0.5` |
+| `BENCHMARK_CONCURRENCY` | Parallel requests | `3` |
+| `BENCHMARK_THRESHOLD` | Decision threshold | `0.7` |
+| `BENCHMARK_WARMUP` | Warmup request count | `5` |
+| `BENCHMARK_TIMEOUT` | Request timeout (seconds) | `120` |
+| `BENCHMARK_BOOTSTRAP_ITERATIONS` | Bootstrap iterations | `1000` |
+| `BENCHMARK_CONFIDENCE_LEVEL` | Confidence level | `0.95` |
 
 ### CLI Options
 
@@ -97,8 +103,8 @@ asyncio.run(run_benchmark())
 Options:
   -s, --strategies TEXT    Comma-separated strategies (default: vector_semantic,mcp_enhanced)
   --all-strategies         Test all available strategies
-  -t, --threshold FLOAT    Decision threshold (default: 0.5)
-  -c, --concurrency INT    Parallel requests (default: 10)
+  -t, --threshold FLOAT    Decision threshold (default: 0.7)
+  -c, --concurrency INT    Parallel requests (default: 3)
   -w, --warmup INT         Warmup requests (default: 5)
   --timeout FLOAT          Request timeout in seconds (default: 120)
   -d, --dataset PATH       Path to benchmark dataset CSV
@@ -117,11 +123,13 @@ The benchmark expects a CSV file with the following columns:
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `claim` | string | The claim to verify |
-| `context` | string | Context for the claim |
+| `id` | integer | Unique case identifier |
+| `text` | string | The claim text to verify |
+| `label` | boolean | Ground truth label (true = factual) |
 | `domain` | string | Domain category (e.g., science, medical) |
-| `difficulty` | string | Difficulty level (easy, medium, hard) |
-| `is_hallucination` | boolean | Ground truth label |
+| `difficulty` | string | Difficulty level (easy, medium, hard, critical) |
+| `notes` | string | Optional notes |
+| `hallucination_type` | string | Optional hallucination pattern |
 
 ## Output
 

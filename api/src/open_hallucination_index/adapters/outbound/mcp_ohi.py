@@ -169,8 +169,7 @@ class OHIMCPAdapter(HTTPMCPAdapter):
             source = TOOL_TO_SOURCE.get(tool_name, EvidenceSource.KNOWLEDGE_GRAPH)
 
             evidence_list = [
-                self._create_evidence(result, source, tool_name)
-                for result in results[:max_results]
+                self._create_evidence(result, source, tool_name) for result in results[:max_results]
             ]
 
             logger.info(
@@ -211,9 +210,7 @@ class OHIMCPAdapter(HTTPMCPAdapter):
         try:
             results = await self.call_tool("get_doi_metadata", {"doi": doi})
             if results:
-                ev = self._create_evidence(
-                    results[0], EvidenceSource.ACADEMIC, "get_doi_metadata"
-                )
+                ev = self._create_evidence(results[0], EvidenceSource.ACADEMIC, "get_doi_metadata")
                 ev.source_uri = f"https://doi.org/{doi}"
                 return ev
             return None
@@ -355,9 +352,7 @@ class OHIMCPAdapter(HTTPMCPAdapter):
         if not self._available:
             return []
         try:
-            results = await self.call_tool(
-                "search_dbpedia", {"query": query, "limit": max_results}
-            )
+            results = await self.call_tool("search_dbpedia", {"query": query, "limit": max_results})
             return [
                 self._create_evidence(r, EvidenceSource.WIKIPEDIA, "search_dbpedia")
                 for r in results[:max_results]
@@ -396,11 +391,13 @@ class OHIMCPAdapter(HTTPMCPAdapter):
                 if isinstance(result, dict) and "text" in result:
                     # Parse from text response
                     import re
+
                     match = re.search(r"(/[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)", result["text"])
                     if match:
                         return match.group(1)
                 if isinstance(result, str):
                     import re
+
                     match = re.search(r"(/[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+)", result)
                     if match:
                         return match.group(1)
@@ -426,9 +423,7 @@ class OHIMCPAdapter(HTTPMCPAdapter):
         if not self._available:
             return []
         try:
-            results = await self.call_tool(
-                "query-docs", {"libraryId": library_id, "query": query}
-            )
+            results = await self.call_tool("query-docs", {"libraryId": library_id, "query": query})
             evidences = [
                 self._create_evidence(r, EvidenceSource.MCP_CONTEXT7, "query-docs")
                 for r in results[:max_results]

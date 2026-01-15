@@ -3,12 +3,12 @@
 import { motion } from "framer-motion";
 import { Sparkles, Gift, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import Link from "next/link";
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center px-4">
+    <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center px-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -25,9 +25,9 @@ export default function PricingPage() {
             >
               <Gift className="h-8 w-8 text-amber-400" />
             </motion.div>
-            <CardTitle className="text-3xl font-bold bg-gradient-to-r from-amber-300 to-orange-300 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-300 to-orange-300 bg-clip-text text-transparent">
               Free Tokens Every Day!
-            </CardTitle>
+            </h1>
             <CardDescription className="text-lg text-neutral-300 mt-2">
               No payment required – enjoy our service for free
             </CardDescription>
@@ -86,6 +86,6 @@ export default function PricingPage() {
           </CardContent>
         </Card>
       </motion.div>
-    </div>
+    </main>
   );
 }

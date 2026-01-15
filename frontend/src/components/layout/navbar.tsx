@@ -15,11 +15,11 @@ export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
-  
+
   const [user, setUser] = useState<User | null>(null);
   const [tokens, setTokens] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  
+
 
   const isDashboard = pathname?.startsWith("/dashboard");
 
@@ -95,6 +95,15 @@ export function Navbar() {
         </Link>
         <nav className="flex items-center gap-4">
           <Link 
+            href="/pricing" 
+            className={cn(
+              "text-neutral-300 hover:text-white font-medium transition-colors px-3 py-2",
+              pathname === "/pricing" && "text-white"
+            )}
+          >
+            Pricing
+          </Link>
+          <Link 
             href="/about" 
             className={cn(
               "text-neutral-300 hover:text-white font-medium transition-colors px-3 py-2",
@@ -103,7 +112,7 @@ export function Navbar() {
           >
             About
           </Link>
-          {!loading && user ? (
+          {user ? (
             <>
               {/* Token Balance */}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20">
@@ -128,7 +137,7 @@ export function Navbar() {
                 Logout
               </Button>
             </>
-          ) : !loading ? (
+          ) : (
             <>
               <Link 
                 href="/auth/login" 
@@ -143,7 +152,7 @@ export function Navbar() {
                 <Button className="bg-slate-800 text-white border border-slate-700 font-medium hover:bg-slate-700 transition-colors cursor-pointer">Sign Up</Button>
               </Link>
             </>
-          ) : null}
+          )}
         </nav>
       </div>
     </header>

@@ -12,11 +12,11 @@ import logging
 from typing import TYPE_CHECKING
 
 from open_hallucination_index.domain.knowledge_track import (
+    MCP_SOURCE_DESCRIPTIONS,
     EdgeType,
     KnowledgeEdge,
     KnowledgeMesh,
     KnowledgeNode,
-    MCP_SOURCE_DESCRIPTIONS,
     NodeType,
     SourceReference,
     TraceData,
@@ -114,9 +114,7 @@ class KnowledgeMeshBuilder:
         edges = list(mesh.edges)
 
         # Get claim text from central node
-        claim_node = next(
-            (n for n in nodes if n.id == mesh.center_claim_id), None
-        )
+        claim_node = next((n for n in nodes if n.id == mesh.center_claim_id), None)
         if claim_node is None:
             return mesh
 
@@ -125,9 +123,7 @@ class KnowledgeMeshBuilder:
             entity_nodes = [n for n in nodes if n.node_type == NodeType.ENTITY]
             for entity in entity_nodes[:10]:
                 try:
-                    related = await self._graph_store.get_entity_properties(
-                        entity.label
-                    )
+                    related = await self._graph_store.get_entity_properties(entity.label)
                     if related and len(nodes) < max_entities + len(mesh.nodes):
                         # Add related entities as deeper nodes
                         for prop_name, prop_value in list(related.items())[:5]:

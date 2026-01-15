@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from open_hallucination_index.domain.knowledge_track import (
-    KnowledgeTrackResult,
     MCP_SOURCE_DESCRIPTIONS,
+    KnowledgeTrackResult,
     SourceReference,
     TraceData,
 )
@@ -108,9 +108,7 @@ class KnowledgeTrackService:
         cached_until = datetime.now(UTC) + timedelta(seconds=DEFAULT_TRACE_TTL)
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000
-        logger.debug(
-            f"Built knowledge track for claim {claim_id} in {elapsed_ms:.1f}ms"
-        )
+        logger.debug(f"Built knowledge track for claim {claim_id} in {elapsed_ms:.1f}ms")
 
         return KnowledgeTrackResult(
             claim_id=claim_id,
@@ -131,9 +129,7 @@ class KnowledgeTrackService:
         # Add references from MCP call logs
         for call in trace.mcp_calls:
             source_name = call.get("source", call.get("tool", "unknown"))
-            normalized_name = source_name.lower().replace("search_", "").replace(
-                "get_", ""
-            )
+            normalized_name = source_name.lower().replace("search_", "").replace("get_", "")
 
             if normalized_name in seen_sources:
                 continue

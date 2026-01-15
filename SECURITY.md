@@ -15,7 +15,7 @@ We take security seriously. If you discover a security vulnerability within Open
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Instead, please send an email to **security@your-organization.com** with the following information:
+Instead, please send an email to **security@shiftbloom.studio** with the following information:
 
 1.  **Description**: A detailed description of the vulnerability.
 2.  **Reproduction**: Steps to reproduce the issue (including sample code/requests).

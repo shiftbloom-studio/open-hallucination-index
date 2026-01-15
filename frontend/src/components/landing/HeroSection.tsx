@@ -36,12 +36,11 @@ const itemVariants: Variants = {
 
 export function HeroSection() {
   const prefersReducedMotion = useReducedMotion();
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia("(max-width: 767px)").matches;
-  });
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const mediaQuery = window.matchMedia("(max-width: 767px)");
     const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
       setIsMobile(event.matches);

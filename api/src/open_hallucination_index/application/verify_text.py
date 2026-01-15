@@ -27,7 +27,6 @@ from open_hallucination_index.domain.results import (
 )
 
 if TYPE_CHECKING:
-    from open_hallucination_index.domain.knowledge_track import TraceData
     from open_hallucination_index.ports.cache import CacheProvider
     from open_hallucination_index.ports.claim_decomposer import ClaimDecomposer
     from open_hallucination_index.ports.knowledge_tracker import KnowledgeTracker

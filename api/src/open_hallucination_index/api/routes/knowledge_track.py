@@ -79,9 +79,7 @@ class SourceReferenceResponse(BaseModel):
     mcp_source: str = Field(..., description="Source name")
     source_description: str = Field(..., description="Human-readable description")
     url: str | None = Field(None, description="Direct URL to content")
-    evidence_snippet: str | None = Field(
-        None, max_length=500, description="Evidence excerpt"
-    )
+    evidence_snippet: str | None = Field(None, max_length=500, description="Evidence excerpt")
     confidence: float = Field(..., ge=0.0, le=1.0)
     contributed: bool = Field(..., description="Whether source contributed evidence")
     query_time_ms: float | None = Field(None, description="Query latency")
@@ -102,9 +100,7 @@ class KnowledgeTrackResponse(BaseModel):
     source_references: list[SourceReferenceResponse] = Field(
         ..., description="All MCP sources with URLs and descriptions"
     )
-    mesh: KnowledgeMeshResponse = Field(
-        ..., description="3D knowledge graph for visualization"
-    )
+    mesh: KnowledgeMeshResponse = Field(..., description="3D knowledge graph for visualization")
     cached_until: str | None = Field(None, description="Cache expiry timestamp")
     generated_at: str = Field(..., description="Generation timestamp")
 
@@ -131,9 +127,7 @@ class KnowledgeTrackResponse(BaseModel):
                 for ref in result.source_references
             ],
             mesh=_mesh_to_response(result.mesh),
-            cached_until=(
-                result.cached_until.isoformat() if result.cached_until else None
-            ),
+            cached_until=(result.cached_until.isoformat() if result.cached_until else None),
             generated_at=result.generated_at.isoformat(),
         )
 
@@ -141,9 +135,7 @@ class KnowledgeTrackResponse(BaseModel):
 class AvailableSourcesResponse(BaseModel):
     """List of available MCP sources."""
 
-    sources: list[SourceReferenceResponse] = Field(
-        ..., description="All available MCP sources"
-    )
+    sources: list[SourceReferenceResponse] = Field(..., description="All available MCP sources")
     total: int = Field(..., description="Total number of sources")
 
 

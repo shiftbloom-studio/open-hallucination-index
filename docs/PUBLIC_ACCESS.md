@@ -19,9 +19,15 @@ This guide explains how to expose the Open Hallucination Index API to the public
 openssl rand -hex 32
 ```
 
-Add to your `.env` file:
+Add to your repository‑root `.env` file:
 ```bash
-API_KEY=your_generated_api_key_here
+API_API_KEY=your_generated_api_key_here
+```
+
+If you use the Next.js proxy (`/api/ohi/*`), also set:
+```bash
+DEFAULT_API_KEY=your_generated_api_key_here
+DEFAULT_API_URL=http://ohi-api:8080
 ```
 
 ### Step 2: Configure Router Port Forwarding
@@ -55,7 +61,13 @@ chmod +x scripts/init-letsencrypt.sh
 docker-compose up -d
 ```
 
-Your API is now available at: `https://yourdomain.example.com`
+Your API is now available. By default, public access goes through the Next.js proxy route:
+
+- `https://yourdomain.example.com/api/ohi/api/v1/verify`
+
+If you expose the backend directly (e.g., custom nginx location), use:
+
+- `https://yourdomain.example.com/api/v1/verify` with `X-API-Key: <API_API_KEY>`
 
 ---
 
@@ -157,9 +169,8 @@ docker-compose exec certbot certbot certificates
 ### curl
 
 ```bash
-curl -X POST "https://yourdomain.myfritz.net/api/v1/verify" \
+curl -X POST "https://yourdomain.myfritz.net/api/ohi/api/v1/verify" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_api_key_here" \
   -d '{"text": "Albert Einstein was born in Germany.", "strategy": "mcp_enhanced"}'
 ```
 
@@ -169,18 +180,16 @@ curl -X POST "https://yourdomain.myfritz.net/api/v1/verify" \
 import requests
 
 API_URL = "https://yourdomain.myfritz.net"
-API_KEY = "your_api_key_here"
 
 response = requests.post(
-    f"{API_URL}/api/v1/verify",
-    headers={
-        "Content-Type": "application/json",
-        "X-API-Key": API_KEY,
-    },
-    json={
-        "text": "Albert Einstein was born in Germany.",
-        "strategy": "mcp_enhanced"
-    }
+  f"{API_URL}/api/ohi/api/v1/verify",
+  headers={
+    "Content-Type": "application/json",
+  },
+  json={
+    "text": "Albert Einstein was born in Germany.",
+    "strategy": "mcp_enhanced"
+  }
 )
 print(response.json())
 ```
@@ -188,11 +197,10 @@ print(response.json())
 ### JavaScript
 
 ```javascript
-const response = await fetch('https://yourdomain.myfritz.net/api/v1/verify', {
+const response = await fetch('https://yourdomain.myfritz.net/api/ohi/api/v1/verify', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'X-API-Key': 'your_api_key_here',
   },
   body: JSON.stringify({
     text: 'Albert Einstein was born in Germany.',
@@ -210,7 +218,7 @@ console.log(result);
 ### Built-in Protections
 
 - ✅ **HTTPS/TLS 1.2+** - All traffic encrypted
-- ✅ **API Key Authentication** - Required for `/api/v1/*` endpoints
+- ✅ **API Key Authentication** - Required for backend `/api/v1/*` endpoints (proxy injects server key)
 - ✅ **Rate Limiting** - 60 requests/minute per IP (Nginx)
 - ✅ **Security Headers** - HSTS, X-Frame-Options, etc.
 - ✅ **OCSP Stapling** - Faster TLS handshakes

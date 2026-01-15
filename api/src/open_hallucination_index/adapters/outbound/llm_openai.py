@@ -92,9 +92,7 @@ class OpenAILLMAdapter(LLMProvider):
         )
         self._model = settings.model
 
-    def _format_messages_for_mistral(
-        self, messages: list[LLMMessage]
-    ) -> list[dict[str, str]]:
+    def _format_messages_for_mistral(self, messages: list[LLMMessage]) -> list[dict[str, str]]:
         """
         Format messages for Mistral-Instruct models.
 

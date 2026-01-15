@@ -24,15 +24,16 @@
 
 ---
 
-**Open Hallucination Index (OHI)** ist eine hochperformante Middleware- und Analyseplattform, die LLM‑Ausgaben in atomic Claims zerlegt, diese gegen kuratierte Wissensquellen verifiziert und eine nachvollziehbare Vertrauensbewertung in Echtzeit berechnet. Der Fokus liegt auf reproduzierbarer, evidenzbasierter Halluzinationsdetektion mit klaren Schnittstellen für Forschung, Produktivbetrieb und Auditierbarkeit.
+**Open Hallucination Index (OHI)** ist eine hochperformante Middleware- und Analyseplattform, die LLM‑Ausgaben in atomare Claims zerlegt, diese gegen kuratierte Wissensquellen verifiziert und eine nachvollziehbare Vertrauensbewertung in Echtzeit berechnet. Der Fokus liegt auf reproduzierbarer, evidenzbasierter Halluzinationsdetektion mit klaren Schnittstellen für Forschung, Produktivbetrieb und Auditierbarkeit.
 
 ## 🧭 Projektüberblick
 
 OHI verbindet **Claim‑Decomposition**, **Multi‑Source‑Evidenzsuche** und **quantitative Trust‑Scoring‑Modelle**. Die Architektur folgt einem hexagonalen Design, sodass Wissensquellen, Scoring‑Strategien und Retrieval‑Pipelines austauschbar bleiben. Das System besteht aus:
 
 - **API (FastAPI):** Orchestriert Verifikation, Evidence‑Aggregation und Scoring.
+- **Knowledge Track API:** Liefert Provenienz, Quellenlisten und 3D‑Mesh‑Daten für Claims.
 - **Frontend (Next.js):** Wissenschaftlich orientierte UI für Analyse, Nachvollziehbarkeit und Reporting.
-- **Infrastruktur‑Layer:** Neo4j, Qdrant und optionale MCP‑Quellen für externe Evidenz.
+- **Infrastruktur‑Layer:** Neo4j, Qdrant, Redis und MCP‑Quellen für externe Evidenz.
 
 ## 📚 Dokumentation
 
@@ -49,9 +50,11 @@ Die detaillierte Dokumentation ist im Ordner docs abgelegt:
 | Feature | Description |
 |---------|-------------|
 | **🧠 Claim Decomposition** | Breaks text into verifiable atomic claims using LLM-powered extraction |
-| **📊 Multi-Source Verification** | Validates against Neo4j graph, Qdrant vectors, Wikipedia, and Context7 |
+| **📊 Multi-Source Verification** | Validates against Neo4j graph, Qdrant vectors, and MCP sources |
 | **⚡ High Performance** | Session pooling, batch processing, parallel verification, Redis caching |
+| **🧭 Adaptive Evidence** | Adaptive strategy balances speed and coverage with tiered retrieval |
 | **🎯 Trust Scoring** | Evidence-ratio based scoring with confidence intervals (0.0 - 1.0) |
+| **🧩 Knowledge Track** | Source‑aware provenance and 3D‑mesh graph for each verified claim |
 | **🔌 Pluggable Architecture** | Hexagonal design - easily swap knowledge sources and strategies |
 
 ## 📁 Project Structure
@@ -78,6 +81,9 @@ open-hallucination-index/
 │   ├── CONTRIBUTING.md     # Contribution guidelines
 │   ├── CODE_OF_CONDUCT.md  # Community standards
 │   └── PUBLIC_ACCESS.md    # Public access documentation
+├── benchmark/              # Research-grade benchmark suite
+├── docker/                 # Docker assets (nginx, MCP server)
+├── data/                   # Local storage for Neo4j/Qdrant/Redis
 ├── .github/                # GitHub configuration
 │   ├── workflows/          # CI/CD pipelines
 │   └── ISSUE_TEMPLATE/     # Issue templates
@@ -91,8 +97,8 @@ open-hallucination-index/
 ### Prerequisites
 
 - **Python 3.14+** for the API
-- **Node.js 22+** for the frontend
-- **Your own infrastructure** for knowledge sources (see [Infrastructure](#infrastructure))
+- **Node.js 18+** for the frontend (22+ recommended)
+- **Optional Docker Compose** for local/dev infrastructure (see [Infrastructure](#infrastructure))
 
 ### API Setup
 
@@ -130,7 +136,7 @@ npm run test
 
 ## 🏗️ Infrastructure
 
-> **⚠️ Important:** This repository contains only the **API and Frontend source code**. Users are responsible for deploying and managing their own infrastructure.
+Docker Compose definitions for the full stack live in the repository root. For local/dev you can copy [.env.example](.env.example) to `.env` and run the compose stack.
 
 ### Required Services
 
@@ -145,7 +151,7 @@ The OHI API requires the following external services:
 
 ### Configuration
 
-Create a `.env` file in the `api/` directory:
+Create a `.env` file at the repository root (see [.env.example](.env.example)):
 
 ```env
 # API Settings
@@ -181,7 +187,7 @@ MCP_CONTEXT7_ENABLED=true
 
 You can deploy these services using:
 
-- **Docker Compose** (create your own compose file)
+- **Docker Compose** (included in this repo)
 - **Kubernetes** (Helm charts recommended)
 - **Managed Services** (Neo4j Aura, Qdrant Cloud, Redis Cloud)
 - **Self-hosted** on bare metal or VMs
@@ -219,6 +225,7 @@ npm run test:e2e
 | `cascading` | Graph first, vector fallback | When exact matches preferred |
 | `graph_exact` | Neo4j only | Known entity verification |
 | `vector_semantic` | Qdrant only | Semantic similarity matching |
+| `adaptive` | Tiered retrieval with early-exit heuristics | Balanced speed + coverage |
 
 ## 🤝 Contributing
 

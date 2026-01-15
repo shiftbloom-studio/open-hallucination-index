@@ -606,7 +606,422 @@ class AdvancedTextPreprocessor:
 
 
 # =============================================================================
-# WIKIPEDIA DUMP DOWNLOADER
+# WIKIPEDIA DUMP DOWNLOADER - CHUNKED FILE APPROACH
+# =============================================================================
+
+
+@dataclass
+class DumpFile:
+    """Represents a single dump file part."""
+
+    index: int
+    filename: str
+    url: str
+    local_path: Path | None = None
+    download_complete: bool = False
+    processed: bool = False
+    size_bytes: int = 0
+
+
+class ChunkedWikiDownloader:
+    """
+    Downloads Wikipedia dump files in chunks (multistream parts).
+    
+    The dump is split into ~27 parts. This class:
+    1. Discovers all available parts
+    2. Downloads them in parallel (max 3 concurrent)
+    3. Queues completed downloads for processing
+    4. Deletes files after processing
+    
+    This is much more robust than streaming because:
+    - Each file is fully downloaded before processing
+    - Network errors only affect one part
+    - Can resume from where it left off
+    """
+
+    # Pattern to match multistream part files
+    PART_PATTERN = re.compile(
+        r'href="(enwiki-latest-pages-articles-multistream(\d+)\.xml[^"]*\.bz2)"'
+    )
+    
+    # Download settings
+    MAX_CONCURRENT_DOWNLOADS = 3
+    CHUNK_SIZE = 1024 * 1024  # 1MB chunks for download
+    DOWNLOAD_TIMEOUT = (30, 600)  # (connect, read) timeouts
+    MAX_RETRIES = 10
+    RETRY_BACKOFF = 5
+    
+    def __init__(self, download_dir: Path | None = None):
+        self.download_dir = download_dir or Path(".wiki_dumps")
+        self.download_dir.mkdir(parents=True, exist_ok=True)
+        self.session = self._create_session()
+        self._download_executor = ThreadPoolExecutor(
+            max_workers=self.MAX_CONCURRENT_DOWNLOADS
+        )
+        self._active_downloads: dict[int, Future[DumpFile]] = {}
+        
+    def _create_session(self) -> requests.Session:
+        """Create a requests session with retry logic."""
+        session = requests.Session()
+        retry_strategy = Retry(
+            total=self.MAX_RETRIES,
+            backoff_factor=self.RETRY_BACKOFF,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "HEAD"],
+        )
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=10,
+            pool_maxsize=10,
+        )
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        return session
+
+    def discover_parts(self) -> list[DumpFile]:
+        """Discover all available multistream part files."""
+        logger.info(f"🔍 Discovering dump parts at {DUMPS_URL}...")
+        
+        try:
+            resp = self.session.get(DUMPS_URL, timeout=30)
+            resp.raise_for_status()
+            
+            # Find all multistream part files
+            matches = self.PART_PATTERN.findall(resp.text)
+            if not matches:
+                raise ValueError("No multistream parts found on server.")
+            
+            # Create DumpFile objects, sorted by index
+            parts = []
+            seen_indices: set[int] = set()
+            
+            for filename, index_str in matches:
+                # Skip RSS/index files
+                if "rss" in filename.lower() or "index" in filename.lower():
+                    continue
+                    
+                index = int(index_str)
+                if index in seen_indices:
+                    continue
+                seen_indices.add(index)
+                
+                parts.append(DumpFile(
+                    index=index,
+                    filename=filename,
+                    url=urljoin(DUMPS_URL, filename),
+                    local_path=self.download_dir / filename,
+                ))
+            
+            # Sort by index
+            parts.sort(key=lambda p: p.index)
+            
+            logger.info(f"📦 Found {len(parts)} dump parts (1-{parts[-1].index})")
+            return parts
+            
+        except Exception as e:
+            logger.error(f"Failed to discover dump parts: {e}")
+            raise
+
+    def download_file(self, part: DumpFile) -> DumpFile:
+        """
+        Download a single dump file with resume support.
+        
+        Returns the updated DumpFile with download_complete=True on success.
+        """
+        if shutdown_requested:
+            return part
+            
+        local_path = part.local_path
+        if local_path is None:
+            local_path = self.download_dir / part.filename
+            part.local_path = local_path
+        
+        # Check if already downloaded
+        if local_path.exists():
+            # Verify file size with HEAD request
+            try:
+                head_resp = self.session.head(part.url, timeout=30)
+                expected_size = int(head_resp.headers.get("content-length", 0))
+                actual_size = local_path.stat().st_size
+                
+                if expected_size > 0 and actual_size == expected_size:
+                    logger.info(f"✅ Part {part.index} already downloaded")
+                    part.download_complete = True
+                    part.size_bytes = actual_size
+                    return part
+                elif actual_size > 0:
+                    logger.info(
+                        f"📥 Resuming part {part.index} from {actual_size:,} bytes"
+                    )
+            except Exception:
+                pass  # Will re-download if HEAD fails
+        
+        # Download with resume support
+        headers = {}
+        mode = "wb"
+        start_byte = 0
+        
+        if local_path.exists():
+            start_byte = local_path.stat().st_size
+            headers["Range"] = f"bytes={start_byte}-"
+            mode = "ab"
+        
+        logger.info(f"📥 Downloading part {part.index}: {part.filename}")
+        
+        retry_count = 0
+        while retry_count < self.MAX_RETRIES and not shutdown_requested:
+            try:
+                resp = self.session.get(
+                    part.url,
+                    stream=True,
+                    timeout=self.DOWNLOAD_TIMEOUT,
+                    headers=headers,
+                )
+                
+                # Handle resume response
+                if resp.status_code == 416:  # Range not satisfiable = complete
+                    part.download_complete = True
+                    part.size_bytes = local_path.stat().st_size
+                    return part
+                    
+                resp.raise_for_status()
+                
+                # Get total size
+                if "content-range" in resp.headers:
+                    # Resume response: "bytes start-end/total"
+                    total_size = int(
+                        resp.headers["content-range"].split("/")[-1]
+                    )
+                else:
+                    total_size = int(resp.headers.get("content-length", 0))
+                    total_size += start_byte
+                
+                # Download with progress
+                downloaded = start_byte
+                with open(local_path, mode) as f:
+                    for chunk in resp.iter_content(chunk_size=self.CHUNK_SIZE):
+                        if shutdown_requested:
+                            logger.warning(
+                                f"⚠️  Download interrupted for part {part.index}"
+                            )
+                            return part
+                            
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                
+                # Verify download
+                actual_size = local_path.stat().st_size
+                if total_size > 0 and actual_size < total_size:
+                    logger.warning(
+                        f"⚠️  Part {part.index} incomplete: "
+                        f"{actual_size:,}/{total_size:,} bytes"
+                    )
+                    # Update headers for resume
+                    start_byte = actual_size
+                    headers["Range"] = f"bytes={start_byte}-"
+                    mode = "ab"
+                    retry_count += 1
+                    time.sleep(self.RETRY_BACKOFF)
+                    continue
+                
+                logger.info(
+                    f"✅ Part {part.index} downloaded: "
+                    f"{actual_size / (1024*1024):.1f} MB"
+                )
+                part.download_complete = True
+                part.size_bytes = actual_size
+                return part
+                
+            except Exception as e:
+                retry_count += 1
+                logger.warning(
+                    f"⚠️  Download error for part {part.index} "
+                    f"(attempt {retry_count}/{self.MAX_RETRIES}): {e}"
+                )
+                if retry_count < self.MAX_RETRIES:
+                    time.sleep(self.RETRY_BACKOFF * retry_count)
+                    # Update for resume
+                    if local_path.exists():
+                        start_byte = local_path.stat().st_size
+                        headers["Range"] = f"bytes={start_byte}-"
+                        mode = "ab"
+        
+        logger.error(f"❌ Failed to download part {part.index} after retries")
+        return part
+
+    def start_download(self, part: DumpFile) -> Future[DumpFile]:
+        """Start an async download for a part."""
+        future = self._download_executor.submit(self.download_file, part)
+        self._active_downloads[part.index] = future
+        return future
+
+    def get_completed_downloads(self) -> list[DumpFile]:
+        """Check for and return completed downloads."""
+        completed = []
+        to_remove = []
+        
+        for index, future in self._active_downloads.items():
+            if future.done():
+                to_remove.append(index)
+                try:
+                    part = future.result()
+                    if part.download_complete:
+                        completed.append(part)
+                except Exception as e:
+                    logger.error(f"Download future error for part {index}: {e}")
+        
+        for index in to_remove:
+            del self._active_downloads[index]
+        
+        return completed
+
+    def active_download_count(self) -> int:
+        """Return number of active downloads."""
+        return len(self._active_downloads)
+
+    def close(self):
+        """Clean up resources."""
+        self._download_executor.shutdown(wait=False)
+        self.session.close()
+
+
+class LocalFileParser:
+    """
+    Parses downloaded Wikipedia dump files from disk.
+    
+    Much more robust than streaming because:
+    - File is complete before parsing
+    - Can seek/retry on errors
+    - Memory-mapped for efficiency
+    """
+
+    @staticmethod
+    def parse_file(file_path: Path) -> Generator[WikiArticle]:
+        """
+        Parse a local BZ2-compressed Wikipedia dump file.
+        
+        Yields WikiArticle objects for each valid article.
+        """
+        if not file_path.exists():
+            logger.error(f"File not found: {file_path}")
+            return
+        
+        logger.info(f"📖 Parsing {file_path.name}...")
+        articles_yielded = 0
+        parse_errors = 0
+        
+        try:
+            # Open BZ2 file and parse with lxml
+            with bz2.open(file_path, "rb") as f:
+                context = etree.iterparse(
+                    f,
+                    events=("end",),
+                    tag="{http://www.mediawiki.org/xml/export-0.11/}page",
+                    recover=True,
+                    huge_tree=True,
+                )
+                
+                for _event, elem in context:
+                    if shutdown_requested:
+                        break
+                    
+                    try:
+                        # Namespace-aware lookups
+                        ns = {"mw": "http://www.mediawiki.org/xml/export-0.11/"}
+                        
+                        title = (
+                            elem.findtext("mw:title", namespaces=ns)
+                            or elem.findtext(
+                                "{http://www.mediawiki.org/xml/export-0.11/}title"
+                            )
+                            or elem.findtext("title")
+                        )
+                        
+                        page_id = (
+                            elem.findtext("mw:id", namespaces=ns)
+                            or elem.findtext(
+                                "{http://www.mediawiki.org/xml/export-0.11/}id"
+                            )
+                            or elem.findtext("id")
+                        )
+                        
+                        revision = (
+                            elem.find("mw:revision", namespaces=ns)
+                            or elem.find(
+                                "{http://www.mediawiki.org/xml/export-0.11/}revision"
+                            )
+                            or elem.find("revision")
+                        )
+                        
+                        page_ns = (
+                            elem.findtext("mw:ns", namespaces=ns)
+                            or elem.findtext(
+                                "{http://www.mediawiki.org/xml/export-0.11/}ns"
+                            )
+                            or elem.findtext("ns")
+                        )
+
+                        text = ""
+                        if revision is not None:
+                            text = (
+                                revision.findtext("mw:text", namespaces=ns)
+                                or revision.findtext(
+                                    "{http://www.mediawiki.org/xml/export-0.11/}text"
+                                )
+                                or revision.findtext("text")
+                                or ""
+                            )
+
+                        # Only process main namespace articles, skip redirects
+                        if (
+                            page_ns == "0"
+                            and text
+                            and title is not None
+                            and page_id is not None
+                            and not text.lower().startswith("#redirect")
+                            and len(text) > 100
+                        ):
+                            safe_title = quote(title.replace(" ", "_"), safe="/:@")
+                            yield WikiArticle(
+                                id=int(page_id),
+                                title=title,
+                                text=text,
+                                url=f"https://en.wikipedia.org/wiki/{safe_title}",
+                                word_count=len(text.split()),
+                            )
+                            articles_yielded += 1
+
+                    except Exception as e:
+                        parse_errors += 1
+                        if parse_errors <= 10:
+                            logger.debug(f"Parse error: {e}")
+                    finally:
+                        # Clear element to free memory
+                        elem.clear()
+                        while elem.getprevious() is not None:
+                            parent = elem.getparent()
+                            if parent is not None:
+                                del parent[0]
+                            else:
+                                break
+                
+        except Exception as e:
+            logger.error(f"Error parsing {file_path.name}: {e}")
+        
+        if parse_errors > 0:
+            logger.warning(
+                f"Completed {file_path.name} with {parse_errors} errors, "
+                f"{articles_yielded} articles"
+            )
+        else:
+            logger.info(
+                f"✅ Parsed {file_path.name}: {articles_yielded} articles"
+            )
+
+
+# =============================================================================
+# LEGACY STREAMING DOWNLOADER (kept for compatibility)
 # =============================================================================
 
 
@@ -1735,6 +2150,28 @@ def main():
         default=30,
         help="Seconds to wait before retrying after a network error (default: 30)",
     )
+    parser.add_argument(
+        "--download-dir",
+        type=str,
+        default=".wiki_dumps",
+        help="Directory for temporary dump file downloads",
+    )
+    parser.add_argument(
+        "--keep-downloads",
+        action="store_true",
+        help="Keep downloaded files after processing (don't delete)",
+    )
+    parser.add_argument(
+        "--max-concurrent-downloads",
+        type=int,
+        default=3,
+        help="Maximum concurrent dump file downloads (default: 3)",
+    )
+    parser.add_argument(
+        "--stream-mode",
+        action="store_true",
+        help="Use legacy streaming mode instead of chunked downloads",
+    )
 
     args = parser.parse_args()
 
@@ -1764,7 +2201,6 @@ def main():
     # Initialize components
     logger.info("🔧 Initializing components...")
 
-    url = WikiDownloader.get_latest_url()
     preprocessor = AdvancedTextPreprocessor(
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
@@ -1785,8 +2221,6 @@ def main():
     )
 
     stats = IngestionStats()
-    article_batch: list[tuple[WikiArticle, list[ProcessedChunk]]] = []
-    pending_futures: list[Future[None]] = []  # Track async uploads
     skipped_count = 0
 
     # Calculate remaining articles if limit is set
@@ -1805,6 +2239,323 @@ def main():
             f"article IDs will be skipped if encountered again"
         )
 
+    # Thread pool for parallel uploads
+    executor = ThreadPoolExecutor(max_workers=args.workers * 2)
+
+    # Choose mode: chunked downloads (default) or legacy streaming
+    if args.stream_mode:
+        # Legacy streaming mode
+        logger.info("📡 Using legacy streaming mode")
+        completed_successfully = run_streaming_mode(
+            args=args,
+            checkpoint=checkpoint,
+            preprocessor=preprocessor,
+            qdrant=qdrant,
+            neo4j=neo4j,
+            stats=stats,
+            executor=executor,
+            remaining_limit=remaining_limit,
+        )
+        skipped_count = 0  # Not tracked in streaming mode
+    else:
+        # Chunked download mode (default, more robust)
+        logger.info("📦 Using chunked download mode (more robust)")
+        completed_successfully, skipped_count = run_chunked_mode(
+            args=args,
+            checkpoint=checkpoint,
+            preprocessor=preprocessor,
+            qdrant=qdrant,
+            neo4j=neo4j,
+            stats=stats,
+            executor=executor,
+            remaining_limit=remaining_limit,
+        )
+
+    # Cleanup
+    executor.shutdown(wait=True)
+    neo4j.close()
+    
+    # Final checkpoint save
+    checkpoint.save()
+    
+    # Show summary
+    logger.info(stats.summary())
+    
+    if skipped_count > 0:
+        logger.info(f"⏭️  Skipped {skipped_count:,} already-processed articles")
+    
+    if completed_successfully and not shutdown_requested:
+        logger.info("🎉 Ingestion completed successfully!")
+    elif shutdown_requested:
+        logger.info(
+            f"💾 Checkpoint saved. Run again to resume from "
+            f"{checkpoint.articles_processed:,} articles."
+        )
+
+
+def run_chunked_mode(
+    args,
+    checkpoint: CheckpointManager,
+    preprocessor: AdvancedTextPreprocessor,
+    qdrant: QdrantHybridStore,
+    neo4j: Neo4jGraphStore,
+    stats: IngestionStats,
+    executor: ThreadPoolExecutor,
+    remaining_limit: int | None,
+) -> tuple[bool, int]:
+    """
+    Run ingestion using chunked file downloads.
+    
+    This is the default mode and is much more robust than streaming.
+    Downloads each dump part completely before processing.
+    
+    Returns (completed_successfully, skipped_count)
+    """
+    download_dir = Path(args.download_dir)
+    downloader = ChunkedWikiDownloader(download_dir=download_dir)
+    
+    # Track which parts have been processed
+    parts_checkpoint_file = download_dir / ".parts_checkpoint.json"
+    processed_parts: set[int] = set()
+    
+    # Load parts checkpoint
+    if parts_checkpoint_file.exists():
+        try:
+            with open(parts_checkpoint_file) as f:
+                data = json.load(f)
+                processed_parts = set(data.get("processed_parts", []))
+                logger.info(f"📍 Resuming: {len(processed_parts)} parts already processed")
+        except Exception as e:
+            logger.warning(f"Could not load parts checkpoint: {e}")
+    
+    def save_parts_checkpoint():
+        """Save which parts have been processed."""
+        try:
+            with open(parts_checkpoint_file, "w") as f:
+                json.dump({"processed_parts": list(processed_parts)}, f)
+        except Exception as e:
+            logger.warning(f"Could not save parts checkpoint: {e}")
+    
+    try:
+        # Discover all available parts
+        all_parts = downloader.discover_parts()
+        
+        # Filter out already processed parts
+        pending_parts = [p for p in all_parts if p.index not in processed_parts]
+        
+        if not pending_parts:
+            logger.info("✅ All parts already processed!")
+            return True, 0
+        
+        logger.info(f"📥 {len(pending_parts)} parts remaining to process")
+        
+        # Queue for parts ready to process
+        ready_to_process: list[DumpFile] = []
+        download_queue = list(pending_parts)
+        
+        # Track state
+        completed_successfully = True
+        skipped_count = 0
+        article_batch: list[tuple[WikiArticle, list[ProcessedChunk]]] = []
+        pending_futures: list[Future[None]] = []
+        
+        # Progress bar
+        pbar = tqdm(
+            total=remaining_limit or args.limit or len(pending_parts) * 50000,
+            unit="articles",
+            desc="Dual Ingest",
+            dynamic_ncols=True,
+        )
+        
+        # Start initial downloads (up to max concurrent)
+        while (
+            download_queue
+            and downloader.active_download_count() < args.max_concurrent_downloads
+        ):
+            part = download_queue.pop(0)
+            downloader.start_download(part)
+            logger.info(f"📥 Started download: part {part.index}")
+        
+        # Main processing loop
+        has_work = (
+            ready_to_process
+            or download_queue
+            or downloader.active_download_count() > 0
+        )
+        while has_work and not shutdown_requested:
+            # Check for completed downloads
+            completed = downloader.get_completed_downloads()
+            ready_to_process.extend(completed)
+            
+            # Start new downloads if slots available
+            while (
+                download_queue
+                and downloader.active_download_count() < args.max_concurrent_downloads
+            ):
+                part = download_queue.pop(0)
+                downloader.start_download(part)
+                logger.info(f"📥 Started download: part {part.index}")
+            
+            # Process any ready files
+            if ready_to_process:
+                part = ready_to_process.pop(0)
+                
+                if not part.download_complete or part.local_path is None:
+                    logger.warning(f"⚠️  Part {part.index} not ready, skipping")
+                    continue
+                
+                logger.info(f"📖 Processing part {part.index}...")
+                
+                try:
+                    # Process all articles in this part
+                    for article in LocalFileParser.parse_file(part.local_path):
+                        if shutdown_requested:
+                            break
+                        
+                        # Skip already processed articles
+                        if checkpoint.should_skip(article.id):
+                            skipped_count += 1
+                            continue
+                        
+                        # Clean and extract metadata
+                        (
+                            clean_text,
+                            links,
+                            categories,
+                            infobox,
+                            entities,
+                        ) = preprocessor.clean_and_extract(article.text)
+
+                        article.links = links
+                        article.categories = categories
+                        article.infobox = infobox
+                        article.entities = entities
+                        article.sections = preprocessor.extract_sections(article.text)
+                        article.first_paragraph = preprocessor.extract_first_paragraph(
+                            article.text
+                        )
+
+                        # Create semantic chunks
+                        chunks = preprocessor.chunk_article(article, clean_text)
+
+                        if chunks:
+                            article_batch.append((article, chunks))
+
+                        # Process batch when full
+                        if len(article_batch) >= args.batch_size:
+                            if pending_futures:
+                                wait_for_uploads(pending_futures, stats)
+                                pending_futures = []
+                            
+                            pending_futures = process_batch(
+                                article_batch, qdrant, neo4j, stats, executor
+                            )
+                            
+                            # Record in checkpoint
+                            batch_articles = [a for a, _ in article_batch]
+                            batch_chunks = sum(len(c) for _, c in article_batch)
+                            checkpoint.record_batch(batch_articles, batch_chunks)
+                            
+                            pbar.update(len(article_batch))
+                            article_batch = []
+
+                            if remaining_limit and stats.articles_processed >= remaining_limit:
+                                logger.info("✅ Limit reached")
+                                break
+                    
+                    # Wait for pending uploads
+                    if pending_futures:
+                        wait_for_uploads(pending_futures, stats)
+                        pending_futures = []
+                    
+                    # Process final batch for this part
+                    if article_batch:
+                        futures = process_batch(
+                            article_batch, qdrant, neo4j, stats, executor
+                        )
+                        wait_for_uploads(futures, stats)
+                        
+                        batch_articles = [a for a, _ in article_batch]
+                        batch_chunks = sum(len(c) for _, c in article_batch)
+                        checkpoint.record_batch(batch_articles, batch_chunks)
+                        
+                        pbar.update(len(article_batch))
+                        article_batch = []
+                    
+                    # Mark part as processed
+                    processed_parts.add(part.index)
+                    save_parts_checkpoint()
+                    
+                    # Delete file unless --keep-downloads
+                    if not args.keep_downloads and part.local_path.exists():
+                        try:
+                            part.local_path.unlink()
+                            logger.info(f"🗑️  Deleted {part.local_path.name}")
+                        except Exception as e:
+                            logger.warning(f"Could not delete {part.local_path}: {e}")
+                    
+                    logger.info(
+                        f"✅ Part {part.index} complete. "
+                        f"Progress: {len(processed_parts)}/{len(all_parts)} parts"
+                    )
+                    
+                    # Check limit
+                    if remaining_limit and stats.articles_processed >= remaining_limit:
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"Error processing part {part.index}: {e}")
+                    stats.update(errors=1)
+                    # Don't mark as processed so it can be retried
+            else:
+                # No files ready, wait a bit for downloads
+                time.sleep(1)
+            
+            # Update loop condition
+            has_work = (
+                ready_to_process
+                or download_queue
+                or downloader.active_download_count() > 0
+            )
+        
+        pbar.close()
+        
+        # Check if all parts processed or limit reached
+        all_done = len(processed_parts) == len(all_parts)
+        limit_reached = bool(
+            remaining_limit and stats.articles_processed >= remaining_limit
+        )
+        completed_successfully = (all_done or limit_reached) and not shutdown_requested
+        
+        return completed_successfully, skipped_count
+        
+    finally:
+        downloader.close()
+
+
+def run_streaming_mode(
+    args,
+    checkpoint: CheckpointManager,
+    preprocessor: AdvancedTextPreprocessor,
+    qdrant: QdrantHybridStore,
+    neo4j: Neo4jGraphStore,
+    stats: IngestionStats,
+    executor: ThreadPoolExecutor,
+    remaining_limit: int | None,
+) -> bool:
+    """
+    Run ingestion using legacy streaming mode.
+    
+    This is the original mode that streams directly from the server.
+    Less robust but uses less disk space.
+    
+    Returns completed_successfully
+    """
+    url = WikiDownloader.get_latest_url()
+    
+    article_batch: list[tuple[WikiArticle, list[ProcessedChunk]]] = []
+    pending_futures: list[Future[None]] = []
+    
     pbar = tqdm(
         total=remaining_limit or args.limit,
         unit="articles",
@@ -1812,10 +2563,6 @@ def main():
         dynamic_ncols=True,
     )
 
-    # Thread pool for parallel uploads (more workers for pipeline)
-    executor = ThreadPoolExecutor(max_workers=args.workers * 2)
-
-    # Endless mode: track connection attempts
     connection_attempts = 0
     max_connection_attempts = 1000 if args.endless else 1
     completed_successfully = False
@@ -1829,7 +2576,6 @@ def main():
                 f"(waiting {args.endless_retry_delay}s)..."
             )
             time.sleep(args.endless_retry_delay)
-            # Reload checkpoint to get latest state
             checkpoint.load()
             logger.info(f"📍 {checkpoint.get_resume_info()}")
 
@@ -1839,12 +2585,9 @@ def main():
                     logger.warning("⚠️  Shutdown requested, saving checkpoint...")
                     break
 
-                # Skip already processed articles
                 if checkpoint.should_skip(article.id):
-                    skipped_count += 1
                     continue
 
-                # 1. Clean and extract all metadata
                 (
                     clean_text,
                     links,
@@ -1862,25 +2605,20 @@ def main():
                     article.text
                 )
 
-                # 2. Create semantic chunks
                 chunks = preprocessor.chunk_article(article, clean_text)
 
                 if chunks:
                     article_batch.append((article, chunks))
 
-                # 3. Process batch when full (async pipeline)
                 if len(article_batch) >= args.batch_size:
-                    # Wait for previous uploads to complete before starting new batch
                     if pending_futures:
                         wait_for_uploads(pending_futures, stats)
                         pending_futures = []
                     
-                    # Process the batch (returns futures for async completion)
                     pending_futures = process_batch(
                         article_batch, qdrant, neo4j, stats, executor
                     )
                     
-                    # Record in checkpoint immediately
                     batch_articles = [a for a, _ in article_batch]
                     batch_chunks = sum(len(c) for _, c in article_batch)
                     checkpoint.record_batch(batch_articles, batch_chunks)
@@ -1893,23 +2631,19 @@ def main():
                         completed_successfully = True
                         break
 
-            # If we got here without exception, stream completed
             if not shutdown_requested:
                 completed_successfully = True
                 
-            # Wait for any pending uploads
             if pending_futures:
                 wait_for_uploads(pending_futures, stats)
                 pending_futures = []
                 
-            # Process final batch
             if article_batch and not shutdown_requested:
                 futures = process_batch(
                     article_batch, qdrant, neo4j, stats, executor
                 )
                 wait_for_uploads(futures, stats)
                 
-                # Record final batch in checkpoint
                 batch_articles = [a for a, _ in article_batch]
                 batch_chunks = sum(len(c) for _, c in article_batch)
                 checkpoint.record_batch(batch_articles, batch_chunks)
@@ -1917,7 +2651,6 @@ def main():
                 pbar.update(len(article_batch))
                 article_batch = []
 
-            # Exit the retry loop if completed or shutdown
             if completed_successfully or shutdown_requested:
                 break
 
@@ -1929,10 +2662,8 @@ def main():
             TimeoutError,
             OSError,
         ) as e:
-            # Network-related errors - save checkpoint and retry if endless mode
             logger.warning(f"⚠️  Network error: {e}")
             
-            # Wait for pending uploads before saving checkpoint
             if pending_futures:
                 wait_for_uploads(pending_futures, stats)
                 pending_futures = []
@@ -1945,7 +2676,6 @@ def main():
                     f"💾 Checkpoint saved at {checkpoint.articles_processed:,} articles. "
                     f"Will retry..."
                 )
-                # Clear the current batch (will be re-processed after reconnect)
                 article_batch = []
                 continue
             else:
@@ -1953,45 +2683,17 @@ def main():
                 break
 
         except Exception as e:
-            # Other errors - save and exit
             logger.error(f"Critical failure: {e}", exc_info=True)
             stats.update(errors=1)
             
-            # Wait for pending uploads before saving checkpoint
             if pending_futures:
                 wait_for_uploads(pending_futures, stats)
             
             checkpoint.save()
             break
 
-    # Cleanup
     pbar.close()
-    executor.shutdown(wait=True)
-    neo4j.close()
-    
-    # Final checkpoint save
-    checkpoint.save()
-    
-    # Show summary
-    logger.info(stats.summary())
-    
-    if skipped_count > 0:
-        logger.info(f"⏭️  Skipped {skipped_count:,} already-processed articles")
-    
-    if completed_successfully and not shutdown_requested:
-        logger.info("🎉 Ingestion completed successfully!")
-        if args.endless:
-            logger.info(f"📊 Total connection attempts: {connection_attempts}")
-    elif shutdown_requested:
-        logger.info(
-            f"💾 Checkpoint saved. Run again to resume from "
-            f"{checkpoint.articles_processed:,} articles."
-        )
-    elif args.endless:
-        logger.warning(
-            f"❌ Failed after {connection_attempts} connection attempts. "
-            f"Checkpoint saved at {checkpoint.articles_processed:,} articles."
-        )
+    return completed_successfully
 
 
 if __name__ == "__main__":
