@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/your-org/open-hallucination-index/main/docs/assets/logo.png" alt="Open Hallucination Index" width="120" />
+  <img src="https://raw.githubusercontent.com/shiftbloom-studio/open-hallucination-index/main/docs/logo.jpg" alt="Open Hallucination Index" width="765" />
 </p>
 
 <h1 align="center">Open Hallucination Index</h1>
@@ -19,7 +19,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.14+-blue.svg" alt="Python 3.14+" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License" />
-  <a href="https://github.com/your-org/open-hallucination-index/actions"><img src="https://github.com/your-org/open-hallucination-index/workflows/CI/badge.svg" alt="CI Status" /></a>
+  <a href="https://github.com/shiftbloom-studio/open-hallucination-index/actions"><img src="https://github.com/shiftbloom-studio/open-hallucination-index/workflows/CI/badge.svg" alt="CI Status" /></a>
 </p>
 
 ---
