@@ -172,6 +172,10 @@ class ComparisonBenchmarkConfig:
     2. TruthfulQA - adversarial question answering
     3. FActScore - atomic fact precision
     4. Latency - response time performance
+    
+    Special modes:
+    - Strategy comparison: Run all OHI strategies to find optimal
+    - Cache testing: Run with/without Redis cache to measure impact
     """
     
     # Which evaluators to run
@@ -195,6 +199,27 @@ class ComparisonBenchmarkConfig:
     ohi_api_port: str = "8080"
     ohi_api_key: str | None = None
     ohi_strategy: str = "adaptive"  # Best OHI strategy
+    
+    # OHI Strategy Comparison Mode
+    # If True, runs all strategies for OHI to compare performance
+    ohi_all_strategies: bool = False
+    ohi_strategies: list[str] = field(
+        default_factory=lambda: [
+            "vector_semantic",
+            "graph_exact",
+            "hybrid",
+            "cascading",
+            "mcp_enhanced",
+            "adaptive",
+        ]
+    )
+    
+    # Cache Testing Mode
+    # If True, runs each evaluator twice: once with cache disabled, once with cache enabled (cleared first)
+    cache_testing: bool = False
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_password: str | None = None
     
     # Dataset paths
     hallucination_dataset: Path = field(
@@ -226,6 +251,14 @@ class ComparisonBenchmarkConfig:
         
         extended_path = os.getenv("BENCHMARK_EXTENDED_DATASET")
         
+        # Parse OHI strategies if provided
+        ohi_strategies_str = os.getenv("OHI_STRATEGIES")
+        ohi_strategies = (
+            ohi_strategies_str.split(",")
+            if ohi_strategies_str
+            else ["vector_semantic", "graph_exact", "hybrid", "cascading", "mcp_enhanced", "adaptive"]
+        )
+        
         return cls(
             evaluators=evaluators_str.split(","),  # type: ignore
             metrics=metrics_str.split(","),  # type: ignore
@@ -237,6 +270,12 @@ class ComparisonBenchmarkConfig:
             ohi_api_port=os.getenv("OHI_API_PORT", "8080"),
             ohi_api_key=os.getenv("API_API_KEY"),  # Matches .env naming
             ohi_strategy=os.getenv("OHI_STRATEGY", "adaptive"),
+            ohi_all_strategies=os.getenv("OHI_ALL_STRATEGIES", "false").lower() == "true",
+            ohi_strategies=ohi_strategies,
+            cache_testing=os.getenv("BENCHMARK_CACHE_TESTING", "false").lower() == "true",
+            redis_host=os.getenv("REDIS_HOST", "localhost"),
+            redis_port=int(os.getenv("REDIS_PORT", "6379")),
+            redis_password=os.getenv("REDIS_PASSWORD"),
             hallucination_dataset=Path(
                 os.getenv("BENCHMARK_DATASET", "benchmark/benchmark_dataset.csv")
             ),

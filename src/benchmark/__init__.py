@@ -1,128 +1,125 @@
 """
-OHI Benchmark Suite - Research-Grade Hallucination Detection Evaluation
-========================================================================
+OHI Benchmark Suite - Multi-Evaluator Comparison Framework
+============================================================
 
-A comprehensive benchmarking framework for evaluating the Open Hallucination Index
-API against VectorRAG, GraphRAG, and hybrid retrieval strategies.
+A research-grade benchmarking framework for comparing hallucination detection
+systems across multiple dimensions:
+
+Evaluators:
+-----------
+* OHI (Open Hallucination Index) - Hybrid verification with knowledge graph + vector + MCP
+* GPT-4 (OpenAI) - Direct LLM verification baseline
+* VectorRAG - Vector similarity baseline (using public Wikipedia API for fair comparison)
+
+Metrics:
+--------
+* Hallucination Detection - Accuracy, precision, recall, F1, MCC
+* TruthfulQA - Adversarial question answering accuracy
+* FActScore - Atomic fact precision (claim decomposition + verification)
+* Latency - Response time analysis (P50, P90, P99)
 
 Features:
 ---------
-* Multi-strategy comparison with statistical significance testing
-* Multi-evaluator comparison (OHI vs GPT-4 vs VectorRAG)
+* Multi-evaluator comparison with statistical significance testing
 * Stratified analysis by domain, difficulty, and claim complexity
-* Bootstrap confidence intervals for all metrics
-* DeLong test for AUC comparison between strategies
-* McNemar's test for paired classifier comparison
-* Calibration analysis (Brier Score, ECE, MCE)
-* ROC/PR curve analysis with optimal threshold detection
+* Redis cache testing (with/without cache, cache cleared before run)
 * Comprehensive multi-format reporting (HTML, JSON, Markdown, CSV)
-* Publication-ready comparison charts (radar, heatmap, grouped bars)
+* Publication-ready comparison charts (radar, heatmap, grouped bars, combined dashboard)
 
 Usage:
 ------
-    # Standard benchmark
-    python -m benchmark --strategies vector_semantic,mcp_enhanced
+    # Run comparison benchmark via CLI
+    python -m benchmark.comparison_benchmark --evaluators ohi,gpt4,vector_rag
 
-    # Comparison benchmark (OHI vs GPT-4 vs VectorRAG)
-    python -m benchmark.comparison_benchmark
+    # Quick test
+    python src/benchmark/test_evaluators_quick.py
 
-    # Programmatically
-    from benchmark import OHIBenchmarkRunner
-    async with OHIBenchmarkRunner(strategies=["vector_semantic", "mcp_enhanced"]) as runner:
-        report = await runner.run_benchmark()
+    # Detailed comparison
+    python src/benchmark/test_evaluators_detailed.py
 
-    # Comparison benchmark
-    from benchmark.comparison_runner import run_comparison_benchmark
-    report = await run_comparison_benchmark()
+    # Programmatic usage
+    from benchmark import ComparisonBenchmarkRunner, ComparisonBenchmarkConfig
+
+    async with ComparisonBenchmarkRunner() as runner:
+        report = await runner.run_comparison()
 
 Author: OHI Research Team
 License: MIT
-Version: 2.0.0
+Version: 3.0.0
 """
 
-from benchmark.config import BenchmarkConfig, get_config
-from benchmark.models import (
-    BenchmarkCase,
-    BenchmarkReport,
-    ConfidenceInterval,
-    DifficultyLevel,
-    ResultMetric,
-    StatisticalComparison,
-    StrategyReport,
-    VerificationStrategy,
+from benchmark.comparison_config import (
+    ComparisonBenchmarkConfig,
+    EvaluatorType,
+    MetricType,
+    OpenAIConfig,
+    VectorRAGConfig,
 )
-from benchmark.metrics import (
-    CalibrationMetrics,
-    ConfusionMatrix,
-    LatencyStats,
-    PRCurveAnalysis,
-    ROCAnalysis,
-)
-from benchmark.analysis.statistical import (
-    bootstrap_ci,
-    delong_test,
-    mcnemar_test,
-    wilson_ci,
-)
-from benchmark.reporters.base import BaseReporter
-from benchmark.reporters.console import ConsoleReporter
-from benchmark.reporters.markdown import MarkdownReporter
-from benchmark.reporters.json_reporter import JSONReporter
-from benchmark.reporters.csv_reporter import CSVReporter
-from benchmark.runner import OHIBenchmarkRunner
-
-# Comparison benchmark components
-from benchmark.comparison_config import ComparisonBenchmarkConfig
 from benchmark.comparison_metrics import (
     ComparisonReport,
     EvaluatorMetrics,
     FActScoreMetrics,
-    HallucinationMetrics as ComparisonHallucinationMetrics,
-    LatencyMetrics as ComparisonLatencyMetrics,
+    HallucinationMetrics,
+    LatencyMetrics,
     TruthfulQAMetrics,
 )
-from benchmark.comparison_runner import ComparisonBenchmarkRunner, run_comparison_benchmark
+from benchmark.comparison_runner import (
+    ComparisonBenchmarkRunner,
+    run_comparison_benchmark,
+)
 
-__version__ = "2.0.0"
+# Reporters
+from benchmark.reporters.base import BaseReporter
+from benchmark.reporters.charts import ChartsReporter
+from benchmark.reporters.console import ConsoleReporter
+from benchmark.reporters.csv_reporter import CSVReporter
+from benchmark.reporters.json_reporter import JSONReporter
+from benchmark.reporters.markdown import MarkdownReporter
+
+# Evaluators
+from benchmark.evaluators import (
+    BaseEvaluator,
+    EvaluatorResult,
+    FActScoreResult,
+    FairVectorRAGEvaluator,
+    GPT4Evaluator,
+    OHIEvaluator,
+    VectorRAGEvaluator,
+    VerificationVerdict,
+    get_evaluator,
+)
+
+__version__ = "3.0.0"
 __all__ = [
-    # Core runner
-    "OHIBenchmarkRunner",
-    # Comparison runner
+    # Core Runner
     "ComparisonBenchmarkRunner",
     "run_comparison_benchmark",
+    # Configuration
     "ComparisonBenchmarkConfig",
+    "EvaluatorType",
+    "MetricType",
+    "OpenAIConfig",
+    "VectorRAGConfig",
+    # Metrics
     "ComparisonReport",
     "EvaluatorMetrics",
-    # Configuration
-    "BenchmarkConfig",
-    "get_config",
-    # Models
-    "BenchmarkCase",
-    "BenchmarkReport",
-    "ConfidenceInterval",
-    "DifficultyLevel",
-    "ResultMetric",
-    "StatisticalComparison",
-    "StrategyReport",
-    "VerificationStrategy",
-    # Metrics
-    "CalibrationMetrics",
-    "ConfusionMatrix",
-    "LatencyStats",
-    "PRCurveAnalysis",
-    "ROCAnalysis",
-    # Comparison Metrics
-    "ComparisonHallucinationMetrics",
-    "ComparisonLatencyMetrics",
     "FActScoreMetrics",
+    "HallucinationMetrics",
+    "LatencyMetrics",
     "TruthfulQAMetrics",
-    # Statistical
-    "bootstrap_ci",
-    "delong_test",
-    "mcnemar_test",
-    "wilson_ci",
+    # Evaluators
+    "BaseEvaluator",
+    "EvaluatorResult",
+    "FActScoreResult",
+    "FairVectorRAGEvaluator",
+    "GPT4Evaluator",
+    "OHIEvaluator",
+    "VectorRAGEvaluator",
+    "VerificationVerdict",
+    "get_evaluator",
     # Reporters
     "BaseReporter",
+    "ChartsReporter",
     "ConsoleReporter",
     "CSVReporter",
     "JSONReporter",
