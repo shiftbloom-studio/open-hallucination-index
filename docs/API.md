@@ -1,42 +1,42 @@
-# Open Hallucination Index – API‑Dokumentation
+# Open Hallucination Index – API Documentation
 
-> **Zielsetzung:** Diese Spezifikation beschreibt die HTTP‑Schnittstellen der OHI‑API für verifizierbare Faktenprüfung, Evidenzaggregation und Trust‑Scoring. Alle Endpunkte sind deterministisch dokumentiert und für reproduzierbare Forschungsexperimente ausgelegt.
+> **Objective:** This specification describes the HTTP interfaces of the OHI API for verifiable fact checking, evidence aggregation, and trust scoring. All endpoints are deterministically documented and designed for reproducible research experiments.
 
 ---
 
-## 🧪 Wissenschaftlicher Rahmen
+## 🧪 Scientific Framework
 
-Die API modelliert den Verifikationsprozess als Pipeline:
+The API models the verification process as a pipeline:
 
-1. **Claim Decomposition**: Zerlegung von Text in atomare Claims.
-2. **Evidence Retrieval**: Paralleles Suchen in Graph‑, Vektor‑ und MCP‑Quellen.
-3. **Evidence Alignment**: Mapping der Evidenz auf Claims.
-4. **Trust Scoring**: Bewertung durch evidenzbasierte Metriken.
+1. **Claim Decomposition**: Breaking text into atomic claims.
+2. **Evidence Retrieval**: Parallel searching across graph, vector, and MCP sources.
+3. **Evidence Alignment**: Mapping evidence to claims.
+4. **Trust Scoring**: Evaluation through evidence-based metrics.
 
-Die Hauptmetriken sind:
+Main metrics are:
 
 - **Support Ratio** $\frac{n_{supported}}{n_{total}}$
 - **Refutation Ratio** $\frac{n_{refuted}}{n_{total}}$
-- **Confidence** (0–1) als Konfidenzintervall‑Schätzer
-- **Overall Trust** als gewichtete Aggregation
+- **Confidence** (0–1) as a confidence interval estimator
+- **Overall Trust** as a weighted aggregation
 
 ---
 
-## 🔐 Authentifizierung
+## 🔐 Authentication
 
-Die API erwartet standardmäßig einen API‑Key‑Header:
+By default, the API expects an API key header:
 
 ```
 X-API-Key: <YOUR_API_KEY>
 ```
 
-Die Konfiguration erfolgt via `API_API_KEY` in der API‑Umgebung.
+Configuration is handled via `API_API_KEY` in the API environment.
 
 ---
 
-## 🌐 Basis‑URL
+## 🌐 Base URL
 
-Standardmäßig:
+Default:
 
 ```
 http://localhost:8080
@@ -44,7 +44,7 @@ http://localhost:8080
 
 ---
 
-## ✅ Kernendpunkte
+## ✅ Core Endpoints
 
 ### 1) Verify (Single)
 
@@ -53,27 +53,27 @@ http://localhost:8080
 POST /api/v1/verify
 ```
 
-**Beschreibung**: Verifiziert einen Text und liefert Trust‑Scores, Claim‑Evidenz und Zusammenfassung.
+**Description**: Verifies a text and returns trust scores, claim evidence, and summary.
 
-**Request‑Schema (JSON)**
+**Request Schema (JSON)**
 
-| Feld | Typ | Pflicht | Beschreibung |
+| Field | Type | Required | Description |
 |------|-----|---------|--------------|
-| `text` | string | ✅ | Text zur Verifikation (max. 100.000 Zeichen) |
-| `context` | string | ❌ | Optionaler Kontext zur Disambiguierung |
+| `text` | string | ✅ | Text for verification (max. 100,000 characters) |
+| `context` | string | ❌ | Optional context for disambiguation |
 | `strategy` | string | ❌ | `mcp_enhanced` · `hybrid` · `cascading` · `graph_exact` · `vector_semantic` · `adaptive` |
-| `use_cache` | boolean | ❌ | Cache‑Nutzung (default: `true`) |
-| `target_sources` | integer | ❌ | Zielanzahl geprüfter Quellen (1–20) |
+| `use_cache` | boolean | ❌ | Cache usage (default: `true`) |
+| `target_sources` | integer | ❌ | Target number of checked sources (1–20) |
 
-**Beispiel**
+**Example**
 ```
 curl -X POST http://localhost:8080/api/v1/verify \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"text": "Die Eiffel Tower steht in Paris und wurde 1889 gebaut."}'
+  -d '{"text": "The Eiffel Tower is in Paris and was built in 1889."}'
 ```
 
-**Beispielantwort (gekürzt)**
+**Example Response (truncated)**
 ```
 {
   "id": "abc123...",
@@ -89,13 +89,13 @@ curl -X POST http://localhost:8080/api/v1/verify \
   "claims": [
     {
       "id": "f5a1...",
-      "text": "Der Eiffelturm steht in Paris.",
+      "text": "The Eiffel Tower is in Paris.",
       "status": "supported",
       "confidence": 0.91,
       "reasoning": "Found supporting evidence in sources."
     }
   ],
-  "summary": "2 Claims analysiert, 2 gestützt. Vertrauensniveau: hoch (0.99).",
+  "summary": "2 claims analyzed, 2 supported. Trust level: high (0.99).",
   "processing_time_ms": 42.3,
   "cached": false
 }
@@ -110,40 +110,40 @@ curl -X POST http://localhost:8080/api/v1/verify \
 POST /api/v1/verify/batch
 ```
 
-**Beschreibung**: Parallelisierte Verifikation mehrerer Texte.
+**Description**: Parallelized verification of multiple texts.
 
-**Request‑Schema**
+**Request Schema**
 
-| Feld | Typ | Pflicht | Beschreibung |
+| Field | Type | Required | Description |
 |------|-----|---------|--------------|
-| `texts` | array | ✅ | Liste von Texten (max. 50) |
-| `strategy` | string | ❌ | Verifikationsstrategie (optional) |
-| `use_cache` | boolean | ❌ | Cache‑Nutzung |
+| `texts` | array | ✅ | List of texts (max. 50) |
+| `strategy` | string | ❌ | Verification strategy (optional) |
+| `use_cache` | boolean | ❌ | Cache usage |
 
-**Hinweis**: Max. 50 Texte pro Anfrage.
+**Note**: Max. 50 texts per request.
 
 ---
 
 ### 3) Health
 
-| Endpoint | Zweck |
+| Endpoint | Purpose |
 |----------|------|
-| `GET /health` | Basic Health (Alias für Liveness) |
-| `GET /health/live` | Liveness‑Probe |
-| `GET /health/ready` | Readiness‑Probe inkl. Dependency‑Status |
+| `GET /health` | Basic health (alias for liveness) |
+| `GET /health/live` | Liveness probe |
+| `GET /health/ready` | Readiness probe including dependency status |
 
 ---
 
-## 🧠 Verifikationsstrategien
+## 🧠 Verification Strategies
 
-| Strategie | Charakteristik | Empfohlen für |
+| Strategy | Characteristics | Recommended for |
 |-----------|----------------|--------------|
-| `mcp_enhanced` | Lokale Quellen + MCP‑Quellen (z. B. Wikipedia/Context7) | Höchste Evidenzabdeckung |
-| `hybrid` | Graph + Vektor parallel | Schnelle lokale Verifikation |
-| `cascading` | Graph zuerst, Vektor fallback | Präzision vor Recall |
-| `graph_exact` | Neo4j‑exact matching | Entity‑Konsistenz |
-| `vector_semantic` | Qdrant‑Semantik | Inhaltliche Ähnlichkeit |
-| `adaptive` | Stufenweises Retrieval mit Early‑Exit | Balanciert Speed & Coverage |
+| `mcp_enhanced` | Local sources + MCP sources (e.g., Wikipedia/Context7) | Highest evidence coverage |
+| `hybrid` | Parallel graph + vector search | Fast local verification |
+| `cascading` | Graph first, vector fallback | Precision over recall |
+| `graph_exact` | Neo4j exact matching | Entity consistency |
+| `vector_semantic` | Qdrant semantics | Content similarity |
+| `adaptive` | Tiered retrieval with early-exit | Balances speed & coverage |
 
 ---
 
@@ -200,31 +200,31 @@ Fehler werden als strukturierte JSON‑Antwort geliefert:
 
 ---
 
-## 🔬 Reproduzierbarkeit
+## 🔬 Reproducibility
 
-Für wissenschaftliche Reproduzierbarkeit sollten Sie:
+For scientific reproducibility, you should:
 
-1. Strategien und Quellen konfigurativ fixieren.
-2. Versionsstände der Wissensquellen dokumentieren.
-3. Requests und Antworten versionieren und archivieren.
+1. Fix strategies and sources via configuration.
+2. Document version states of knowledge sources.
+3. Version and archive requests and responses.
 
 ---
 
-## 🧭 Knowledge Track (Provenienz)
+## 🧭 Knowledge Track (Provenance)
 
-Zusätzliche Endpunkte liefern Provenienz und Quellenlisten für Claims:
+Additional endpoints provide provenance and source lists for claims:
 
-- `GET /api/v1/knowledge-track/{claim_id}` – vollständiger Knowledge Track inkl. Mesh
-- `HEAD /api/v1/knowledge-track/{claim_id}` – Existenzprüfung
-- `GET /api/v1/knowledge-track/sources/available` – verfügbare MCP‑Quellen
+- `GET /api/v1/knowledge-track/{claim_id}` – full knowledge track including mesh
+- `HEAD /api/v1/knowledge-track/{claim_id}` – existence check
+- `GET /api/v1/knowledge-track/sources/available` – available MCP sources
 
-Parameter:
+Parameters:
 - `depth` (1–5)
 - `generate_detail` (bool, default: true)
 
 ---
 
-## 🔗 Weitere Dokumente
+## 🔗 Further Documents
 
 - [docs/FRONTEND.md](FRONTEND.md)
 - [docs/CONTRIBUTING.md](CONTRIBUTING.md)

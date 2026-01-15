@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 """
-OHI Benchmark Suite
-===================
+OHI Benchmark Suite (Legacy Entry)
+=================================
 
 Research-grade benchmark for evaluating hallucination detection performance
 of the Open Hallucination Index (OHI) API against VectorRAG and GraphRAG systems.
 
-This is the main entry point for backward compatibility. The implementation
-has been refactored into the `benchmark` package for better maintainability.
+This module is a legacy entry point that re-exports the public API and delegates
+CLI execution to the `benchmark` package.
 
 Usage:
-    python benchmark_suite.py [OPTIONS]
     python -m benchmark [OPTIONS]
+    python -m benchmark.legacy_entry [OPTIONS]
 
 For detailed options, run:
-    python benchmark_suite.py --help
+    python -m benchmark --help
 
 Examples:
-    python benchmark_suite.py
-    python benchmark_suite.py --strategies vector_semantic,mcp_enhanced
-    python benchmark_suite.py --threshold 0.6 --concurrency 5
+    python -m benchmark
+    python -m benchmark --strategies vector_semantic,mcp_enhanced
+    python -m benchmark --threshold 0.6 --concurrency 5
 
 Author: OHI Team
 Version: 2.0.0
@@ -67,7 +67,7 @@ __all__ = [
 
 # Re-export core components for backward compatibility
 # These are intentionally re-exported for public API
-from benchmark import (
+from benchmark import (  # isort: skip
     OHIBenchmarkRunner,
     BenchmarkConfig,
     get_config,

@@ -60,7 +60,7 @@ class BenchmarkConfig:
     api_port: str = DEFAULT_API_PORT
 
     # Dataset
-    dataset_path: Path = field(default_factory=lambda: Path("benchmark_dataset.csv"))
+    dataset_path: Path = field(default_factory=lambda: Path("benchmark/benchmark_dataset.csv"))
     output_dir: Path = field(default_factory=lambda: Path("benchmark_results"))
 
     # Benchmark Parameters
@@ -137,7 +137,7 @@ def get_config() -> BenchmarkConfig:
     return BenchmarkConfig(
         api_host=os.getenv("OHI_API_HOST", DEFAULT_API_HOST),
         api_port=os.getenv("OHI_API_PORT", DEFAULT_API_PORT),
-        dataset_path=Path(os.getenv("BENCHMARK_DATASET", "benchmark_dataset.csv")),
+        dataset_path=Path(os.getenv("BENCHMARK_DATASET", "benchmark/benchmark_dataset.csv")),
         output_dir=Path(os.getenv("BENCHMARK_OUTPUT_DIR", "benchmark_results")),
         concurrency=int(os.getenv("BENCHMARK_CONCURRENCY", str(DEFAULT_CONCURRENCY))),
         threshold=float(os.getenv("BENCHMARK_THRESHOLD", str(DEFAULT_THRESHOLD))),
