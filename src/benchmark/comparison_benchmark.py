@@ -34,7 +34,33 @@ from benchmark.comparison_runner import ComparisonBenchmarkRunner, run_compariso
 
 def setup_logging(verbose: bool = False) -> None:
     """Configure logging with Rich handler."""
-    level = logging.DEBUG if verbose else logging.INFO
+    # Default to WARNING to keep console clean for live display
+    level = logging.DEBUG if verbose else logging.ERROR
+    
+    # Suppress external libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("neo4j").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("datasets").setLevel(logging.ERROR)
+    logging.getLogger("transformers").setLevel(logging.ERROR)
+    logging.getLogger("filelock").setLevel(logging.ERROR)
+    logging.getLogger("fsspec").setLevel(logging.ERROR)
+    
+    # Configure HuggingFace libraries to be quiet
+    try:
+        import datasets
+        datasets.disable_progress_bar()
+        datasets.logging.set_verbosity_error()
+    except ImportError:
+        pass
+
+    try:
+        import transformers
+        transformers.logging.set_verbosity_error()
+    except ImportError:
+        pass
+    
     logging.basicConfig(
         level=level,
         format="%(message)s",
