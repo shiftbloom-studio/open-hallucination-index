@@ -204,22 +204,23 @@ DOMAIN_TOOLS: dict[ClaimDomain, list[str]] = {
         "search_wikipedia",
     ],
     ClaimDomain.NEWS: [
-        "search_gdelt",
         "search_wikipedia",
+        "search_wikidata",
     ],
     ClaimDomain.TECHNICAL: [
-        "search_vulnerabilities",
+        "resolve-library-id",
+        "query-docs",
         "search_wikipedia",
         "search_wikidata",
     ],
     ClaimDomain.ECONOMIC: [
-        "get_world_bank_indicator",
         "search_wikipedia",
         "search_wikidata",
+        "search_openalex",
     ],
     ClaimDomain.SECURITY: [
-        "search_vulnerabilities",
-        "get_vulnerability",
+        "resolve-library-id",
+        "query-docs",
         "search_wikipedia",
     ],
     ClaimDomain.GENERAL: [

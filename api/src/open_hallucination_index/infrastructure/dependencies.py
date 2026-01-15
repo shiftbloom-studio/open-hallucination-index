@@ -26,13 +26,18 @@ from open_hallucination_index.adapters.outbound.llm_openai import OpenAILLMAdapt
 from open_hallucination_index.adapters.outbound.mcp_context7 import Context7MCPAdapter
 from open_hallucination_index.adapters.outbound.mcp_ohi import OHIMCPAdapter
 from open_hallucination_index.adapters.outbound.mcp_wikipedia import WikipediaMCPAdapter
+from open_hallucination_index.adapters.outbound.trace_redis import RedisTraceAdapter
 from open_hallucination_index.adapters.outbound.vector_qdrant import QdrantVectorAdapter
+from open_hallucination_index.application.knowledge_track_service import (
+    KnowledgeTrackService,
+)
 from open_hallucination_index.application.verify_text import VerifyTextUseCase
 from open_hallucination_index.domain.services.claim_decomposer import LLMClaimDecomposer
 from open_hallucination_index.domain.services.evidence_collector import (
     AdaptiveEvidenceCollector,
 )
 from open_hallucination_index.domain.services.mcp_selector import SmartMCPSelector
+from open_hallucination_index.domain.services.mesh_builder import KnowledgeMeshBuilder
 from open_hallucination_index.domain.services.scorer import WeightedScorer
 from open_hallucination_index.domain.services.verification_oracle import (
     HybridVerificationOracle,
@@ -64,10 +69,12 @@ _embedding_adapter: LocalEmbeddingAdapter | None = None
 _graph_store: GraphKnowledgeStore | None = None
 _vector_store: VectorKnowledgeStore | None = None
 _cache_provider: CacheProvider | None = None
+_trace_store: RedisTraceAdapter | None = None
 _claim_decomposer: ClaimDecomposer | None = None
 _verification_oracle: VerificationOracle | None = None
 _scorer: Scorer | None = None
 _verify_use_case: VerifyTextUseCase | None = None
+_knowledge_track_service: KnowledgeTrackService | None = None
 _mcp_sources: list[MCPKnowledgeSource] = []
 
 
@@ -99,7 +106,7 @@ async def _initialize_adapters() -> None:
     """
     global _llm_provider, _embedding_adapter, _graph_store, _vector_store, _cache_provider
     global _claim_decomposer, _verification_oracle, _scorer, _verify_use_case
-    global _mcp_sources
+    global _mcp_sources, _trace_store, _knowledge_track_service
 
     settings = get_settings()
 
@@ -138,8 +145,14 @@ async def _initialize_adapters() -> None:
         _cache_provider = RedisCacheAdapter(settings.redis)
         await _cache_provider.connect()
         logger.info(f"Cache connected: {settings.redis.host}:{settings.redis.port}")
+
+        # Initialize Redis trace store (for knowledge-track endpoint)
+        _trace_store = RedisTraceAdapter(settings.redis)
+        await _trace_store.connect()
+        logger.info("Trace store connected (12h TTL for knowledge-track)")
     else:
         _cache_provider = None
+        _trace_store = None
         logger.info("Cache disabled")
 
     # Initialize MCP sources (Wikipedia, Context7)
@@ -263,8 +276,28 @@ async def _initialize_adapters() -> None:
         oracle=_verification_oracle,
         scorer=_scorer,
         cache=_cache_provider,
+        trace_store=_trace_store,  # Enable knowledge-track recording
     )
-    logger.info("VerifyTextUseCase initialized - DI container ready")
+    logger.info("VerifyTextUseCase initialized")
+
+    # Initialize KnowledgeTrackService for provenance tracking
+    if _trace_store is not None:
+        mesh_builder = KnowledgeMeshBuilder(
+            trace_store=_trace_store,
+            graph_store=_graph_store,
+            vector_store=_vector_store,
+        )
+        _knowledge_track_service = KnowledgeTrackService(
+            trace_store=_trace_store,
+            mesh_builder=mesh_builder,
+            llm_provider=_llm_provider,
+        )
+        logger.info("KnowledgeTrackService initialized")
+    else:
+        _knowledge_track_service = None
+        logger.info("KnowledgeTrackService disabled (Redis not available)")
+
+    logger.info("DI container ready")
 
 
 async def _cleanup_adapters() -> None:
@@ -277,6 +310,7 @@ async def _cleanup_adapters() -> None:
     import asyncio
 
     global _llm_provider, _graph_store, _vector_store, _cache_provider, _mcp_sources
+    global _trace_store, _knowledge_track_service
 
     logger.info("Starting adapter cleanup...")
 
@@ -293,6 +327,22 @@ async def _cleanup_adapters() -> None:
         except Exception as e:
             logger.warning(f"MCP source disconnect failed: {e}")
     _mcp_sources = []
+
+    # Clear knowledge track service
+    _knowledge_track_service = None
+
+    # Disconnect trace store
+    if _trace_store is not None:
+        try:
+            await asyncio.shield(asyncio.wait_for(_trace_store.disconnect(), timeout=5.0))
+            logger.debug("Disconnected trace store")
+        except TimeoutError:
+            logger.warning("Trace store disconnect timed out")
+        except asyncio.CancelledError:
+            logger.warning("Trace store disconnect cancelled")
+        except Exception as e:
+            logger.warning(f"Trace store disconnect failed: {e}")
+        _trace_store = None
 
     # Disconnect cache provider
     if _cache_provider is not None:
@@ -394,3 +444,20 @@ async def get_verify_use_case() -> VerifyTextUseCase:
     if _verify_use_case is None:
         raise RuntimeError("VerifyTextUseCase not initialized. Check adapter configuration.")
     return _verify_use_case
+
+
+async def get_knowledge_track_service() -> KnowledgeTrackService:
+    """Dependency: Get the knowledge track service instance."""
+    if _knowledge_track_service is None:
+        raise RuntimeError(
+            "KnowledgeTrackService not initialized. "
+            "Ensure Redis is enabled for knowledge-track functionality."
+        )
+    return _knowledge_track_service
+
+
+async def get_trace_store() -> RedisTraceAdapter:
+    """Dependency: Get the trace store instance."""
+    if _trace_store is None:
+        raise RuntimeError("Trace store not initialized. Check Redis configuration.")
+    return _trace_store

@@ -92,6 +92,34 @@ class OpenAILLMAdapter(LLMProvider):
         )
         self._model = settings.model
 
+    def _format_messages_for_mistral(
+        self, messages: list[LLMMessage]
+    ) -> list[dict[str, str]]:
+        """
+        Format messages for Mistral-Instruct models.
+
+        Mistral-Instruct models require strict user/assistant alternation.
+        System messages are prepended to the first user message.
+        """
+        formatted: list[dict[str, str]] = []
+        system_content: list[str] = []
+
+        for msg in messages:
+            if msg.role == "system":
+                system_content.append(msg.content)
+            elif msg.role == "user":
+                content = msg.content
+                if system_content:
+                    # Prepend system instructions to first user message
+                    prefix = "\n\n".join(system_content)
+                    content = f"[INST] {prefix}\n\n{content} [/INST]"
+                    system_content.clear()
+                formatted.append({"role": "user", "content": content})
+            else:  # assistant
+                formatted.append({"role": msg.role, "content": msg.content})
+
+        return formatted
+
     @property
     def model_name(self) -> str:
         """Return the configured model name."""
@@ -122,7 +150,9 @@ class OpenAILLMAdapter(LLMProvider):
             LLMProviderError: If inference fails.
         """
         try:
-            formatted_messages = [{"role": m.role, "content": m.content} for m in messages]
+            # Mistral-Instruct models don't support system messages natively.
+            # We merge system messages into the first user message.
+            formatted_messages = self._format_messages_for_mistral(messages)
 
             response_format = {"type": "json_object"} if json_mode else None
 
@@ -181,7 +211,7 @@ class OpenAILLMAdapter(LLMProvider):
             Token strings as they're generated.
         """
         try:
-            formatted_messages = [{"role": m.role, "content": m.content} for m in messages]
+            formatted_messages = self._format_messages_for_mistral(messages)
 
             stream = await self._client.chat.completions.create(
                 model=self._model,

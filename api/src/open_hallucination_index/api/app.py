@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse, Response
 from fastapi.security import APIKeyHeader
 
-from open_hallucination_index.api.routes import health, verification
+from open_hallucination_index.api.routes import health, knowledge_track, verification
 from open_hallucination_index.infrastructure.config import get_settings
 from open_hallucination_index.infrastructure.dependencies import lifespan_manager
 
@@ -82,6 +82,12 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
         prefix="/api/v1",
         tags=["Verification"],
         dependencies=[Depends(verify_api_key)],  # Require API key for verification
+    )
+    app.include_router(
+        knowledge_track.router,
+        prefix="/api/v1",
+        tags=["Knowledge Track"],
+        dependencies=[Depends(verify_api_key)],  # Require API key for knowledge-track
     )
 
     @app.get("/openapi.yaml", include_in_schema=False)

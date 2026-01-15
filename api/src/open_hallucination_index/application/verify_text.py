@@ -27,8 +27,10 @@ from open_hallucination_index.domain.results import (
 )
 
 if TYPE_CHECKING:
+    from open_hallucination_index.domain.knowledge_track import TraceData
     from open_hallucination_index.ports.cache import CacheProvider
     from open_hallucination_index.ports.claim_decomposer import ClaimDecomposer
+    from open_hallucination_index.ports.knowledge_tracker import KnowledgeTracker
     from open_hallucination_index.ports.scorer import Scorer
     from open_hallucination_index.ports.verification_oracle import (
         VerificationOracle,
@@ -57,6 +59,7 @@ class VerifyTextUseCase:
         oracle: VerificationOracle,
         scorer: Scorer,
         cache: CacheProvider | None = None,
+        trace_store: KnowledgeTracker | None = None,
     ) -> None:
         """
         Initialize the use-case with required ports.
@@ -66,11 +69,13 @@ class VerifyTextUseCase:
             oracle: Claim verification service.
             scorer: Trust score computation service.
             cache: Optional result cache.
+            trace_store: Optional trace storage for knowledge-track.
         """
         self._decomposer = decomposer
         self._oracle = oracle
         self._scorer = scorer
         self._cache = cache
+        self._trace_store = trace_store
 
     async def execute(
         self,
@@ -131,12 +136,14 @@ class VerifyTextUseCase:
         # Step 3: Verify each claim (skip cached claims)
         claims_to_verify: list = []
         results_by_claim_id: dict = {}
+        cached_claim_ids: set = set()
 
         for claim, claim_hash in zip(claims, claim_hashes, strict=True):
             cached = cached_claims.get(claim_hash)
             if cached is not None:
                 trace = cached.trace.model_copy(update={"claim_id": claim.id})
                 results_by_claim_id[claim.id] = (cached.status, trace)
+                cached_claim_ids.add(claim.id)
             else:
                 claims_to_verify.append(claim)
 
@@ -219,7 +226,141 @@ class VerifyTextUseCase:
             if claim_cache_entries:
                 await self._cache.set_claims_batch(claim_cache_entries)
 
+        # Step 9: Record traces for knowledge-track (12h TTL)
+        if self._trace_store is not None:
+            asyncio.create_task(
+                self._record_traces(claim_verifications, processing_time, cached_claim_ids)
+            )
+
         return result
+
+    async def _record_traces(
+        self,
+        verifications: list[ClaimVerification],
+        total_time_ms: float,
+        cached_claim_ids: set,
+    ) -> None:
+        """Record traces for all verified claims."""
+        from open_hallucination_index.domain.knowledge_track import TraceData
+
+        if self._trace_store is None:
+            return
+
+        traces = []
+        for v in verifications:
+            supporting = [ev.model_dump(mode="json") for ev in v.trace.supporting_evidence]
+            refuting = [ev.model_dump(mode="json") for ev in v.trace.refuting_evidence]
+            evidence_sources = self._extract_sources_from_evidence(
+                v.trace.supporting_evidence + v.trace.refuting_evidence
+            )
+            contributed_sources = self._extract_sources_from_evidence(
+                v.trace.supporting_evidence + v.trace.refuting_evidence,
+                include_local=True,
+            )
+
+            if v.claim.id in cached_claim_ids:
+                evidence_sources.add("redis")
+                contributed_sources.add("redis")
+
+            mcp_calls = self._build_mcp_calls(
+                v.trace.supporting_evidence, "supporting"
+            ) + self._build_mcp_calls(v.trace.refuting_evidence, "refuting")
+
+            trace = TraceData(
+                claim_id=v.claim.id,
+                claim_text=v.claim.text,
+                verification_status=v.status.value,
+                verification_confidence=v.trace.confidence,
+                verification_strategy=v.trace.verification_strategy,
+                supporting_evidence=supporting,
+                refuting_evidence=refuting,
+                mcp_calls=mcp_calls,
+                sources_queried=sorted(evidence_sources),
+                sources_contributed=sorted(contributed_sources),
+                query_times_ms={},
+                total_time_ms=total_time_ms,
+                reasoning=v.trace.reasoning,
+            )
+            traces.append(trace)
+
+        if traces:
+            await self._trace_store.record_traces_batch(traces)
+
+    def _extract_sources_from_evidence(
+        self,
+        evidence_list: list,
+        *,
+        include_local: bool = False,
+    ) -> set[str]:
+        sources: set[str] = set()
+        for ev in evidence_list:
+            source_name = self._normalize_source_name(ev)
+            if source_name:
+                sources.add(source_name)
+
+            structured = ev.structured_data or {}
+            aliases = structured.get("source_aliases")
+            if isinstance(aliases, list):
+                for alias in aliases:
+                    if isinstance(alias, str) and alias:
+                        sources.add(alias.lower().replace("-", "_"))
+
+            if include_local:
+                local_source = self._map_local_source(ev)
+                if local_source:
+                    sources.add(local_source)
+
+        return sources
+
+    def _normalize_source_name(self, evidence) -> str | None:
+        structured = evidence.structured_data or {}
+        mcp_source = structured.get("mcp_source") or structured.get("original_source")
+        if isinstance(mcp_source, str) and mcp_source:
+            return mcp_source.lower().replace("-", "_")
+
+        if evidence.source.value == "mcp_wikipedia":
+            return "wikipedia"
+        if evidence.source.value == "mcp_context7":
+            return "context7"
+        if evidence.source.value == "pubmed":
+            return "pubmed"
+
+        return None
+
+    def _map_local_source(self, evidence) -> str | None:
+        if evidence.source.value in {"graph_exact", "graph_inferred"}:
+            return "neo4j"
+        if evidence.source.value == "vector_semantic":
+            return "qdrant"
+        if evidence.source.value == "cached":
+            return "redis"
+        return None
+
+    def _build_mcp_calls(
+        self,
+        evidence_list: list,
+        evidence_type: str,
+    ) -> list[dict]:
+        calls: list[dict] = []
+        for ev in evidence_list:
+            source_name = self._normalize_source_name(ev)
+            if not source_name:
+                source_name = self._map_local_source(ev) or "unknown"
+
+            structured = ev.structured_data or {}
+            calls.append(
+                {
+                    "source": source_name,
+                    "tool": structured.get("tool"),
+                    "content": ev.content,
+                    "url": ev.source_uri,
+                    "confidence": ev.similarity_score,
+                    "match_type": ev.match_type,
+                    "evidence_type": evidence_type,
+                }
+            )
+
+        return calls
 
     def _compute_hash(self, text: str) -> str:
         """Compute deterministic hash of input text."""

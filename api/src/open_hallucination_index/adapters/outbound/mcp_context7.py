@@ -380,6 +380,7 @@ class Context7MCPAdapter(MCPKnowledgeSource):
                                 "library_id": library_id,
                                 "library_name": library_name,
                                 "topic": topic,
+                                "mcp_source": "context7",
                             },
                             similarity_score=0.9,  # High confidence for docs
                             match_type="mcp_docs",

@@ -155,7 +155,7 @@ API_API_KEY=your-secret-api-key
 
 # LLM Configuration
 LLM_BASE_URL=http://your-llm-service:8000/v1
-LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
+LLM_MODEL=mistralai/Mistral-7B-Instruct-v0.2
 LLM_API_KEY=your-llm-api-key
 
 # Neo4j Graph Database

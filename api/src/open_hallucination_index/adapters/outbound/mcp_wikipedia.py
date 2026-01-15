@@ -86,25 +86,35 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
         try:
             # Initialize session pool for persistent connections
             if self._use_pool:
-                self._pool = MCPSessionPool(
-                    source_name="Wikipedia",
-                    mcp_url=self._mcp_url,
-                    transport_type=MCPTransportType.SSE,
-                    config=PoolConfig(
-                        min_sessions=1,
-                        max_sessions=3,
-                        session_ttl_seconds=300.0,  # 5 minutes
-                        idle_timeout_seconds=60.0,  # 1 minute
-                        health_check_interval_seconds=30.0,
-                    ),
-                )
-                await self._pool.initialize()
+                try:
+                    self._pool = MCPSessionPool(
+                        source_name="Wikipedia",
+                        mcp_url=self._mcp_url,
+                        transport_type=MCPTransportType.SSE,
+                        config=PoolConfig(
+                            min_sessions=1,
+                            max_sessions=3,
+                            session_ttl_seconds=300.0,  # 5 minutes
+                            idle_timeout_seconds=60.0,  # 1 minute
+                            health_check_interval_seconds=30.0,
+                        ),
+                    )
+                    await self._pool.initialize()
 
-                # Get tools from pooled session
-                async with self._pool.acquire() as session:
-                    tools = await session.list_tools()
-                    self._tools = [t.name for t in tools.tools]
-            else:
+                    # Get tools from pooled session
+                    async with self._pool.acquire() as session:
+                        tools = await session.list_tools()
+                        self._tools = [t.name for t in tools.tools]
+                except Exception as e:
+                    logger.warning(
+                        f"Wikipedia MCP pool initialization failed: {e}. Falling back to per-request sessions."
+                    )
+                    if self._pool:
+                        await self._pool.shutdown()
+                    self._pool = None
+                    self._use_pool = False
+
+            if not self._use_pool:
                 # Fallback to per-request sessions
                 async with self._session_fallback() as session:
                     tools = await session.list_tools()
@@ -269,6 +279,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
                                 structured_data={
                                     "title": title,
                                     "query": query,
+                                    "mcp_source": "wikipedia",
                                 },
                                 similarity_score=0.85,  # Base confidence
                                 match_type="mcp_search",

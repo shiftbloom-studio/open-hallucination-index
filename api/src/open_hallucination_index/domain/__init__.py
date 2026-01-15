@@ -12,6 +12,16 @@ from open_hallucination_index.domain.entities import (
     Evidence,
     EvidenceSource,
 )
+from open_hallucination_index.domain.knowledge_track import (
+    EdgeType,
+    KnowledgeEdge,
+    KnowledgeMesh,
+    KnowledgeNode,
+    KnowledgeTrackResult,
+    NodeType,
+    SourceReference,
+    TraceData,
+)
 from open_hallucination_index.domain.results import (
     CitationTrace,
     ClaimVerification,
@@ -26,6 +36,15 @@ __all__ = [
     "ClaimType",
     "Evidence",
     "EvidenceSource",
+    # Knowledge Track
+    "EdgeType",
+    "KnowledgeEdge",
+    "KnowledgeMesh",
+    "KnowledgeNode",
+    "KnowledgeTrackResult",
+    "NodeType",
+    "SourceReference",
+    "TraceData",
     # Results
     "CitationTrace",
     "ClaimVerification",
