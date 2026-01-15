@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class DBpediaAdapter(SPARQLKnowledgeSource):
     """
     Adapter for DBpedia SPARQL queries.
-    
+
     DBpedia extracts structured content from Wikipedia,
     providing a semantic layer over Wikipedia articles.
     """
@@ -59,6 +59,7 @@ class DBpediaAdapter(SPARQLKnowledgeSource):
             from open_hallucination_index.adapters.outbound.knowledge_sources.base import (
                 HTTPKnowledgeSourceError,
             )
+
             raise HTTPKnowledgeSourceError("Client not connected")
 
         response = await self._client.get(
@@ -76,11 +77,11 @@ class DBpediaAdapter(SPARQLKnowledgeSource):
         """Find DBpedia evidence for a claim."""
         if not self._available:
             return []
-        
+
         evidences: list[Evidence] = []
         search_term = claim.subject or claim.text[:100]
         search_term = self._sanitize_for_sparql(search_term)
-        
+
         try:
             # Search for resources with matching labels
             query = f"""
@@ -97,40 +98,42 @@ class DBpediaAdapter(SPARQLKnowledgeSource):
             }}
             LIMIT 3
             """
-            
+
             result = await self._execute_sparql(query, "/sparql")
-            
+
             for binding in result.get("results", {}).get("bindings", []):
                 resource = binding.get("resource", {}).get("value", "")
                 label = binding.get("label", {}).get("value", "")
                 abstract = binding.get("abstract", {}).get("value", "")
-                
+
                 if not resource or not abstract:
                     continue
-                
+
                 # Get additional properties
                 props = await self._get_resource_properties(resource)
-                
+
                 content = f"{label}\n\n{abstract[:1500]}"
                 if props:
                     content += f"\n\nRelated facts:\n{self._format_properties(props)}"
-                
+
                 resource_id = resource.split("/")[-1]
-                evidences.append(self._create_evidence(
-                    content=content,
-                    source_id=f"dbpedia:{resource_id}",
-                    source_uri=resource,
-                    similarity_score=0.82,
-                    structured_data={
-                        "resource": resource,
-                        "label": label,
-                        "properties": props[:10] if props else [],
-                    },
-                ))
-            
+                evidences.append(
+                    self._create_evidence(
+                        content=content,
+                        source_id=f"dbpedia:{resource_id}",
+                        source_uri=resource,
+                        similarity_score=0.82,
+                        structured_data={
+                            "resource": resource,
+                            "label": label,
+                            "properties": props[:10] if props else [],
+                        },
+                    )
+                )
+
             logger.debug(f"Found {len(evidences)} DBpedia evidences for claim")
             return evidences
-            
+
         except Exception as e:
             logger.warning(f"DBpedia search failed: {e}")
             return []
@@ -139,9 +142,9 @@ class DBpediaAdapter(SPARQLKnowledgeSource):
         """Search DBpedia resources."""
         if not self._available:
             return []
-        
+
         query_safe = self._sanitize_for_sparql(query)
-        
+
         try:
             sparql = f"""
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -153,17 +156,19 @@ class DBpediaAdapter(SPARQLKnowledgeSource):
             }}
             LIMIT {limit}
             """
-            
+
             result = await self._execute_sparql(sparql, "/sparql")
-            
+
             results = []
             for binding in result.get("results", {}).get("bindings", []):
-                results.append({
-                    "resource": binding.get("resource", {}).get("value", ""),
-                    "label": binding.get("label", {}).get("value", ""),
-                })
+                results.append(
+                    {
+                        "resource": binding.get("resource", {}).get("value", ""),
+                        "label": binding.get("label", {}).get("value", ""),
+                    }
+                )
             return results
-            
+
         except Exception as e:
             logger.warning(f"DBpedia search failed: {e}")
             return []
@@ -184,7 +189,7 @@ class DBpediaAdapter(SPARQLKnowledgeSource):
         }}
         LIMIT {limit}
         """
-        
+
         try:
             result = await self._execute_sparql(query, "/sparql")
             props = []
@@ -209,5 +214,5 @@ class DBpediaAdapter(SPARQLKnowledgeSource):
         # Escape quotes and backslashes
         text = text.replace("\\", "\\\\").replace('"', '\\"')
         # Remove other problematic characters
-        text = re.sub(r'[^\w\s\-\.\,]', '', text)
+        text = re.sub(r"[^\w\s\-\.\,]", "", text)
         return text.strip()[:200]

@@ -29,7 +29,8 @@ STATUS_WEIGHTS = {
     VerificationStatus.SUPPORTED: 1.0,
     VerificationStatus.PARTIALLY_SUPPORTED: 0.85,  # Mostly trustworthy
     VerificationStatus.UNCERTAIN: 0.50,  # True uncertainty
-    VerificationStatus.UNVERIFIABLE: 0.60,  # Neutral - no evidence either way, slight benefit of doubt
+    # Neutral - no evidence either way, slight benefit of doubt
+    VerificationStatus.UNVERIFIABLE: 0.60,
     VerificationStatus.REFUTED: 0.0,
 }
 
@@ -93,15 +94,9 @@ class WeightedScorer(Scorer):
 
         # Count by status
         total = len(verifications)
-        supported = sum(
-            1 for v in verifications if v.status == VerificationStatus.SUPPORTED
-        )
-        refuted = sum(
-            1 for v in verifications if v.status == VerificationStatus.REFUTED
-        )
-        unverifiable = sum(
-            1 for v in verifications if v.status == VerificationStatus.UNVERIFIABLE
-        )
+        supported = sum(1 for v in verifications if v.status == VerificationStatus.SUPPORTED)
+        refuted = sum(1 for v in verifications if v.status == VerificationStatus.REFUTED)
+        unverifiable = sum(1 for v in verifications if v.status == VerificationStatus.UNVERIFIABLE)
 
         # Compute weighted score
         weighted_sum = 0.0
@@ -119,10 +114,7 @@ class WeightedScorer(Scorer):
             weight_sum += weight
 
         # Calculate overall score
-        if weight_sum > 0:
-            overall = weighted_sum / weight_sum
-        else:
-            overall = 0.5  # No confidence = uncertain
+        overall = weighted_sum / weight_sum if weight_sum > 0 else 0.5
 
         # Clamp to [0, 1]
         overall = max(0.0, min(1.0, overall))
@@ -130,10 +122,8 @@ class WeightedScorer(Scorer):
         # Meta-confidence: how confident are we in this score?
         # Higher if more claims, more verified (not unverifiable)
         verified_ratio = (total - unverifiable) / total if total > 0 else 0
-        avg_confidence = (
-            sum(v.trace.confidence for v in verifications) / total if total > 0 else 0
-        )
-        meta_confidence = (verified_ratio * 0.5 + avg_confidence * 0.5)
+        avg_confidence = sum(v.trace.confidence for v in verifications) / total if total > 0 else 0
+        meta_confidence = verified_ratio * 0.5 + avg_confidence * 0.5
 
         return TrustScore(
             overall=round(overall, 4),
@@ -156,7 +146,7 @@ class WeightedScorer(Scorer):
         - Base weight from verification status (SUPPORTED=1.0, PARTIALLY_SUPPORTED=0.85, etc.)
         - Light adjustment based on claim extraction confidence
         - Light adjustment based on verification trace confidence
-        
+
         The formula is designed to NOT over-penalize:
         - Uses additive blending instead of pure multiplication
         - High confidence evidence gets full weight
@@ -219,15 +209,9 @@ class StrictScorer(Scorer):
             )
 
         total = len(verifications)
-        supported = sum(
-            1 for v in verifications if v.status == VerificationStatus.SUPPORTED
-        )
-        refuted = sum(
-            1 for v in verifications if v.status == VerificationStatus.REFUTED
-        )
-        unverifiable = sum(
-            1 for v in verifications if v.status == VerificationStatus.UNVERIFIABLE
-        )
+        supported = sum(1 for v in verifications if v.status == VerificationStatus.SUPPORTED)
+        refuted = sum(1 for v in verifications if v.status == VerificationStatus.REFUTED)
+        unverifiable = sum(1 for v in verifications if v.status == VerificationStatus.UNVERIFIABLE)
 
         # Any refuted claim = max 0.3 trust
         if refuted > 0:
@@ -237,10 +221,7 @@ class StrictScorer(Scorer):
         else:
             # Score based on supported ratio
             verified = total - unverifiable
-            if verified > 0:
-                overall = supported / verified
-            else:
-                overall = 0.5
+            overall = supported / verified if verified > 0 else 0.5
 
         avg_confidence = sum(v.trace.confidence for v in verifications) / total
 

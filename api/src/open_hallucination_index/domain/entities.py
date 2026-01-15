@@ -8,7 +8,7 @@ These are immutable value objects with no infrastructure dependencies.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum, auto
 from typing import Any
 from uuid import UUID, uuid4
@@ -54,9 +54,7 @@ class Claim(BaseModel):
     confidence: float = Field(
         default=1.0, ge=0.0, le=1.0, description="Decomposer's confidence in extraction"
     )
-    normalized_form: str | None = Field(
-        default=None, description="Canonicalized form for matching"
-    )
+    normalized_form: str | None = Field(default=None, description="Canonicalized form for matching")
 
     model_config = {"frozen": True}
 
@@ -71,7 +69,7 @@ class EvidenceSource(StrEnum):
     CACHED = auto()  # Retrieved from semantic cache
     MCP_WIKIPEDIA = auto()  # Wikipedia via MCP server
     MCP_CONTEXT7 = auto()  # Context7 documentation via MCP server
-    
+
     # Unified OHI MCP Server sources
     WIKIPEDIA = auto()  # Wikipedia/Wikidata/DBpedia
     KNOWLEDGE_GRAPH = auto()  # Generic knowledge graph
@@ -112,9 +110,7 @@ class Evidence(BaseModel):
     )
 
     # Provenance
-    retrieved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    source_uri: str | None = Field(
-        default=None, description="URI/IRI of source document or entity"
-    )
+    retrieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    source_uri: str | None = Field(default=None, description="URI/IRI of source document or entity")
 
     model_config = {"frozen": True}

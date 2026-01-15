@@ -155,9 +155,7 @@ class OHIMCPAdapter(MCPKnowledgeSource):
                         self._tools = [t.name for t in tools.tools]
                         logger.info(f"Available tools ({len(self._tools)}): {self._tools}")
                 except Exception as e:
-                    logger.warning(
-                        f"Could not list tools on startup (pool may be warming up): {e}"
-                    )
+                    logger.warning(f"Could not list tools on startup (pool may be warming up): {e}")
                     # Set default tools - they'll be refreshed on first use
                     self._tools = []
             else:
@@ -285,6 +283,7 @@ class OHIMCPAdapter(MCPKnowledgeSource):
             if isinstance(content, TextContent):
                 try:
                     import json
+
                     data = json.loads(content.text)
                     if isinstance(data, dict) and "results" in data:
                         results.extend(data["results"])
@@ -370,7 +369,7 @@ class OHIMCPAdapter(MCPKnowledgeSource):
                 evidence_list = []
                 for result in results[:max_results]:
                     source = TOOL_TO_SOURCE.get(tool_name, EvidenceSource.KNOWLEDGE_GRAPH)
-                    
+
                     evidence = Evidence(
                         id=uuid4(),
                         source=source,
@@ -411,9 +410,7 @@ class OHIMCPAdapter(MCPKnowledgeSource):
 
         try:
             async with self._session() as session:
-                results = await self._call_tool(
-                    session, "get_wikipedia_summary", {"title": title}
-                )
+                results = await self._call_tool(session, "get_wikipedia_summary", {"title": title})
 
                 if results:
                     result = results[0]
@@ -447,9 +444,7 @@ class OHIMCPAdapter(MCPKnowledgeSource):
 
         try:
             async with self._session() as session:
-                results = await self._call_tool(
-                    session, "get_doi_metadata", {"doi": doi}
-                )
+                results = await self._call_tool(session, "get_doi_metadata", {"doi": doi})
 
                 if results:
                     result = results[0]
@@ -468,9 +463,7 @@ class OHIMCPAdapter(MCPKnowledgeSource):
             logger.warning(f"Failed to get DOI metadata for '{doi}': {e}")
             return None
 
-    async def search_pubmed(
-        self, query: str, *, max_results: int = 10
-    ) -> list[Evidence]:
+    async def search_pubmed(self, query: str, *, max_results: int = 10) -> list[Evidence]:
         """
         Search PubMed for medical/scientific literature.
 
@@ -507,9 +500,7 @@ class OHIMCPAdapter(MCPKnowledgeSource):
             logger.warning(f"PubMed search failed: {e}")
             return []
 
-    async def search_clinical_trials(
-        self, query: str, *, max_results: int = 10
-    ) -> list[Evidence]:
+    async def search_clinical_trials(self, query: str, *, max_results: int = 10) -> list[Evidence]:
         """
         Search ClinicalTrials.gov for clinical studies.
 
@@ -548,9 +539,7 @@ class OHIMCPAdapter(MCPKnowledgeSource):
             logger.warning(f"ClinicalTrials search failed: {e}")
             return []
 
-    async def search_news(
-        self, query: str, *, max_results: int = 10
-    ) -> list[Evidence]:
+    async def search_news(self, query: str, *, max_results: int = 10) -> list[Evidence]:
         """
         Search GDELT for global news.
 
@@ -587,9 +576,7 @@ class OHIMCPAdapter(MCPKnowledgeSource):
             logger.warning(f"GDELT news search failed: {e}")
             return []
 
-    async def get_economic_indicator(
-        self, indicator: str, country: str = "all"
-    ) -> list[Evidence]:
+    async def get_economic_indicator(self, indicator: str, country: str = "all") -> list[Evidence]:
         """
         Get World Bank economic indicators.
 
@@ -650,9 +637,7 @@ class OHIMCPAdapter(MCPKnowledgeSource):
                 if ecosystem:
                     args["ecosystem"] = ecosystem
 
-                results = await self._call_tool(
-                    session, "search_vulnerabilities", args
-                )
+                results = await self._call_tool(session, "search_vulnerabilities", args)
 
                 return [
                     Evidence(

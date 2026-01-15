@@ -8,12 +8,12 @@ Creates and configures the FastAPI application with routers and middleware.
 from __future__ import annotations
 
 import secrets
+
 import yaml
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import ORJSONResponse, Response
 from fastapi.security import APIKeyHeader
-from fastapi.responses import ORJSONResponse
 
 from open_hallucination_index.api.routes import health, verification
 from open_hallucination_index.infrastructure.config import get_settings
@@ -26,11 +26,11 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 async def verify_api_key(api_key: str | None = Depends(api_key_header)):
     """Verify API key if authentication is enabled."""
     settings = get_settings()
-    
+
     # If no API key configured, skip auth
     if not settings.api.api_key:
         return True
-    
+
     # Check API key
     if not api_key or not secrets.compare_digest(api_key, settings.api.api_key):
         raise HTTPException(
@@ -78,8 +78,8 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
     # Include routers
     app.include_router(health.router, prefix="/health", tags=["Health"])
     app.include_router(
-        verification.router, 
-        prefix="/api/v1", 
+        verification.router,
+        prefix="/api/v1",
         tags=["Verification"],
         dependencies=[Depends(verify_api_key)],  # Require API key for verification
     )

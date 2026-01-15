@@ -5,7 +5,7 @@ Integration Tests for API Endpoints
 Tests the API endpoints using FastAPI TestClient.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -13,13 +13,12 @@ from fastapi.testclient import TestClient
 
 from open_hallucination_index.domain.entities import Claim, ClaimType
 from open_hallucination_index.domain.results import (
-    ClaimVerification,
     CitationTrace,
+    ClaimVerification,
     TrustScore,
     VerificationResult,
     VerificationStatus,
 )
-
 
 # Skip if dependencies not installed
 pytest.importorskip("fastapi")

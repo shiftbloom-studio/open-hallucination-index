@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class ClinicalTrialsAdapter(HTTPKnowledgeSource):
     """
     Adapter for ClinicalTrials.gov v2 API.
-    
+
     Provides access to clinical trial registrations,
     protocols, and results.
     """
@@ -62,72 +62,74 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
         """Find clinical trial evidence for a claim."""
         if not self._available:
             return []
-        
+
         evidences: list[Evidence] = []
         search_term = claim.subject or claim.text[:100]
-        
+
         try:
             studies = await self._search_studies(search_term, limit=5)
-            
+
             for study in studies:
                 protocol = study.get("protocolSection", {})
                 id_module = protocol.get("identificationModule", {})
                 status_module = protocol.get("statusModule", {})
                 desc_module = protocol.get("descriptionModule", {})
-                
+
                 nct_id = id_module.get("nctId", "")
                 title = id_module.get("briefTitle", "")
-                
+
                 if not title:
                     continue
-                
+
                 content = f"{title}"
-                
+
                 # Add study status
                 status = status_module.get("overallStatus", "")
                 if status:
                     content += f"\n\nStatus: {status}"
-                
+
                 # Add brief summary
                 brief_summary = desc_module.get("briefSummary", "")
                 if brief_summary:
                     content += f"\n\nSummary: {brief_summary[:600]}"
-                
+
                 # Add conditions
                 conditions_module = protocol.get("conditionsModule", {})
                 conditions = conditions_module.get("conditions", [])
                 if conditions:
                     content += f"\n\nConditions: {', '.join(conditions[:5])}"
-                
+
                 # Add interventions
                 arms_module = protocol.get("armsInterventionsModule", {})
                 interventions = arms_module.get("interventions", [])
                 if interventions:
                     intervention_names = [i.get("name", "") for i in interventions[:3]]
                     content += f"\nInterventions: {', '.join(intervention_names)}"
-                
+
                 # Add dates
                 start_date = status_module.get("startDateStruct", {}).get("date", "")
                 if start_date:
                     content += f"\n\nStart Date: {start_date}"
-                
-                evidences.append(self._create_evidence(
-                    content=content,
-                    source_id=f"clinicaltrials:{nct_id}",
-                    source_uri=f"https://clinicaltrials.gov/study/{nct_id}",
-                    similarity_score=0.85,
-                    structured_data={
-                        "nctId": nct_id,
-                        "title": title,
-                        "status": status,
-                        "conditions": conditions[:5],
-                        "phase": status_module.get("phases", []),
-                    },
-                ))
-            
+
+                evidences.append(
+                    self._create_evidence(
+                        content=content,
+                        source_id=f"clinicaltrials:{nct_id}",
+                        source_uri=f"https://clinicaltrials.gov/study/{nct_id}",
+                        similarity_score=0.85,
+                        structured_data={
+                            "nctId": nct_id,
+                            "title": title,
+                            "status": status,
+                            "conditions": conditions[:5],
+                            "phase": status_module.get("phases", []),
+                        },
+                    )
+                )
+
             logger.debug(f"Found {len(evidences)} ClinicalTrials evidences")
             return evidences
-            
+
         except Exception as e:
             logger.warning(f"ClinicalTrials search failed: {e}")
             return []
@@ -138,9 +140,7 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
             return []
         return await self._search_studies(query, limit)
 
-    async def _search_studies(
-        self, query: str, limit: int = 5
-    ) -> list[dict[str, Any]]:
+    async def _search_studies(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for clinical studies."""
         try:
             response = await self._client.get(
@@ -168,9 +168,7 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
         except Exception:
             return None
 
-    async def search_by_condition(
-        self, condition: str, limit: int = 10
-    ) -> list[dict[str, Any]]:
+    async def search_by_condition(self, condition: str, limit: int = 10) -> list[dict[str, Any]]:
         """Search studies by medical condition."""
         try:
             response = await self._client.get(

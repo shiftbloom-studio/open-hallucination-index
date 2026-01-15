@@ -174,7 +174,7 @@ class TestHybridVerificationOracle:
         results = await oracle.verify_claims(claims)
 
         assert len(results) == 2
-        for status, trace in results:
+        for status, _trace in results:
             assert status == VerificationStatus.UNVERIFIABLE
 
     @pytest.mark.asyncio

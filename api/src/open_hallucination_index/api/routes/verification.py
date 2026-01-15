@@ -13,7 +13,7 @@ from itertools import count
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from open_hallucination_index.application.verify_text import VerifyTextUseCase
@@ -54,8 +54,7 @@ def _format_text_preview(text: str, max_len: int = 160) -> str:
 
 def _count_evidence(result: VerificationResult) -> int:
     return sum(
-        len(verification.trace.supporting_evidence)
-        + len(verification.trace.refuting_evidence)
+        len(verification.trace.supporting_evidence) + len(verification.trace.refuting_evidence)
         for verification in result.claim_verifications
     )
 
@@ -80,14 +79,17 @@ class VerifyTextRequest(BaseModel):
         max_length=10_000,
         description="Optional context to help with claim disambiguation.",
     )
-    strategy: Literal[
-        "graph_exact",
-        "vector_semantic",
-        "hybrid",
-        "cascading",
-        "mcp_enhanced",
-        "adaptive",
-    ] | None = Field(
+    strategy: (
+        Literal[
+            "graph_exact",
+            "vector_semantic",
+            "hybrid",
+            "cascading",
+            "mcp_enhanced",
+            "adaptive",
+        ]
+        | None
+    ) = Field(
         default=None,
         description="Verification strategy. Defaults to configured strategy if not specified.",
     )
@@ -133,14 +135,17 @@ class BatchVerifyRequest(BaseModel):
         max_length=50,
         description="List of texts to verify (max 50).",
     )
-    strategy: Literal[
-        "graph_exact",
-        "vector_semantic",
-        "hybrid",
-        "cascading",
-        "mcp_enhanced",
-        "adaptive",
-    ] | None = None
+    strategy: (
+        Literal[
+            "graph_exact",
+            "vector_semantic",
+            "hybrid",
+            "cascading",
+            "mcp_enhanced",
+            "adaptive",
+        ]
+        | None
+    ) = None
     use_cache: bool = True
 
 
@@ -188,9 +193,9 @@ async def verify_text(
         strategy = VerificationStrategy(request.strategy)
 
     audit_logger.info(
-        f"[REQUEST] ID: {request_seq} - UserID: \"{user_id or 'unknown'}\" - "
-        f"Mode: \"{_format_mode(request.target_sources)}\" - "
-        f"Text: \"{_format_text_preview(request.text)}\""
+        f'[REQUEST] ID: {request_seq} - UserID: "{user_id or "unknown"}" - '
+        f'Mode: "{_format_mode(request.target_sources)}" - '
+        f'Text: "{_format_text_preview(request.text)}"'
     )
 
     logger.info(
@@ -214,9 +219,7 @@ async def verify_text(
             target_sources=request.target_sources,
         )
     except Exception as e:
-        audit_logger.warning(
-            f"[OUTPUT] ID: {request_seq} - RESULT: ERROR - SOURCES: 0"
-        )
+        audit_logger.warning(f"[OUTPUT] ID: {request_seq} - RESULT: ERROR - SOURCES: 0")
         logger.error(
             "Verify request failed",
             extra={
