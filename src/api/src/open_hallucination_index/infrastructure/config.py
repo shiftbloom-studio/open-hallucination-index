@@ -144,7 +144,7 @@ class VerificationSettings(BaseSettings):
         description="Verification strategy. 'adaptive' uses intelligent tiered collection.",
     )
     max_claims_per_request: int = Field(default=100, ge=1)
-    similarity_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    similarity_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     graph_max_hops: int = Field(default=2, ge=1)
     enable_caching: bool = Field(default=True)
     persist_mcp_evidence: bool = Field(
@@ -158,12 +158,12 @@ class VerificationSettings(BaseSettings):
 
     # === Adaptive Evidence Collection Settings ===
     min_evidence_count: int = Field(
-        default=3,
+        default=2,
         ge=1,
         description="Minimum evidence pieces before early exit",
     )
     min_weighted_value: float = Field(
-        default=2.0,
+        default=1.5,
         ge=0.0,
         description="Minimum quality-weighted value for sufficiency",
     )
@@ -173,19 +173,19 @@ class VerificationSettings(BaseSettings):
         description="High-confidence evidence count for early exit",
     )
 
-    # === Timeout Settings (milliseconds) ===
+    # === Timeout Settings (milliseconds) - INCREASED for MCP sources ===
     local_timeout_ms: float = Field(
-        default=50.0,
+        default=2000.0,
         ge=10.0,
-        description="Timeout for local sources (Neo4j + Qdrant)",
+        description="Timeout for local sources (Neo4j + Qdrant) - needs ~500ms for complex queries",
     )
     mcp_timeout_ms: float = Field(
-        default=500.0,
+        default=10000.0,
         ge=100.0,
-        description="Timeout for MCP sources per claim",
+        description="Timeout for MCP sources per claim - MCP can take 5-10s",
     )
     total_timeout_ms: float = Field(
-        default=2000.0,
+        default=15000.0,
         ge=500.0,
         description="Total timeout for all evidence collection",
     )

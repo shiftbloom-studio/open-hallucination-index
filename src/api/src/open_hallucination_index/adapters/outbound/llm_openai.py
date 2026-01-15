@@ -181,7 +181,9 @@ class OpenAILLMAdapter(LLMProvider):
             )
 
         except APIConnectionError as e:
-            logger.error(f"LLM connection error: {e}")
+            # Use warning level for connection errors - expected during startup
+            # or when vLLM is temporarily unavailable. Callers handle fallback.
+            logger.warning(f"LLM not available (will use fallback): {e}")
             raise LLMProviderError(f"Failed to connect to LLM: {e}") from e
         except APIStatusError as e:
             logger.error(f"LLM API error: {e.status_code} - {e.message}")

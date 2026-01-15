@@ -77,6 +77,10 @@ class LocalEmbeddingAdapter:
         self._batch_size = settings.batch_size
         self._normalize = settings.normalize
         self._model = None
+        
+        # Eager load the model at startup (not lazy) to avoid 9+ second delay on first request
+        self._load_model()
+        logger.info(f"Embedding model '{self._model_name}' pre-loaded at startup")
 
     def _load_model(self):
         """Lazy load the model."""

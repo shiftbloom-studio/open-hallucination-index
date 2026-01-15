@@ -100,6 +100,14 @@ services:
       --disable-log-requests
     networks:
       - ohi-net
+    # vLLM takes 30-60s to load models - health check ensures API waits
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
 
   # 5. OHI MCP Server - Unified Knowledge Sources
   ohi-mcp-server:
@@ -166,8 +174,11 @@ services:
 
       # Qdrant with local embedding size (384 for all-MiniLM-L12-v2)
       QDRANT_HOST: "qdrant"
-      # QDRANT_COLLECTION_NAME: "wikipedia_hybrid"  # Disabled - data was lost, using default
+      QDRANT_COLLECTION: "wikipedia_hybrid"
       QDRANT_VECTOR_SIZE: "384"
+      
+      # Redis cache - disabled for testing
+      REDIS_ENABLED: "false"
       REDIS_HOST: "redis"
 
       # MCP Server configuration
@@ -179,18 +190,35 @@ services:
       MCP_OHI_ENABLED: "true"
       MCP_OHI_URL: "http://ohi-mcp-server:8080"
 
-      # Verification settings
-      VERIFY_DEFAULT_STRATEGY: "mcp_enhanced"
+      # Verification settings - ADAPTIVE uses local sources FIRST, then MCP
+      VERIFY_DEFAULT_STRATEGY: "adaptive"
       VERIFY_PERSIST_MCP_EVIDENCE: "true"
+      VERIFY_PERSIST_TO_VECTOR: "true"
+      # Timeout settings - INCREASED significantly for MCP sources
+      VERIFY_LOCAL_TIMEOUT_MS: "2000.0"
+      VERIFY_MCP_TIMEOUT_MS: "10000.0"
+      VERIFY_TOTAL_TIMEOUT_MS: "15000.0"
+      # Evidence thresholds
+      VERIFY_MIN_EVIDENCE_COUNT: "2"
+      VERIFY_MIN_WEIGHTED_VALUE: "1.5"
+      VERIFY_SIMILARITY_THRESHOLD: "0.5"
+      # MCP source selection
+      VERIFY_MAX_MCP_SOURCES_PER_CLAIM: "6"
+      
       NVIDIA_VISIBLE_DEVICES: "all"
       NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
 
     depends_on:
-      - neo4j
-      - qdrant
-      - redis
-      - vllm
-      - ohi-mcp-server
+      neo4j:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_started
+      vllm:
+        condition: service_healthy
+      ohi-mcp-server:
+        condition: service_healthy
     runtime: nvidia
     gpus: all
     networks:

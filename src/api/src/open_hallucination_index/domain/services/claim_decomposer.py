@@ -145,7 +145,8 @@ class LLMClaimDecomposer(ClaimDecomposer):
             return claims[:limit]
 
         except Exception as e:
-            logger.error(f"Claim decomposition failed: {e}. Falling back to single-claim mode.")
+            # Use warning level - fallback mode works fine, this is expected during startup
+            logger.warning(f"Claim decomposition unavailable: {e}. Using single-claim fallback.")
             # Fallback: Treat the whole text as one unclassified claim
             # This ensures robustness even if LLM is down
             return [

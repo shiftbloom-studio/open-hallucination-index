@@ -80,25 +80,23 @@ async def test_ohi_evaluator():
 
 
 async def test_vector_rag_evaluator():
-    """Test VectorRAG evaluator."""
-    console.print("\n[bold cyan]Testing VectorRAG Evaluator[/bold cyan]")
+    """Test VectorRAG evaluator (Fair mode - uses public Wikipedia API)."""
+    console.print("\n[bold cyan]Testing VectorRAG Evaluator (Fair Mode - Wikipedia API)[/bold cyan]")
     
     try:
         from benchmark.comparison_config import ComparisonBenchmarkConfig
-        from benchmark.evaluators import VectorRAGEvaluator
+        from benchmark.evaluators import FairVectorRAGEvaluator
         
         config = ComparisonBenchmarkConfig.from_env()
-        config.vector_rag.qdrant_host = "qdrant"  # Docker service name
-        config.vector_rag.collection_name = "wikipedia_hybrid"  # Correct collection name
         
-        evaluator = VectorRAGEvaluator(config)
+        evaluator = FairVectorRAGEvaluator(config)
         
         # Health check
         is_healthy = await evaluator.health_check()
         console.print(f"  Health check: {'✅ Passed' if is_healthy else '❌ Failed'}")
         
         if not is_healthy:
-            console.print("  [yellow]Qdrant not available, skipping tests[/yellow]")
+            console.print("  [yellow]Wikipedia API not available, skipping tests[/yellow]")
             await evaluator.close()
             return None
         

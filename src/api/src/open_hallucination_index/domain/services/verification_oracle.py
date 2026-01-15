@@ -636,6 +636,7 @@ Only output valid JSON, no other text."""
                     messages=messages,
                     max_tokens=512,
                     temperature=0.1,  # Low temperature for consistent classification
+                    json_mode=True,
                 )
 
                 # Parse the LLM response
@@ -677,19 +678,39 @@ Only output valid JSON, no other text."""
     def _parse_classification_response(self, response: str) -> list[dict]:
         """Parse the LLM classification response."""
         try:
-            # Try to extract JSON from the response
             # Handle cases where LLM might wrap JSON in markdown code blocks
             json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", response)
             if json_match:
                 response = json_match.group(1)
 
-            # Try to find JSON object in the response
-            json_start = response.find("{")
-            json_end = response.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                json_str = response[json_start:json_end]
+            response = response.strip()
+
+            # Fast path: full JSON object or array
+            if response.startswith("{") or response.startswith("["):
+                data = json.loads(response)
+                if isinstance(data, list):
+                    return data
+                if isinstance(data, dict):
+                    classifications = data.get("classifications", [])
+                    return classifications if isinstance(classifications, list) else []
+
+            # Try to find JSON object or array inside the response
+            object_match = re.search(r"\{[\s\S]*\}", response)
+            array_match = re.search(r"\[[\s\S]*\]", response)
+            json_str = None
+            if object_match:
+                json_str = object_match.group(0)
+            elif array_match:
+                json_str = array_match.group(0)
+
+            if json_str:
                 data = json.loads(json_str)
-                return data.get("classifications", [])
+                if isinstance(data, list):
+                    return data
+                if isinstance(data, dict):
+                    classifications = data.get("classifications", [])
+                    return classifications if isinstance(classifications, list) else []
+
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(f"Failed to parse LLM classification response: {e}")
 

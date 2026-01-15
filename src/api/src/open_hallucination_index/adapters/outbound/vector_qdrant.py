@@ -372,7 +372,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
         self,
         claim: Claim,
         top_k: int = 5,
-        min_similarity: float = 0.7,
+        min_similarity: float = 0.5,
     ) -> list[Evidence]:
         """
         Find semantically similar evidence for a claim.
@@ -385,7 +385,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
         Args:
             claim: The claim to verify.
             top_k: Maximum number of results.
-            min_similarity: Minimum similarity threshold.
+            min_similarity: Minimum similarity threshold (lowered to 0.5 for better recall).
 
         Returns:
             List of semantically similar evidence.
@@ -504,10 +504,11 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 **{k: v for k, v in fact.items() if k not in ["content", "id"]},
             }
 
+            # Use named vector "dense" for wikipedia_hybrid collection
             points.append(
                 PointStruct(
                     id=point_id if isinstance(point_id, int) else hash(point_id) % (2**63),
-                    vector=embedding,
+                    vector={"dense": embedding},  # Named vector for hybrid collection
                     payload=payload,
                 )
             )
@@ -571,7 +572,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
     async def count_similar(
         self,
         text: str,
-        min_similarity: float = 0.7,
+        min_similarity: float = 0.5,
     ) -> int:
         """
         Fast count of similar vectors without retrieving full content.
@@ -580,7 +581,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
 
         Args:
             text: Text to find similar content for.
-            min_similarity: Minimum similarity threshold.
+            min_similarity: Minimum similarity threshold (lowered for better recall).
 
         Returns:
             Count of similar items.

@@ -41,7 +41,7 @@ class VectorQuery:
     sparse_indices: list[int] | None = None  # Sparse vector indices (BM25)
     sparse_values: list[float] | None = None  # Sparse vector values (BM25)
     top_k: int = 5
-    min_similarity: float = 0.7
+    min_similarity: float = 0.5  # Lowered for better evidence recall
     filter_metadata: dict[str, Any] | None = None
     # Extended filters matching Wikipedia ingestion metadata
     infobox_types: list[str] | None = None  # Filter by entity types
@@ -184,7 +184,7 @@ class VectorKnowledgeStore(KnowledgeStore):
         self,
         claim: Claim,
         top_k: int = 5,
-        min_similarity: float = 0.7,
+        min_similarity: float = 0.5,
     ) -> list[Evidence]:
         """
         Find vector evidence supporting or refuting a claim.
@@ -192,7 +192,7 @@ class VectorKnowledgeStore(KnowledgeStore):
         Args:
             claim: The claim to verify.
             top_k: Maximum number of results.
-            min_similarity: Minimum similarity threshold.
+            min_similarity: Minimum similarity threshold (lowered to 0.5 for better recall).
 
         Returns:
             List of semantically similar evidence.
