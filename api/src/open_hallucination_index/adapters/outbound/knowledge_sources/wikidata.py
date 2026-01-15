@@ -179,11 +179,11 @@ class WikidataAdapter(SPARQLKnowledgeSource):
         """Search for Wikidata entities by text."""
         # Use Wikidata's search API via MediaWiki Action API
         # This is more efficient than SPARQL for text search
-        search_url = getattr(self, "_wikidata_api_url", "https://www.wikidata.org/w/api.php")
+        search_url = self._wikidata_api_url
         
         # Use a separate request to wikidata.org API
         async with httpx.AsyncClient(
-            timeout=getattr(self, "timeout", 10.0)
+            timeout=self.timeout
         ) as client:
             response = await client.get(
                 search_url,
