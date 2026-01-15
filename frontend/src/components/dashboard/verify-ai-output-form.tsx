@@ -235,24 +235,21 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
         </CardContent>
       </Card>
 
-      {verificationResult && (
-        <>
-          {(() => {
-            const trustScore = extractTrustScore(verificationResult);
-            return (
-              <Card className="border-none bg-gradient-to-br from-slate-900/50 to-slate-800/50 backdrop-blur-md shadow-xl">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BadgeCheck className="h-6 w-6 text-primary" />
-                    Verification Results
-                  </CardTitle>
-                  <CardDescription>
-                    Processed in {verificationResult.processing_time_ms.toFixed(0)}ms
-                    {verificationResult.cached && " (cached)"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-            {/* Trust Score */}
+      {verificationResult && (() => {
+        const trustScore = extractTrustScore(verificationResult);
+        return (
+          <Card className="border-none bg-gradient-to-br from-slate-900/50 to-slate-800/50 backdrop-blur-md shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BadgeCheck className="h-6 w-6 text-primary" />
+                Verification Results
+              </CardTitle>
+              <CardDescription>
+                Processed in {verificationResult.processing_time_ms.toFixed(0)}ms
+                {verificationResult.cached && " (cached)"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">{/* Trust Score */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
                 <p className="text-sm text-muted-foreground mb-1">Trust Score</p>
@@ -328,10 +325,8 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
             </div>
           </CardContent>
         </Card>
-      );
-    })()}
-        </>
-      )}
+        );
+      })()}
     </div>
   );
 }
