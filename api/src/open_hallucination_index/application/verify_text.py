@@ -84,6 +84,7 @@ class VerifyTextUseCase:
         use_cache: bool = True,
         context: str | None = None,
         target_sources: int | None = None,
+        skip_decomposition: bool = False,
     ) -> VerificationResult:
         """
         Execute the full verification pipeline.
@@ -116,7 +117,21 @@ class VerifyTextUseCase:
                 )
 
         # Step 2: Decompose text into claims
-        if context:
+        if skip_decomposition:
+            from open_hallucination_index.domain.entities import Claim, ClaimType
+
+            claims = [
+                Claim(
+                    text=text.strip(),
+                    claim_type=ClaimType.UNCLASSIFIED,
+                    subject="Unknown",
+                    predicate="is",
+                    object="Unknown",
+                    confidence=0.5,
+                    context=context,
+                )
+            ]
+        elif context:
             claims = await self._decomposer.decompose_with_context(text, context)
         else:
             claims = await self._decomposer.decompose(text)

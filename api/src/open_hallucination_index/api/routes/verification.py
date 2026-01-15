@@ -104,6 +104,10 @@ class VerifyTextRequest(BaseModel):
         le=20,
         description="Preferred number of sources to query during verification.",
     )
+    skip_decomposition: bool = Field(
+        default=False,
+        description="Skip LLM claim decomposition and treat input text as a single claim.",
+    )
 
 
 class ClaimSummary(BaseModel):
@@ -219,6 +223,7 @@ async def verify_text(
             use_cache=request.use_cache,
             context=request.context,
             target_sources=request.target_sources,
+            skip_decomposition=request.skip_decomposition,
         )
     except Exception as e:
         audit_logger.warning(f"[OUTPUT] ID: {request_seq} - RESULT: ERROR - SOURCES: 0")
