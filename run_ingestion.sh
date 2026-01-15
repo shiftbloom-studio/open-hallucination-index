@@ -35,23 +35,29 @@ if [ ! -d ".venv" ]; then
     echo "✅ Virtual environment created."
 fi
 
-if [ -d ".venv" ]; then
-  if [ -f ".venv/Scripts/activate" ]; then
-    source .venv/Scripts/activate
-  elif [ -f ".venv/bin/activate" ]; then
-    source .venv/bin/activate
-  fi
+# Determine Python executable absolute path
+# We use $(pwd) to get absolute path before we cd .. later
+if [ -f "$(pwd)/.venv/Scripts/python.exe" ]; then
+    VENV_PYTHON="$(pwd)/.venv/Scripts/python.exe"
+elif [ -f "$(pwd)/.venv/bin/python" ]; then
+    VENV_PYTHON="$(pwd)/.venv/bin/python"
+else
+    echo "⚠️  Could not find venv python, using system python"
+    VENV_PYTHON="python"
 fi
 
 # Install dependencies if pyproject.toml exists
 if [ -f "pyproject.toml" ]; then
-    # Silence output unless error, but better to show it for first run
     echo "📦 Ensuring dependencies are installed..."
-    pip install .
+    "$VENV_PYTHON" -m pip install .
 fi
 
 # Go up to 'src' directory so python can find the 'ingestion' package
 cd ..
 
+# Add current directory to PYTHONPATH explicitly
+# This ensures that 'import ingestion' works even if pip install didn't fully register it globally
+export PYTHONPATH="${PYTHONPATH:-}:$(pwd)"
+
 echo "🚀 Starting ingestion..."
-python -m src\\ingestion "$@"
+"$VENV_PYTHON" -m ingestion "$@"
