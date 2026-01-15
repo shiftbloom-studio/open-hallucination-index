@@ -130,7 +130,7 @@ class EvidenceQuality:
             # Other
             EvidenceSource.WORLD_BANK: 0.85,
             EvidenceSource.OSV: 0.9,
-            EvidenceSource.EXTERNAL_PERSISTED: 0.7,
+            EvidenceSource.EXTERNAL_API: 0.7,
         }
 
         source_reliability = source_weights.get(evidence.source, 0.5)
@@ -420,7 +420,7 @@ class AdaptiveEvidenceCollector:
         if mcp_sources:
             sources = mcp_sources
         elif self._mcp_selector:
-            selection = self._mcp_selector.select(claim)
+            selection = await self._mcp_selector.select(claim)
             sources = self._mcp_selector.get_sources_for_selection(selection)
         else:
             return [], 0

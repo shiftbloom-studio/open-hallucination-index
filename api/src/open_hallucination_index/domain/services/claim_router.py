@@ -14,12 +14,18 @@ This enables latency-optimized evidence retrieval by:
 from __future__ import annotations
 
 import re
+import json
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from open_hallucination_index.ports.llm_provider import LLMMessage, LLMProvider
 
 if TYPE_CHECKING:
     from open_hallucination_index.domain.entities import Claim
+
+logger = logging.getLogger(__name__)
 
 
 class ClaimDomain(Enum):
@@ -136,8 +142,9 @@ class ClaimRouter:
     3. Recommended sources with priorities
     """
 
-    def __init__(self) -> None:
+    def __init__(self, llm_provider: LLMProvider | None = None) -> None:
         """Initialize the router with compiled patterns."""
+        self._llm_provider = llm_provider
         self._patterns = {
             ClaimDomain.MEDICAL: [re.compile(p, re.IGNORECASE) for p in MEDICAL_PATTERNS],
             ClaimDomain.ACADEMIC: [re.compile(p, re.IGNORECASE) for p in ACADEMIC_PATTERNS],
@@ -273,7 +280,11 @@ class ClaimRouter:
             ),
         }
 
-    def route(self, claim: Claim) -> RoutingDecision:
+    def set_llm_provider(self, provider: LLMProvider) -> None:
+        """Set the LLM provider for intelligent routing."""
+        self._llm_provider = provider
+
+    async def route(self, claim: Claim) -> RoutingDecision:
         """
         Analyze a claim and return routing decision.
 
@@ -283,6 +294,14 @@ class ClaimRouter:
         Returns:
             RoutingDecision with domain, entities, and source recommendations.
         """
+        if self._llm_provider:
+            return await self._route_with_llm(claim)
+        
+        # Fallback to regex-based routing
+        return self._route_with_regex(claim)
+
+    def _route_with_regex(self, claim: Claim) -> RoutingDecision:
+        """Route claim using regex patterns (fallback)."""
         text = claim.text
 
         # Classify domain
@@ -305,6 +324,73 @@ class ClaimRouter:
             keywords=keywords,
             recommendations=recommendations,
         )
+
+    async def _route_with_llm(self, claim: Claim) -> RoutingDecision:
+        """Route claim using LLM analysis."""
+        prompt = f"""Analyze this claim for fact-checking source selection.
+Claim: "{claim.text}"
+
+Context: "{claim.context}" (if available)
+
+Determine the most appropriate domain and extract key search terms.
+Domains:
+- medical: Health, treatments, biology, diseases
+- academic: Scientific research, papers, theories outside medicine
+- news: Recent events (last 5 years), politics, breaking news
+- technical: Software, vulnerabilities (CVE), engineering, libraries
+- economic: Finance, GDP, markets, companies
+- security: Cyber threats, exploits, hacking
+- general: History, geography, general knowledge, pop culture
+
+Return valid JSON only:
+{{
+  "domain": "medical|academic|news|technical|economic|security|general",
+  "confidence": 0.0-1.0,
+  "entities": ["list", "of", "named", "entities"],
+  "keywords": ["list", "of", "search", "keywords"]
+}}
+"""
+        messages = [
+            LLMMessage(role="system", content="You are an expert knowledge graph router. Analyze the claim to select the best knowledge sources."),
+            LLMMessage(role="user", content=prompt)
+        ]
+
+        try:
+            response = await self._llm_provider.complete(messages, temperature=0.0, json_mode=True)
+            content = response.content.strip()
+            # Handle potential markdown code blocks
+            if content.startswith("```json"):
+                content = content[7:-3]
+            elif content.startswith("```"):
+                content = content[3:-3]
+            
+            data = json.loads(content)
+            
+            domain_str = data.get("domain", "general").lower()
+            try:
+                domain = ClaimDomain(domain_str)
+            except ValueError:
+                domain = ClaimDomain.GENERAL
+                
+            confidence = float(data.get("confidence", 0.5))
+            entities = data.get("entities", [])
+            keywords = data.get("keywords", [])
+            
+            # Combine logic
+            recommendations = self._build_recommendations(domain, entities, keywords)
+            
+            return RoutingDecision(
+                claim_id=str(claim.id),
+                domain=domain,
+                confidence=confidence,
+                entities=entities,
+                keywords=keywords,
+                recommendations=recommendations,
+            )
+            
+        except Exception as e:
+            logger.warning(f"LLM routing failed: {e}. Falling back to regex.")
+            return self._route_with_regex(claim)
 
     def _classify_domain(self, text: str) -> tuple[ClaimDomain, float]:
         """Classify claim domain based on pattern matching."""

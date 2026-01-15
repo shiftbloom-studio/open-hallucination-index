@@ -23,7 +23,7 @@ from open_hallucination_index.adapters.outbound.cache_redis import RedisCacheAda
 from open_hallucination_index.adapters.outbound.embeddings_local import LocalEmbeddingAdapter
 from open_hallucination_index.adapters.outbound.graph_neo4j import Neo4jGraphAdapter
 from open_hallucination_index.adapters.outbound.llm_openai import OpenAILLMAdapter
-from open_hallucination_index.adapters.outbound.mcp_ohi import OHIMCPAdapter
+from open_hallucination_index.adapters.outbound.mcp_ohi import OHIMCPAdapter, TargetedOHISource
 from open_hallucination_index.adapters.outbound.trace_redis import RedisTraceAdapter
 from open_hallucination_index.adapters.outbound.vector_qdrant import QdrantVectorAdapter
 from open_hallucination_index.application.knowledge_track_service import (
@@ -158,10 +158,36 @@ async def _initialize_adapters() -> None:
 
     if settings.mcp.ohi_enabled:
         try:
+            # Create main adapter for generic search
             ohi_adapter = OHIMCPAdapter(settings.mcp)
             await ohi_adapter.connect()
             _mcp_sources.append(ohi_adapter)
-            logger.info(f"OHI MCP connected: {settings.mcp.ohi_url}")
+            
+            # Create targeted adapters for specific domains (matching ClaimRouter keys)
+            validation_targets = [
+                ("ohi_wikipedia", "wikipedia"),
+                ("ohi_wikidata", "wikidata"),
+                ("ohi_dbpedia", "dbpedia"),
+                ("ohi_openalex", "openalex"),
+                ("ohi_crossref", "crossref"),
+                ("ohi_europepmc", "europepmc"),
+                ("ohi_pubmed", "pubmed"),
+                ("ohi_clinicaltrials", "clinical_trials"),
+                ("ohi_gdelt", "gdelt"),
+                ("ohi_worldbank", "worldbank"),
+                ("ohi_osv", "osv"),
+                ("context7", "context7"),
+            ]
+            
+            for source_name, search_type in validation_targets:
+                targeted = TargetedOHISource(settings.mcp, search_type, source_name)
+                # Reuse the connection from main adapter (hacky but works if they share nothing but config/url)
+                # Actually they need their own connection or we need to share the client
+                # Standard HTTP adapter creates client in connect()
+                await targeted.connect()
+                _mcp_sources.append(targeted)
+                
+            logger.info(f"OHI MCP connected: {settings.mcp.ohi_url} with {len(validation_targets)} targeted views")
         except Exception as e:
             logger.warning(f"OHI MCP unavailable: {e}")
 
@@ -191,6 +217,7 @@ async def _initialize_adapters() -> None:
         mcp_sources=_mcp_sources,
         max_sources_per_claim=settings.verification.max_mcp_sources_per_claim,
         min_relevance_threshold=settings.verification.min_source_relevance,
+        llm_provider=_llm_provider,
     )
     logger.info("SmartMCPSelector initialized")
 

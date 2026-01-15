@@ -232,11 +232,29 @@ class HTTPMCPAdapter(MCPKnowledgeSource):
         Returns:
             Evidence object.
         """
+        raw_score = result.get("score", result.get("similarity_score", 0.8))
+        try:
+            if isinstance(raw_score, str) and raw_score.endswith("%"):
+                score = float(raw_score.rstrip("%")) / 100.0
+            else:
+                score = float(raw_score)
+        except (TypeError, ValueError):
+            score = 0.8
+
+        # Normalize scores that may be on 0-100 scale or otherwise out of range
+        if score > 1.0:
+            if score <= 100.0:
+                score = score / 100.0
+            else:
+                score = 1.0
+        elif score < 0.0:
+            score = 0.0
+
         return Evidence(
             id=uuid4(),
             source=source,
             content=result.get("content", result.get("title", "")),
-            similarity_score=result.get("score", 0.8),
+            similarity_score=score,
             source_uri=result.get("url"),
             retrieved_at=datetime.now(),
             structured_data={

@@ -438,14 +438,14 @@ class HybridVerificationOracle(VerificationOracle):
             # Get MCP sources to query based on claim domain
             mcp_sources = None
             if self._mcp_selector is not None:
-                selection = (
-                    self._mcp_selector.select(
+                if target_sources is not None:
+                    selection = await self._mcp_selector.select(
                         claim,
                         max_sources_override=target_sources,
                     )
-                    if target_sources is not None
-                    else self._mcp_selector.select(claim)
-                )
+                else:
+                    selection = await self._mcp_selector.select(claim)
+                
                 mcp_sources = self._mcp_selector.get_sources_for_selection(selection)
                 if max_mcp_allowed and len(mcp_sources) > max_mcp_allowed:
                     mcp_sources = mcp_sources[:max_mcp_allowed]

@@ -117,6 +117,25 @@ class OHIMCPAdapter(HTTPMCPAdapter):
         """
         return await self.search_for_evidence(claim, max_results=5, search_type="all")
 
+
+class TargetedOHISource(OHIMCPAdapter):
+    """
+    Targeted adapter for a specific OHI MCP source.
+    Allows routing to specific knowledge domains (e.g. PubMed, Wiki).
+    """
+
+    def __init__(self, settings: MCPSettings, search_type: str, source_name: str) -> None:
+        super().__init__(settings)
+        self._search_type = search_type
+        self._source_name_override = source_name
+
+    @property
+    def source_name(self) -> str:
+        return self._source_name_override
+
+    async def find_evidence(self, claim: Claim) -> list[Evidence]:
+        return await self.search_for_evidence(claim, max_results=5, search_type=self._search_type)
+
     async def search_for_evidence(
         self,
         claim: Claim,
@@ -151,12 +170,17 @@ class OHIMCPAdapter(HTTPMCPAdapter):
             "dbpedia": ("search_dbpedia", {"query": claim.text, "limit": max_results}),
             # Academic cluster
             "academic": ("search_academic", {"query": claim.text, "limit": max_results}),
+            "openalex": ("search_openalex", {"query": claim.text, "limit": max_results}),
+            "crossref": ("search_crossref", {"query": claim.text, "limit": max_results}),
+            "europepmc": ("search_europepmc", {"query": claim.text, "limit": max_results}),
+            # Medical cluster
             "pubmed": ("search_pubmed", {"query": claim.text, "limit": max_results}),
-            "medical": ("search_clinical_trials", {"query": claim.text, "limit": max_results}),
+            "clinical_trials": ("search_clinical_trials", {"query": claim.text, "limit": max_results}),
             # Other sources
-            "news": ("search_gdelt", {"query": claim.text, "limit": max_results}),
-            "economic": ("get_world_bank_indicator", {"indicator": claim.text}),
-            "security": ("search_vulnerabilities", {"query": claim.text}),
+            "gdelt": ("search_gdelt", {"query": claim.text, "limit": max_results}),
+            "worldbank": ("get_world_bank_indicator", {"indicator": claim.text}),
+            "osv": ("search_vulnerabilities", {"query": claim.text}),
+            "context7": ("query-docs", {"query": claim.text, "libraryId": "/general/tech"}), # Placeholder lib ID
         }
 
         tool_name, arguments = tool_map.get(

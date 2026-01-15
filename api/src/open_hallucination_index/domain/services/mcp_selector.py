@@ -21,6 +21,7 @@ from open_hallucination_index.domain.services.claim_router import (
     SourceTier,
     get_claim_router,
 )
+from open_hallucination_index.ports.llm_provider import LLMProvider
 
 if TYPE_CHECKING:
     from open_hallucination_index.domain.entities import Claim
@@ -61,6 +62,7 @@ class SmartMCPSelector:
         mcp_sources: list[MCPKnowledgeSource] | None = None,
         max_sources_per_claim: int = 4,
         min_relevance_threshold: float = 0.5,
+        llm_provider: LLMProvider | None = None,
     ) -> None:
         """
         Initialize the selector.
@@ -69,11 +71,15 @@ class SmartMCPSelector:
             mcp_sources: Available MCP sources.
             max_sources_per_claim: Maximum sources to query per claim.
             min_relevance_threshold: Minimum relevance score to include source.
+            llm_provider: Optional LLM provider for intelligent routing.
         """
         self._mcp_sources = mcp_sources or []
         self._router = get_claim_router()
         self._max_sources = max_sources_per_claim
         self._min_relevance = min_relevance_threshold
+
+        if llm_provider:
+            self._router.set_llm_provider(llm_provider)
 
         # Map source names to MCP source objects
         self._source_map: dict[str, MCPKnowledgeSource] = {}
@@ -85,7 +91,7 @@ class SmartMCPSelector:
         self._mcp_sources = sources
         self._source_map = {s.source_name: s for s in sources}
 
-    def select(self, claim: Claim, *, max_sources_override: int | None = None) -> MCPSelection:
+    async def select(self, claim: Claim, *, max_sources_override: int | None = None) -> MCPSelection:
         """
         Select relevant MCP sources for a claim.
 
@@ -96,7 +102,7 @@ class SmartMCPSelector:
             MCPSelection with selected and skipped sources.
         """
         # Get routing decision from ClaimRouter
-        decision = self._router.route(claim)
+        decision = await self._router.route(claim)
 
         # Filter to MCP sources only (exclude local)
         mcp_recommendations = [
