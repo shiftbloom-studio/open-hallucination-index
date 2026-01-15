@@ -25,11 +25,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import atexit
 import bz2
 import hashlib
 import html
+import json
 import logging
 import math
+import os
 import re
 import signal
 import sys
@@ -38,6 +41,8 @@ from collections import Counter, defaultdict
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin, quote
 from xml.etree.ElementTree import iterparse
 
@@ -623,38 +628,83 @@ class WikiDownloader:
         with requests.get(url, stream=True, timeout=60) as response:
             response.raise_for_status()
 
-            decompressor = bz2.BZ2Decompressor()
+            class MultistreamBZ2Reader:
+                """
+                Reader for multistream bz2 files (like Wikipedia dumps).
+                These files contain multiple concatenated bz2 streams.
+                """
 
-            def stream_reader():
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if shutdown_requested:
-                        break
+                def __init__(self, response):
+                    self.response = response
+                    self.chunk_iter = response.iter_content(chunk_size=256 * 1024)
+                    self.raw_buffer = b""
+                    self.decompressed_buffer = b""
+                    self.decompressor = bz2.BZ2Decompressor()
+                    self.finished = False
+
+                def _refill_raw(self) -> bool:
+                    """Refill raw buffer from network."""
                     try:
-                        yield decompressor.decompress(chunk)
-                    except EOFError:
-                        break
+                        chunk = next(self.chunk_iter)
+                        if chunk:
+                            self.raw_buffer += chunk
+                            return True
+                        return False
+                    except StopIteration:
+                        return False
 
-            class StreamWrapper:
-                """Wrapper to make generator look like file object."""
-
-                def __init__(self, gen):
-                    self.gen = gen
-                    self.buffer = b""
+                def _decompress_available(self) -> None:
+                    """Decompress as much as possible from raw buffer."""
+                    while self.raw_buffer and not shutdown_requested:
+                        try:
+                            # Try to decompress
+                            result = self.decompressor.decompress(self.raw_buffer)
+                            self.decompressed_buffer += result
+                            
+                            if self.decompressor.eof:
+                                # Stream ended, check for more data and create new decompressor
+                                unused = self.decompressor.unused_data
+                                self.raw_buffer = unused
+                                if unused:
+                                    self.decompressor = bz2.BZ2Decompressor()
+                                else:
+                                    break
+                            else:
+                                # Need more input
+                                self.raw_buffer = b""
+                                break
+                        except Exception:
+                            # Invalid data, skip a byte and retry
+                            self.raw_buffer = self.raw_buffer[1:]
+                            if not self.raw_buffer:
+                                break
 
                 def read(self, n: int) -> bytes:
-                    while len(self.buffer) < n:
-                        try:
-                            chunk = next(self.gen)
-                            if not chunk:
-                                break
-                            self.buffer += chunk
-                        except StopIteration:
-                            break
-                    data, self.buffer = self.buffer[:n], self.buffer[n:]
-                    return data
+                    """Read n bytes of decompressed data."""
+                    if shutdown_requested:
+                        return b""
 
-            source = StreamWrapper(stream_reader())
-            context = iterparse(source, events=("end",))
+                    while len(self.decompressed_buffer) < n and not self.finished:
+                        # First try to decompress what we have
+                        self._decompress_available()
+
+                        if len(self.decompressed_buffer) >= n:
+                            break
+
+                        # Need more raw data
+                        if not self._refill_raw():
+                            self.finished = True
+                            break
+
+                        # Decompress the new data
+                        self._decompress_available()
+
+                    result = self.decompressed_buffer[:n]
+                    self.decompressed_buffer = self.decompressed_buffer[n:]
+                    return result
+
+            source = MultistreamBZ2Reader(response)
+            context = iterparse(source, events=("end",))  # type: ignore[arg-type]
 
             for _event, elem in context:
                 if shutdown_requested:
@@ -714,16 +764,20 @@ class QdrantHybridStore:
         host: str,
         port: int,
         collection: str,
-        grpc_port: int = 6334,
-        prefer_grpc: bool = True,
+        grpc_port: int | None = None,
+        prefer_grpc: bool = False,
     ):
-        self.client = QdrantClient(
-            host=host,
-            port=port,
-            grpc_port=grpc_port,
-            prefer_grpc=prefer_grpc,
-            timeout=120,
-        )
+        # Only use gRPC if explicitly provided and prefer_grpc is True
+        client_kwargs: dict[str, Any] = {
+            "host": host,
+            "port": port,
+            "timeout": 120,
+            "prefer_grpc": prefer_grpc and grpc_port is not None,
+        }
+        if grpc_port is not None:
+            client_kwargs["grpc_port"] = grpc_port
+        
+        self.client = QdrantClient(**client_kwargs)
         self.collection = collection
         self.model = SentenceTransformer(DENSE_MODEL)
         self.tokenizer = BM25Tokenizer(vocab_size=50000)
@@ -1044,6 +1098,170 @@ class IngestionStats:
 
 
 # =============================================================================
+# CHECKPOINT MANAGER FOR RESUMABLE INGESTION
+# =============================================================================
+
+
+class CheckpointManager:
+    """
+    Manages checkpoint state for resumable ingestion.
+    
+    Saves progress after each batch so ingestion can be resumed from
+    the last successful batch if interrupted.
+    """
+
+    DEFAULT_CHECKPOINT_FILE = ".ingest_checkpoint.json"
+
+    def __init__(
+        self,
+        checkpoint_file: str | None = None,
+        collection: str = QDRANT_COLLECTION,
+        auto_save: bool = True,
+    ):
+        self.checkpoint_file = Path(checkpoint_file or self.DEFAULT_CHECKPOINT_FILE)
+        self.collection = collection
+        self.auto_save = auto_save
+        
+        # Checkpoint state
+        self.processed_ids: set[int] = set()
+        self.last_article_id: int = 0
+        self.articles_processed: int = 0
+        self.chunks_created: int = 0
+        self.session_start: float = time.time()
+        self.total_elapsed: float = 0.0
+        
+        # Register atexit handler for emergency saves
+        atexit.register(self._emergency_save)
+
+    def _emergency_save(self) -> None:
+        """Save checkpoint on unexpected exit."""
+        if self.processed_ids and shutdown_requested:
+            self.save()
+            logger.info("💾 Emergency checkpoint saved")
+
+    def load(self) -> bool:
+        """
+        Load checkpoint from file if it exists and matches current collection.
+        
+        Returns:
+            True if checkpoint was loaded, False otherwise.
+        """
+        if not self.checkpoint_file.exists():
+            logger.info("📍 No checkpoint found, starting fresh")
+            return False
+
+        try:
+            with open(self.checkpoint_file, encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Verify collection matches
+            if data.get("collection") != self.collection:
+                logger.warning(
+                    f"⚠️  Checkpoint is for different collection "
+                    f"('{data.get('collection')}' vs '{self.collection}'). "
+                    f"Starting fresh."
+                )
+                return False
+
+            self.processed_ids = set(data.get("processed_ids", []))
+            self.last_article_id = data.get("last_article_id", 0)
+            self.articles_processed = data.get("articles_processed", 0)
+            self.chunks_created = data.get("chunks_created", 0)
+            self.total_elapsed = data.get("total_elapsed", 0.0)
+
+            logger.info(
+                f"✅ Checkpoint loaded: {self.articles_processed:,} articles processed, "
+                f"resuming from ID {self.last_article_id}"
+            )
+            return True
+
+        except (json.JSONDecodeError, KeyError, OSError) as e:
+            logger.warning(f"⚠️  Failed to load checkpoint: {e}. Starting fresh.")
+            return False
+
+    def save(self) -> None:
+        """Save current state to checkpoint file."""
+        # Calculate total elapsed time including previous sessions
+        current_session_time = time.time() - self.session_start
+        total_time = self.total_elapsed + current_session_time
+
+        data = {
+            "collection": self.collection,
+            "processed_ids": list(self.processed_ids),
+            "last_article_id": self.last_article_id,
+            "articles_processed": self.articles_processed,
+            "chunks_created": self.chunks_created,
+            "total_elapsed": total_time,
+            "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "version": "2.0",
+        }
+
+        # Write atomically using temp file
+        temp_file = self.checkpoint_file.with_suffix(".tmp")
+        try:
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            
+            # Atomic rename
+            temp_file.replace(self.checkpoint_file)
+            
+        except OSError as e:
+            logger.error(f"❌ Failed to save checkpoint: {e}")
+            if temp_file.exists():
+                temp_file.unlink()
+
+    def should_skip(self, article_id: int) -> bool:
+        """Check if article has already been processed."""
+        return article_id in self.processed_ids
+
+    def record_batch(
+        self,
+        articles: list[Any],
+        chunk_count: int,
+    ) -> None:
+        """
+        Record a successfully processed batch.
+        
+        Args:
+            articles: List of processed WikiArticle objects
+            chunk_count: Number of chunks created from this batch
+        """
+        for article in articles:
+            self.processed_ids.add(article.id)
+            self.last_article_id = max(self.last_article_id, article.id)
+
+        self.articles_processed += len(articles)
+        self.chunks_created += chunk_count
+
+        if self.auto_save:
+            self.save()
+
+    def clear(self) -> None:
+        """Clear checkpoint file (for fresh start)."""
+        if self.checkpoint_file.exists():
+            self.checkpoint_file.unlink()
+            logger.info("🗑️  Checkpoint cleared")
+        
+        self.processed_ids.clear()
+        self.last_article_id = 0
+        self.articles_processed = 0
+        self.chunks_created = 0
+        self.total_elapsed = 0.0
+
+    def get_resume_info(self) -> str:
+        """Get human-readable resume information."""
+        if not self.processed_ids:
+            return "Starting fresh ingestion"
+        
+        elapsed_str = time.strftime("%H:%M:%S", time.gmtime(self.total_elapsed))
+        return (
+            f"Resuming: {self.articles_processed:,} articles already processed, "
+            f"{self.chunks_created:,} chunks created, "
+            f"previous runtime: {elapsed_str}"
+        )
+
+
+# =============================================================================
 # BATCH PROCESSING
 # =============================================================================
 
@@ -1147,7 +1365,41 @@ def main():
         help="Qdrant collection name",
     )
 
+    # Checkpoint settings
+    parser.add_argument(
+        "--checkpoint-file",
+        default=None,
+        help="Checkpoint file path (default: .ingest_checkpoint.json)",
+    )
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Ignore existing checkpoint and start fresh",
+    )
+    parser.add_argument(
+        "--clear-checkpoint",
+        action="store_true",
+        help="Clear existing checkpoint and exit",
+    )
+
     args = parser.parse_args()
+
+    # Initialize checkpoint manager
+    checkpoint = CheckpointManager(
+        checkpoint_file=args.checkpoint_file,
+        collection=args.collection,
+    )
+
+    # Handle --clear-checkpoint
+    if args.clear_checkpoint:
+        checkpoint.clear()
+        logger.info("Checkpoint cleared. Exiting.")
+        return
+
+    # Load checkpoint unless --no-resume
+    if not args.no_resume:
+        checkpoint.load()
+        logger.info(f"📍 {checkpoint.get_resume_info()}")
 
     # Initialize components
     logger.info("🔧 Initializing components...")
@@ -1174,9 +1426,19 @@ def main():
 
     stats = IngestionStats()
     article_batch: list[tuple[WikiArticle, list[ProcessedChunk]]] = []
+    skipped_count = 0
+
+    # Calculate remaining articles if limit is set
+    remaining_limit = None
+    if args.limit:
+        already_done = checkpoint.articles_processed
+        remaining_limit = max(0, args.limit - already_done)
+        if remaining_limit == 0:
+            logger.info("✅ Limit already reached from previous run")
+            return
 
     pbar = tqdm(
-        total=args.limit,
+        total=remaining_limit or args.limit,
         unit="articles",
         desc="Dual Ingest",
         dynamic_ncols=True,
@@ -1188,7 +1450,13 @@ def main():
     try:
         for article in WikiDownloader.stream_articles(url):
             if shutdown_requested:
+                logger.warning("⚠️  Shutdown requested, saving checkpoint...")
                 break
+
+            # Skip already processed articles
+            if checkpoint.should_skip(article.id):
+                skipped_count += 1
+                continue
 
             # 1. Clean and extract all metadata
             (
@@ -1216,27 +1484,56 @@ def main():
 
             # 3. Process batch when full
             if len(article_batch) >= args.batch_size:
+                # Process the batch
                 process_batch(article_batch, qdrant, neo4j, stats, executor)
+                
+                # Record in checkpoint
+                batch_articles = [a for a, _ in article_batch]
+                batch_chunks = sum(len(c) for _, c in article_batch)
+                checkpoint.record_batch(batch_articles, batch_chunks)
+                
                 pbar.update(len(article_batch))
                 article_batch = []
 
-                if args.limit and stats.articles_processed >= args.limit:
+                if remaining_limit and stats.articles_processed >= remaining_limit:
                     logger.info("✅ Limit reached")
                     break
 
         # Process final batch
         if article_batch and not shutdown_requested:
             process_batch(article_batch, qdrant, neo4j, stats, executor)
+            
+            # Record final batch in checkpoint
+            batch_articles = [a for a, _ in article_batch]
+            batch_chunks = sum(len(c) for _, c in article_batch)
+            checkpoint.record_batch(batch_articles, batch_chunks)
+            
             pbar.update(len(article_batch))
 
     except Exception as e:
         logger.error(f"Critical failure: {e}", exc_info=True)
         stats.update(errors=1)
+        # Save checkpoint on error
+        checkpoint.save()
     finally:
         pbar.close()
         executor.shutdown(wait=True)
         neo4j.close()
+        
+        # Final checkpoint save
+        checkpoint.save()
+        
+        # Show summary
         logger.info(stats.summary())
+        
+        if skipped_count > 0:
+            logger.info(f"⏭️  Skipped {skipped_count:,} already-processed articles")
+        
+        if shutdown_requested:
+            logger.info(
+                f"💾 Checkpoint saved. Run again to resume from "
+                f"{checkpoint.articles_processed:,} articles."
+            )
 
 
 if __name__ == "__main__":
