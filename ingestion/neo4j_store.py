@@ -140,7 +140,6 @@ class Neo4jGraphStore:
             # Constraints (also create indexes)
             constraints = [
                 "CREATE CONSTRAINT article_id IF NOT EXISTS FOR (a:Article) REQUIRE a.id IS UNIQUE",
-                "CREATE CONSTRAINT article_title IF NOT EXISTS FOR (a:Article) REQUIRE a.title IS UNIQUE",
                 "CREATE CONSTRAINT category_name IF NOT EXISTS FOR (c:Category) REQUIRE c.name IS UNIQUE",
                 "CREATE CONSTRAINT entity_name IF NOT EXISTS FOR (e:Entity) REQUIRE e.name IS UNIQUE",
                 "CREATE CONSTRAINT location_name IF NOT EXISTS FOR (l:Location) REQUIRE l.name IS UNIQUE",
@@ -180,6 +179,7 @@ class Neo4jGraphStore:
 
             # Regular indexes for common lookups
             indexes = [
+                "CREATE INDEX article_title IF NOT EXISTS FOR (a:Article) ON (a.title)",
                 "CREATE INDEX article_infobox IF NOT EXISTS FOR (a:Article) ON (a.infobox_type)",
                 "CREATE INDEX article_word_count IF NOT EXISTS FOR (a:Article) ON (a.word_count)",
             ]
