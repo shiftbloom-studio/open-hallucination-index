@@ -1094,16 +1094,17 @@ class ChartsReporter(BaseReporter):
         self,
         comparison_report: ComparisonReport,
         prefix: str = "",
+        consolidated: bool = True,
     ) -> list[Path]:
         """
         Generate comparison charts from a ComparisonReport.
         
         This is the main method for multi-evaluator comparison visualization.
-        Creates all comparison chart types.
         
         Args:
             comparison_report: ComparisonReport with all evaluator metrics.
             prefix: Filename prefix.
+            consolidated: If True, generate combined dashboard instead of many individual charts.
             
         Returns:
             List of generated chart file paths.
@@ -1118,6 +1119,14 @@ class ChartsReporter(BaseReporter):
 
         chart_files: list[Path] = []
 
+        # CONSOLIDATED MODE: Single dashboard with all key metrics
+        if consolidated:
+            dashboard = self._create_comparison_dashboard(comparison_report, prefix)
+            if dashboard:
+                chart_files.append(dashboard)
+            return chart_files
+
+        # DETAILED MODE: Individual charts for each visualization
         # 1. RADAR CHART - Multi-metric comparison (dedicated comparison chart)
         c1 = self._create_comparison_radar(comparison_report, prefix)
         if c1:
@@ -1144,6 +1153,186 @@ class ChartsReporter(BaseReporter):
             chart_files.append(c5)
 
         return chart_files
+    
+    def _create_comparison_dashboard(
+        self,
+        comparison_report: ComparisonReport,
+        prefix: str,
+    ) -> Path | None:
+        """
+        Create a consolidated dashboard with all key comparison visualizations.
+        
+        Layout (2x2 grid):
+        - Top-left: Radar chart (multi-metric overview)
+        - Top-right: Grouped bar chart (key metrics)
+        - Bottom-left: Latency boxplot
+        - Bottom-right: Performance heatmap
+        
+        This replaces 5+ individual charts with one comprehensive view.
+        """
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.gridspec import GridSpec
+        except ImportError:
+            return None
+
+        evaluators = comparison_report.evaluators
+        if not evaluators:
+            return None
+
+        with self._mpl_style():
+            fig = plt.figure(figsize=(20, 16))
+            gs = GridSpec(2, 2, figure=fig, hspace=0.3, wspace=0.25)
+
+            # ===== TOP-LEFT: Radar Chart =====
+            ax_radar = fig.add_subplot(gs[0, 0], polar=True)
+            self._draw_radar_on_axis(ax_radar, evaluators)
+
+            # ===== TOP-RIGHT: Grouped Bar Chart =====
+            ax_bar = fig.add_subplot(gs[0, 1])
+            self._draw_grouped_bar_on_axis(ax_bar, evaluators, comparison_report)
+
+            # ===== BOTTOM-LEFT: Latency Boxplot =====
+            ax_latency = fig.add_subplot(gs[1, 0])
+            self._draw_latency_boxplot_on_axis(ax_latency, evaluators)
+
+            # ===== BOTTOM-RIGHT: Performance Heatmap =====
+            ax_heatmap = fig.add_subplot(gs[1, 1])
+            self._draw_heatmap_on_axis(ax_heatmap, evaluators, fig)
+
+            # Main title
+            winner = comparison_report.get_ranking("f1_score")[0] if evaluators else "N/A"
+            fig.suptitle(
+                f"🏆 OHI Benchmark Comparison Dashboard\nWinner: {winner}",
+                fontsize=20, fontweight='bold', y=0.98
+            )
+
+            # Subtitle with run info
+            fig.text(
+                0.5, 0.94,
+                f"Run ID: {comparison_report.run_id} | Evaluators: {len(evaluators)} | Generated: {comparison_report.timestamp[:19]}",
+                ha='center', fontsize=11, color=CHART_COLORS["neutral"]
+            )
+
+            plt.tight_layout(rect=[0, 0.02, 1, 0.92])
+            return self._save_fig(fig, f"{prefix}comparison_dashboard.png")
+    
+    def _draw_radar_on_axis(self, ax, evaluators: dict) -> None:
+        """Draw radar chart on provided axis."""
+        metrics_labels = ["Accuracy", "Precision", "Recall", "F1", "Safety", "TruthfulQA", "FActScore", "Speed"]
+        num_metrics = len(metrics_labels)
+        angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
+        angles += angles[:1]
+
+        for i, (name, m) in enumerate(evaluators.items()):
+            scores = m.get_summary_scores()
+            values = [
+                scores.get("Accuracy", 0), scores.get("Precision", 0),
+                scores.get("Recall", 0), scores.get("F1 Score", 0),
+                scores.get("Safety (1-HPR)", 0), scores.get("TruthfulQA", 0),
+                scores.get("FActScore", 0), scores.get("Speed (1/P95)", 0),
+            ]
+            values += values[:1]
+            color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+            ax.plot(angles, values, 'o-', linewidth=2, label=self._format_strategy_name(name), color=color)
+            ax.fill(angles, values, alpha=0.2, color=color)
+
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(metrics_labels, size=9)
+        ax.set_ylim(0, 1.0)
+        ax.set_title("Multi-Metric Comparison", fontsize=12, pad=10)
+        ax.legend(loc='upper right', bbox_to_anchor=(1.25, 1.0), fontsize=9)
+    
+    def _draw_grouped_bar_on_axis(self, ax, evaluators: dict, comparison_report: ComparisonReport) -> None:
+        """Draw grouped bar chart on provided axis."""
+        metrics = ["Accuracy", "F1", "Safety", "TruthfulQA", "FActScore"]
+        evaluator_names = list(evaluators.keys())
+        x = np.arange(len(metrics))
+        width = 0.8 / max(len(evaluator_names), 1)
+
+        for i, name in enumerate(evaluator_names):
+            m = evaluators[name]
+            scores = m.get_summary_scores()
+            values = [
+                scores.get("Accuracy", 0), scores.get("F1 Score", 0),
+                scores.get("Safety (1-HPR)", 0), scores.get("TruthfulQA", 0),
+                scores.get("FActScore", 0),
+            ]
+            color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+            offset = (i - len(evaluator_names) / 2 + 0.5) * width
+            ax.bar(x + offset, values, width * 0.9, label=self._format_strategy_name(name), color=color)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(metrics, fontsize=10)
+        ax.set_ylim(0, 1.15)
+        ax.set_ylabel("Score", fontsize=10)
+        ax.set_title("Key Metrics Comparison", fontsize=12, pad=10)
+        ax.legend(fontsize=9, loc='upper right')
+    
+    def _draw_latency_boxplot_on_axis(self, ax, evaluators: dict) -> None:
+        """Draw latency boxplot on provided axis."""
+        latencies = []
+        labels = []
+        for name, m in evaluators.items():
+            if m.latency.latencies_ms:
+                latencies.append(m.latency.latencies_ms)
+                labels.append(self._format_strategy_name(name))
+
+        if not latencies:
+            ax.text(0.5, 0.5, "No latency data", ha='center', va='center', transform=ax.transAxes)
+            return
+
+        bp = ax.boxplot(latencies, labels=labels, patch_artist=True, showfliers=True,
+                        flierprops=dict(marker='o', markerfacecolor=CHART_COLORS["danger"], markersize=3, alpha=0.3))
+
+        for i, patch in enumerate(bp["boxes"]):
+            color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+            patch.set_facecolor(color)
+            patch.set_alpha(0.75)
+
+        ax.set_ylabel("Latency (ms)", fontsize=10)
+        ax.set_title("Response Latency Distribution", fontsize=12, pad=10)
+
+        # Annotate P50/P95
+        for i, lat in enumerate(latencies):
+            p50, p95 = np.median(lat), np.percentile(lat, 95)
+            ax.annotate(f"P50:{p50:.0f}ms P95:{p95:.0f}ms", xy=(i + 1, p95),
+                        fontsize=8, ha='center', va='bottom')
+    
+    def _draw_heatmap_on_axis(self, ax, evaluators: dict, fig) -> None:
+        """Draw heatmap on provided axis."""
+        metrics = ["Acc", "Prec", "Rec", "F1", "Safe", "TQA", "FAct", "Spd"]
+        evaluator_names = list(evaluators.keys())
+
+        data = []
+        for name in evaluator_names:
+            m = evaluators[name]
+            scores = m.get_summary_scores()
+            row = [
+                scores.get("Accuracy", 0), scores.get("Precision", 0),
+                scores.get("Recall", 0), scores.get("F1 Score", 0),
+                scores.get("Safety (1-HPR)", 0), scores.get("TruthfulQA", 0),
+                scores.get("FActScore", 0), scores.get("Speed (1/P95)", 0),
+            ]
+            data.append(row)
+
+        mat = np.array(data, dtype=float)
+        im = ax.imshow(mat, aspect='auto', cmap='RdYlGn', vmin=0, vmax=1)
+
+        ax.set_xticks(np.arange(len(metrics)))
+        ax.set_xticklabels(metrics, fontsize=9)
+        ax.set_yticks(np.arange(len(evaluator_names)))
+        ax.set_yticklabels([self._format_strategy_name(n) for n in evaluator_names], fontsize=9)
+
+        for i in range(len(evaluator_names)):
+            for j in range(len(metrics)):
+                val = mat[i, j]
+                color = "white" if val < 0.5 else "#111827"
+                ax.text(j, i, f"{val:.0%}", ha="center", va="center", fontsize=8, fontweight="bold", color=color)
+
+        ax.set_title("Performance Heatmap", fontsize=12, pad=10)
+        ax.grid(False)
+        fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
 
     def _create_comparison_radar(
         self,
