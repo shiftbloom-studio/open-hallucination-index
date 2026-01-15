@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -206,7 +206,7 @@ class HTTPKnowledgeSource(ABC):
             structured_data=structured_data,
             similarity_score=similarity_score,
             match_type="api_search",
-            retrieved_at=datetime.now(timezone.utc),
+            retrieved_at=datetime.now(UTC),
             source_uri=source_uri,
         )
 

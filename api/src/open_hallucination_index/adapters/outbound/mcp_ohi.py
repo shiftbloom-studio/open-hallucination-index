@@ -251,10 +251,12 @@ class OHIMCPAdapter(MCPKnowledgeSource):
     @asynccontextmanager
     async def _session_fallback(self):
         """Create a new MCP session (non-pooled, for fallback)."""
-        async with sse_client(self._mcp_url) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                yield session
+        async with (
+            sse_client(self._mcp_url) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            yield session
 
     def get_pool_stats(self) -> dict[str, Any] | None:
         """Get session pool statistics."""
@@ -311,8 +313,8 @@ class OHIMCPAdapter(MCPKnowledgeSource):
         Args:
             claim: The claim to find evidence for.
             max_results: Maximum number of results to return.
-            search_type: Type of search - "all", "wikipedia", "academic", 
-                        "medical", "news", "economic", "security".
+            search_type: Type of search - "all", "wikipedia", "academic",
+                "medical", "news", "economic", "security".
 
         Returns:
             List of Evidence objects from multiple sources.
@@ -324,19 +326,43 @@ class OHIMCPAdapter(MCPKnowledgeSource):
             async with self._session() as session:
                 # Map search type to appropriate tool
                 tool_map = {
-                    "all": ("search_all", {"query": claim.text, "limit": max_results}),
-                    "wikipedia": ("search_wikipedia", {"query": claim.text, "limit": max_results}),
-                    "academic": ("search_academic", {"query": claim.text, "limit": max_results}),
-                    "pubmed": ("search_pubmed", {"query": claim.text, "limit": max_results}),
-                    "medical": ("search_clinical_trials", {"query": claim.text, "limit": max_results}),
-                    "news": ("search_gdelt", {"query": claim.text, "limit": max_results}),
-                    "economic": ("get_world_bank_indicator", {"indicator": claim.text}),
-                    "security": ("search_vulnerabilities", {"package": claim.text}),
+                    "all": (
+                        "search_all",
+                        {"query": claim.text, "limit": max_results},
+                    ),
+                    "wikipedia": (
+                        "search_wikipedia",
+                        {"query": claim.text, "limit": max_results},
+                    ),
+                    "academic": (
+                        "search_academic",
+                        {"query": claim.text, "limit": max_results},
+                    ),
+                    "pubmed": (
+                        "search_pubmed",
+                        {"query": claim.text, "limit": max_results},
+                    ),
+                    "medical": (
+                        "search_clinical_trials",
+                        {"query": claim.text, "limit": max_results},
+                    ),
+                    "news": (
+                        "search_gdelt",
+                        {"query": claim.text, "limit": max_results},
+                    ),
+                    "economic": (
+                        "get_world_bank_indicator",
+                        {"indicator": claim.text},
+                    ),
+                    "security": (
+                        "search_vulnerabilities",
+                        {"package": claim.text},
+                    ),
                 }
 
                 tool_name, arguments = tool_map.get(
-                    search_type, 
-                    ("search_all", {"query": claim.text, "limit": max_results})
+                    search_type,
+                    ("search_all", {"query": claim.text, "limit": max_results}),
                 )
 
                 results = await self._call_tool(session, tool_name, arguments)
