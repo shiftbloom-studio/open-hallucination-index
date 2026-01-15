@@ -117,13 +117,13 @@ def parse_args() -> argparse.Namespace:
     parallel_group.add_argument(
         "--embedding-workers",
         type=int,
-        default=2,
+        default=4,
         help="Number of embedding worker threads",
     )
     parallel_group.add_argument(
         "--embedding-batch-size",
         type=int,
-        default=512,
+        default=768,
         help="Batch size for GPU embedding (larger = faster)",
     )
     parallel_group.add_argument(
