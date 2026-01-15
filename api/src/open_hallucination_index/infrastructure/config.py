@@ -294,7 +294,9 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
 
     # Environment
-    environment: Literal["development", "staging", "production"] = Field(default="development")
+    environment: Literal["development", "staging", "production", "test"] = Field(
+        default="development"
+    )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
 
 
