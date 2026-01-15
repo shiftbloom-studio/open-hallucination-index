@@ -46,6 +46,7 @@ class IngestionConfig:
 
     # Parallelism settings - aggressive defaults for maximum throughput
     download_workers: int = 4  # Parallel downloads
+    dump_workers: int = 2  # Parallel dump file processing workers
     preprocess_workers: int = 8  # Text preprocessing threads
     embedding_workers: int = 2  # GPU workers (if multi-GPU)
     upload_workers: int = 4  # Parallel DB uploads

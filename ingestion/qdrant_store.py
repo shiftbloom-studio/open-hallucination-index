@@ -77,6 +77,7 @@ class QdrantHybridStore:
         embedding_model: str = "all-MiniLM-L6-v2",
         embedding_batch_size: int = 512,
         upload_workers: int = 4,
+        embedding_workers: int = 2,
         prefer_grpc: bool = True,
         embedding_device: str = "auto",
     ):
@@ -138,6 +139,21 @@ class QdrantHybridStore:
 
         # BM25 tokenizer for sparse vectors
         self.tokenizer = BM25Tokenizer(vocab_size=50000)
+
+        # Embedding queue and workers (GPU-accelerated)
+        self._embedding_workers = max(1, embedding_workers)
+        self._embed_queue: Queue[
+            tuple[list[ProcessedArticle] | None, threading.Event]
+        ] = Queue(maxsize=max(4, self._embedding_workers * 2))
+        self._embed_threads = []
+        for i in range(self._embedding_workers):
+            t = threading.Thread(
+                target=self._embed_worker,
+                daemon=True,
+                name=f"qdrant_embedder_{i}",
+            )
+            t.start()
+            self._embed_threads.append(t)
 
         # Upload queue and workers
         self._upload_queue: Queue[tuple[list[PointStruct], threading.Event]] = Queue(
@@ -229,6 +245,29 @@ class QdrantHybridStore:
             logger.info("✅ Payload indexes created")
         except Exception as e:
             logger.warning(f"Payload index creation: {e}")
+
+    def _embed_worker(self):
+        """Worker thread that computes embeddings and enqueues uploads."""
+        while not self._shutdown:
+            try:
+                articles, done_event = self._embed_queue.get(timeout=1.0)
+                if articles is None:  # Shutdown signal
+                    break
+
+                all_chunks = [c for a in articles for c in a.chunks]
+                if not all_chunks:
+                    done_event.set()
+                    continue
+
+                dense_vectors, sparse_vectors = self.compute_embeddings(all_chunks)
+                points = self.prepare_points(all_chunks, dense_vectors, sparse_vectors)
+
+                self._upload_queue.put((points, done_event))
+            except Empty:
+                continue
+            except Exception as e:
+                logger.error(f"Embedding worker error: {e}")
+                done_event.set()
 
     def _upload_worker(self):
         """Worker thread that processes upload queue."""

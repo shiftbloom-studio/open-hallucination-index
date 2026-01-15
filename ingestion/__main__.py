@@ -103,10 +103,22 @@ def parse_args() -> argparse.Namespace:
         help="Number of preprocessing worker threads",
     )
     parallel_group.add_argument(
+        "--dump-workers",
+        type=int,
+        default=2,
+        help="Number of dump file worker threads",
+    )
+    parallel_group.add_argument(
         "--upload-workers",
         type=int,
         default=4,
         help="Number of upload worker threads per store",
+    )
+    parallel_group.add_argument(
+        "--embedding-workers",
+        type=int,
+        default=2,
+        help="Number of embedding worker threads",
     )
     parallel_group.add_argument(
         "--embedding-batch-size",
@@ -206,9 +218,11 @@ def main():
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
         # Parallelism
+        dump_workers=args.dump_workers,
         preprocess_workers=args.preprocess_workers,
         upload_workers=args.upload_workers,
         embedding_batch_size=args.embedding_batch_size,
+        embedding_workers=args.embedding_workers,
         embedding_device=args.embedding_device,
         # Download
         download_dir=args.download_dir,
