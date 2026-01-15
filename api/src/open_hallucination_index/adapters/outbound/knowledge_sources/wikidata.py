@@ -12,6 +12,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
+import httpx
 from open_hallucination_index.adapters.outbound.knowledge_sources.base import (
     SPARQLKnowledgeSource,
 )
@@ -31,6 +32,10 @@ class WikidataAdapter(SPARQLKnowledgeSource):
     linked data knowledge graph.
     """
 
+    # Base similarity score used for the top result; lower-ranked results
+    # will receive slightly smaller scores derived from this value.
+    DEFAULT_SIMILARITY_SCORE: float = 0.85
+
     def __init__(
         self,
         base_url: str = "https://query.wikidata.org",
@@ -38,13 +43,14 @@ class WikidataAdapter(SPARQLKnowledgeSource):
     ) -> None:
         user_agent = (
             "OpenHallucinationIndex/1.0 "
-            "(https://github.com/open-hallucination-index; mailto:info@example.com)"
+            "(https://github.com/open-hallucination-index; mailto:contact@open-hallucination-index.org)"
         )
         super().__init__(
             base_url=base_url,
             timeout=timeout,
             user_agent=user_agent,
         )
+        self._wikidata_api_url = "https://www.wikidata.org/w/api.php"
 
     @property
     def source_name(self) -> str:
@@ -53,6 +59,22 @@ class WikidataAdapter(SPARQLKnowledgeSource):
     @property
     def evidence_source(self) -> EvidenceSource:
         return EvidenceSource.WIKIDATA
+
+    def _compute_similarity_score(self, rank: int, total_results: int) -> float:
+        """
+        Compute a simple similarity score based on the result rank.
+
+        The highest-ranked result (rank == 0) gets DEFAULT_SIMILARITY_SCORE,
+        and subsequent results get linearly decreasing scores, but never
+        below 0.0.
+        """
+        if total_results <= 1:
+            return self.DEFAULT_SIMILARITY_SCORE
+
+        # Linearly decay the score with rank, clamped to [0.0, 1.0].
+        decay_step = self.DEFAULT_SIMILARITY_SCORE / max(total_results - 1, 1)
+        score = self.DEFAULT_SIMILARITY_SCORE - (decay_step * rank)
+        return max(0.0, min(1.0, score))
 
     async def health_check(self) -> bool:
         """Check Wikidata endpoint with simple query."""
@@ -104,7 +126,8 @@ class WikidataAdapter(SPARQLKnowledgeSource):
             # Search for entities matching the claim subject
             results = await self._search_entities(search_term, limit=3)
             
-            for result in results:
+            total_results = len(results)
+            for rank, result in enumerate(results):
                 entity_id = result.get("id", "")
                 label = result.get("label", "")
                 description = result.get("description", "")
@@ -123,7 +146,7 @@ class WikidataAdapter(SPARQLKnowledgeSource):
                     content=content,
                     source_id=f"wikidata:{entity_id}",
                     source_uri=f"https://www.wikidata.org/wiki/{entity_id}",
-                    similarity_score=0.85,
+                    similarity_score=self._compute_similarity_score(rank, total_results),
                     structured_data={
                         "entity_id": entity_id,
                         "label": label,
@@ -156,11 +179,12 @@ class WikidataAdapter(SPARQLKnowledgeSource):
         """Search for Wikidata entities by text."""
         # Use Wikidata's search API via MediaWiki Action API
         # This is more efficient than SPARQL for text search
-        search_url = "https://www.wikidata.org/w/api.php"
+        search_url = getattr(self, "_wikidata_api_url", "https://www.wikidata.org/w/api.php")
         
         # Use a separate request to wikidata.org API
-        import httpx
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(
+            timeout=getattr(self, "timeout", 10.0)
+        ) as client:
             response = await client.get(
                 search_url,
                 params={
