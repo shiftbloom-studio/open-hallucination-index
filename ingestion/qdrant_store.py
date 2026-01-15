@@ -74,7 +74,7 @@ class QdrantHybridStore:
         port: int = 6333,
         grpc_port: int | None = 6334,
         collection: str = "wikipedia_hybrid",
-        embedding_model: str = "all-MiniLM-L6-v2",
+        embedding_model: str = "all-MiniLM-L12-v2",
         embedding_batch_size: int = 512,
         upload_workers: int = 4,
         embedding_workers: int = 2,

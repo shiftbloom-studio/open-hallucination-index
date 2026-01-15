@@ -84,7 +84,7 @@ class QdrantSettings(BaseSettings):
     collection_name: str = Field(default="knowledge_base")
     vector_size: int = Field(
         default=384,
-        description="Embedding dimension (384 for all-MiniLM-L6-v2)",
+        description="Embedding dimension (384 for all-MiniLM-L12-v2)",
     )
     use_grpc: bool = Field(default=False)
 
@@ -256,12 +256,12 @@ class EmbeddingSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="EMBEDDING_")
 
     # Model choices:
-    # - all-MiniLM-L6-v2: 384 dim, fast, good quality (default)
+    # - all-MiniLM-L12-v2: 384 dim, fast, good quality (default)
     # - all-mpnet-base-v2: 768 dim, higher quality, slower
     # - BAAI/bge-small-en-v1.5: 384 dim, excellent quality
     # - BAAI/bge-base-en-v1.5: 768 dim, best quality
     model_name: str = Field(
-        default="all-MiniLM-L6-v2",
+        default="all-MiniLM-L12-v2",
         description="Sentence-transformer model name",
     )
     batch_size: int = Field(default=32, ge=1)

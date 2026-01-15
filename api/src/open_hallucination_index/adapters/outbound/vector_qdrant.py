@@ -9,7 +9,7 @@ INGESTION COMPATIBILITY
 This adapter is fully aligned with the ingestion pipeline structure:
 
 Ingestion Structure (ingestion/qdrant_store.py):
-- Dense vectors: 384-dim sentence-transformers (all-MiniLM-L6-v2)
+- Dense vectors: 384-dim sentence-transformers (all-MiniLM-L12-v2)
 - Sparse vectors: BM25 with IDF weighting
 - Payload fields:
   * page_id, article_id, title, text, section, url, chunk_id
