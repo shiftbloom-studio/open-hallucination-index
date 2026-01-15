@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class OpenCitationsAdapter(HTTPKnowledgeSource):
     """
     Adapter for OpenCitations Index API.
-    
+
     OpenCitations provides open scholarly citation data.
     Useful for verifying claims about citation counts
     and relationships between academic works.
@@ -61,67 +61,69 @@ class OpenCitationsAdapter(HTTPKnowledgeSource):
     async def find_evidence(self, claim: Claim) -> list[Evidence]:
         """
         Find citation evidence for a claim.
-        
+
         Works best when claim contains DOI references.
         """
         if not self._available:
             return []
-        
+
         evidences: list[Evidence] = []
-        
+
         # Extract DOIs from claim text
         dois = self._extract_dois(claim.text)
-        
+
         if not dois:
             # OpenCitations needs DOIs to query
             logger.debug("No DOIs found in claim, skipping OpenCitations")
             return []
-        
+
         try:
             for doi in dois[:3]:  # Limit to first 3 DOIs
                 # Get citation metadata
                 metadata = await self._get_metadata(doi)
                 if not metadata:
                     continue
-                
+
                 meta = metadata[0] if metadata else {}
-                
+
                 # Get citation count
                 citations = await self._get_citations(doi)
                 references = await self._get_references(doi)
-                
+
                 title = meta.get("title", f"Work: {doi}")
                 author = meta.get("author", "Unknown")
-                
+
                 content = f"{title}\n\nAuthors: {author}"
                 content += f"\n\nCited by: {len(citations)} works"
                 content += f"\nReferences: {len(references)} works"
-                
+
                 pub_date = meta.get("pub_date", "")
                 if pub_date:
                     content += f"\n\nPublished: {pub_date}"
-                
+
                 venue = meta.get("source_title", "")
                 if venue:
                     content += f"\nVenue: {venue}"
-                
-                evidences.append(self._create_evidence(
-                    content=content,
-                    source_id=f"opencitations:{doi}",
-                    source_uri=f"https://doi.org/{doi}",
-                    similarity_score=0.9,
-                    structured_data={
-                        "doi": doi,
-                        "title": title,
-                        "citation_count": len(citations),
-                        "reference_count": len(references),
-                        "oa_link": meta.get("oa_link", ""),
-                    },
-                ))
-            
+
+                evidences.append(
+                    self._create_evidence(
+                        content=content,
+                        source_id=f"opencitations:{doi}",
+                        source_uri=f"https://doi.org/{doi}",
+                        similarity_score=0.9,
+                        structured_data={
+                            "doi": doi,
+                            "title": title,
+                            "citation_count": len(citations),
+                            "reference_count": len(references),
+                            "oa_link": meta.get("oa_link", ""),
+                        },
+                    )
+                )
+
             logger.debug(f"Found {len(evidences)} OpenCitations evidences")
             return evidences
-            
+
         except Exception as e:
             logger.warning(f"OpenCitations search failed: {e}")
             return []
@@ -133,15 +135,15 @@ class OpenCitationsAdapter(HTTPKnowledgeSource):
         """
         if not self._available:
             return []
-        
+
         dois = self._extract_dois(query)
         results = []
-        
+
         for doi in dois[:limit]:
             metadata = await self._get_metadata(doi)
             if metadata:
                 results.extend(metadata)
-        
+
         return results
 
     async def _get_metadata(self, doi: str) -> list[dict[str, Any]]:
@@ -180,8 +182,9 @@ class OpenCitationsAdapter(HTTPKnowledgeSource):
     def _extract_dois(self, text: str) -> list[str]:
         """Extract DOIs from text."""
         import re
+
         # DOI pattern: 10.xxxx/xxxxx
-        pattern = r'10\.\d{4,}/[^\s\]\)\>]+'
+        pattern = r"10\.\d{4,}/[^\s\]\)\>]+"
         matches = re.findall(pattern, text)
         # Clean trailing punctuation
-        return [m.rstrip('.,;:') for m in matches]
+        return [m.rstrip(".,;:") for m in matches]

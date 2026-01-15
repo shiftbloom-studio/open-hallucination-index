@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class NCBIAdapter(HTTPKnowledgeSource):
     """
     Adapter for NCBI E-utilities.
-    
+
     Provides access to PubMed and other NCBI databases
     for biomedical literature and data.
     """
@@ -77,58 +77,60 @@ class NCBIAdapter(HTTPKnowledgeSource):
         """Find PubMed evidence for a claim."""
         if not self._available:
             return []
-        
+
         evidences: list[Evidence] = []
         search_term = claim.subject or claim.text[:100]
-        
+
         try:
             # Search PubMed
             pmids = await self._search_pubmed(search_term, limit=5)
-            
+
             if not pmids:
                 return []
-            
+
             # Fetch article details
             articles = await self._fetch_articles(pmids)
-            
+
             for article in articles:
                 title = article.get("title", "")
                 if not title:
                     continue
-                
+
                 authors = article.get("authors", "Unknown")
                 content = f"{title}\n\nAuthors: {authors}"
-                
+
                 abstract = article.get("abstract", "")
                 if abstract:
                     content += f"\n\nAbstract: {abstract[:800]}"
-                
+
                 pub_date = article.get("pubdate", "")
                 if pub_date:
                     content += f"\n\nPublished: {pub_date}"
-                
+
                 journal = article.get("source", "")
                 if journal:
                     content += f"\nJournal: {journal}"
-                
+
                 pmid = article.get("uid", "")
-                
-                evidences.append(self._create_evidence(
-                    content=content,
-                    source_id=f"pubmed:{pmid}",
-                    source_uri=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
-                    similarity_score=0.85,
-                    structured_data={
-                        "pmid": pmid,
-                        "title": title,
-                        "journal": journal,
-                        "pubdate": pub_date,
-                    },
-                ))
-            
+
+                evidences.append(
+                    self._create_evidence(
+                        content=content,
+                        source_id=f"pubmed:{pmid}",
+                        source_uri=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
+                        similarity_score=0.85,
+                        structured_data={
+                            "pmid": pmid,
+                            "title": title,
+                            "journal": journal,
+                            "pubdate": pub_date,
+                        },
+                    )
+                )
+
             logger.debug(f"Found {len(evidences)} NCBI evidences")
             return evidences
-            
+
         except Exception as e:
             logger.warning(f"NCBI search failed: {e}")
             return []
@@ -137,15 +139,13 @@ class NCBIAdapter(HTTPKnowledgeSource):
         """Search PubMed."""
         if not self._available:
             return []
-        
+
         pmids = await self._search_pubmed(query, limit)
         if pmids:
             return await self._fetch_articles(pmids)
         return []
 
-    async def _search_pubmed(
-        self, query: str, limit: int = 5
-    ) -> list[str]:
+    async def _search_pubmed(self, query: str, limit: int = 5) -> list[str]:
         """Search PubMed and return PMIDs."""
         try:
             response = await self._client.get(
@@ -159,20 +159,18 @@ class NCBIAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            
+
             result = data.get("esearchresult", {})
             return result.get("idlist", [])
         except Exception as e:
             logger.warning(f"PubMed search error: {e}")
             return []
 
-    async def _fetch_articles(
-        self, pmids: list[str]
-    ) -> list[dict[str, Any]]:
+    async def _fetch_articles(self, pmids: list[str]) -> list[dict[str, Any]]:
         """Fetch article details for given PMIDs."""
         if not pmids:
             return []
-        
+
         try:
             response = await self._client.get(
                 "/esummary.fcgi",
@@ -183,14 +181,14 @@ class NCBIAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            
+
             result = data.get("result", {})
             articles = []
-            
+
             for pmid in pmids:
                 if pmid in result:
                     articles.append(result[pmid])
-            
+
             return articles
         except Exception as e:
             logger.warning(f"Article fetch error: {e}")
@@ -209,7 +207,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
                 ),
             )
             response.raise_for_status()
-            
+
             # Parse XML response
             root = ElementTree.fromstring(response.text)
             abstract_elem = root.find(".//AbstractText")
@@ -219,9 +217,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
         except Exception:
             return ""
 
-    async def search_gene(
-        self, query: str, limit: int = 5
-    ) -> list[dict[str, Any]]:
+    async def search_gene(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search NCBI Gene database."""
         try:
             # Search
@@ -235,11 +231,11 @@ class NCBIAdapter(HTTPKnowledgeSource):
             )
             search_resp.raise_for_status()
             search_data = search_resp.json()
-            
+
             gene_ids = search_data.get("esearchresult", {}).get("idlist", [])
             if not gene_ids:
                 return []
-            
+
             # Fetch summaries
             summary_resp = await self._client.get(
                 "/esummary.fcgi",
@@ -250,13 +246,13 @@ class NCBIAdapter(HTTPKnowledgeSource):
             )
             summary_resp.raise_for_status()
             summary_data = summary_resp.json()
-            
+
             result = summary_data.get("result", {})
             genes = []
             for gid in gene_ids:
                 if gid in result:
                     genes.append(result[gid])
-            
+
             return genes
         except Exception:
             return []

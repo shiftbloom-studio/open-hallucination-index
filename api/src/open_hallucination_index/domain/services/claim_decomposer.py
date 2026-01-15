@@ -23,14 +23,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # System prompt for claim extraction
-DECOMPOSITION_PROMPT = """You are a claim extraction system. Your task is to decompose text into atomic, verifiable factual claims.
+DECOMPOSITION_PROMPT = """You are a claim extraction system.
+Your task is to decompose text into atomic, verifiable factual claims.
 
 For each claim, extract:
 1. The claim text (a single factual statement)
 2. Subject (the entity the claim is about)
 3. Predicate (the relationship or property)
 4. Object (the value or related entity)
-5. Claim type (one of: subject_predicate_object, temporal, quantitative, comparative, causal, definitional, existential, unclassified)
+5. Claim type (one of: subject_predicate_object, temporal, quantitative,
+   comparative, causal, definitional, existential, unclassified)
 
 Rules:
 - Each claim should be atomic (one fact per claim)
@@ -122,8 +124,12 @@ class LLMClaimDecomposer(ClaimDecomposer):
         if context:
             user_content = f"Context: {context}\n\n{user_content}"
 
+        system_content = (
+            DECOMPOSITION_PROMPT
+            + "\nRespond strictly with a JSON object containing a 'claims' list."
+        )
         messages = [
-            LLMMessage(role="system", content=DECOMPOSITION_PROMPT + "\nRespond strictly with a JSON object containing a 'claims' list."),
+            LLMMessage(role="system", content=system_content),
             LLMMessage(role="user", content=user_content),
         ]
 
@@ -132,7 +138,7 @@ class LLMClaimDecomposer(ClaimDecomposer):
                 messages,
                 temperature=0.0,
                 max_tokens=2048,
-                json_mode=True # [NEU] Aktivieren
+                json_mode=True,  # [NEU] Aktivieren
             )
 
             claims = self._parse_response(response.content, text)

@@ -22,7 +22,6 @@ from open_hallucination_index.domain.results import (
     CitationTrace,
     ClaimVerification,
     TrustScore,
-    VerificationResult,
     VerificationStatus,
 )
 from open_hallucination_index.ports.verification_oracle import VerificationStrategy
@@ -155,9 +154,7 @@ def refuted_trace(sample_claim_refuted: Claim) -> CitationTrace:
 
 
 @pytest.fixture
-def sample_verification(
-    sample_claim: Claim, supported_trace: CitationTrace
-) -> ClaimVerification:
+def sample_verification(sample_claim: Claim, supported_trace: CitationTrace) -> ClaimVerification:
     """Create a sample verification result."""
     return ClaimVerification(
         claim=sample_claim,

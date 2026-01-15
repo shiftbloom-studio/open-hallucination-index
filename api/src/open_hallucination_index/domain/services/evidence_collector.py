@@ -18,23 +18,21 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Callable, Coroutine, Any
+from typing import TYPE_CHECKING, Any
 
 from open_hallucination_index.domain.entities import Evidence, EvidenceSource
 
 if TYPE_CHECKING:
     from open_hallucination_index.domain.entities import Claim
+    from open_hallucination_index.domain.services.mcp_selector import SmartMCPSelector
     from open_hallucination_index.ports.knowledge_store import (
         GraphKnowledgeStore,
         VectorKnowledgeStore,
     )
     from open_hallucination_index.ports.mcp_source import MCPKnowledgeSource
-    from open_hallucination_index.domain.services.mcp_selector import (
-        SmartMCPSelector,
-        MCPSelection,
-    )
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +107,7 @@ class EvidenceQuality:
     weighted_value: float  # Combined quality score
 
     @classmethod
-    def assess(cls, evidence: Evidence) -> "EvidenceQuality":
+    def assess(cls, evidence: Evidence) -> EvidenceQuality:
         """Assess evidence quality."""
         # Base quality from similarity score
         base_quality = evidence.similarity_score or 0.5
@@ -208,10 +206,7 @@ class AccumulatorState:
             return True
 
         # Check weighted value threshold
-        if self.total_weighted_value >= min_weighted_value:
-            return True
-
-        return False
+        return self.total_weighted_value >= min_weighted_value
 
 
 @dataclass
@@ -281,9 +276,7 @@ class AdaptiveEvidenceCollector:
         self._latency_stats: dict[str, SourceLatencyStats] = {}
 
         # Callbacks for persisting evidence
-        self._persist_callbacks: list[
-            Callable[[list[Evidence]], Coroutine[Any, Any, None]]
-        ] = []
+        self._persist_callbacks: list[Callable[[list[Evidence]], Coroutine[Any, Any, None]]] = []
 
     def add_persist_callback(
         self,
@@ -339,9 +332,7 @@ class AdaptiveEvidenceCollector:
 
         # === TIER 2: MCP sources (selected based on claim) ===
         tier2_start = time.perf_counter()
-        tier2_evidence, pending_count = await self._collect_mcp(
-            claim, mcp_sources, accumulator
-        )
+        tier2_evidence, pending_count = await self._collect_mcp(claim, mcp_sources, accumulator)
         tier2_latency = (time.perf_counter() - tier2_start) * 1000
         tier_latencies["mcp"] = tier2_latency
 
@@ -501,9 +492,7 @@ class AdaptiveEvidenceCollector:
                 if self._enable_background:
                     # Let them complete in background for caching
                     for task in remaining_tasks:
-                        bg_task = asyncio.create_task(
-                            self._background_complete(task, tasks[task])
-                        )
+                        bg_task = asyncio.create_task(self._background_complete(task, tasks[task]))
                         self._background_tasks.add(bg_task)
                         bg_task.add_done_callback(self._background_tasks.discard)
                     pending_count = len(remaining_tasks)
@@ -528,7 +517,7 @@ class AdaptiveEvidenceCollector:
             latency = (time.perf_counter() - start) * 1000
             self._record_latency(source_name, latency, success=True)
             return result
-        except Exception as e:
+        except Exception:
             latency = (time.perf_counter() - start) * 1000
             self._record_latency(source_name, latency, success=False)
             raise
@@ -542,9 +531,7 @@ class AdaptiveEvidenceCollector:
         try:
             result = await task
             if result:
-                logger.debug(
-                    f"Background task {source_name} completed with {len(result)} evidence"
-                )
+                logger.debug(f"Background task {source_name} completed with {len(result)} evidence")
                 # Trigger persist callbacks
                 for callback in self._persist_callbacks:
                     try:

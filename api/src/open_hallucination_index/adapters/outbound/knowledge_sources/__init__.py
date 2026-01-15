@@ -10,9 +10,9 @@ Organized by domain:
 - Wiki: MediaWiki Action API, Wikimedia REST
 - Academic: OpenAlex, Crossref, Europe PMC, OpenCitations
 - Medical: NCBI E-utilities, ClinicalTrials.gov
-- News/Events: GDELT
-- Economic: World Bank Indicators
-- Security: OSV (Open Source Vulnerabilities)
+## News/Events: GDELT (pending)
+## Economic: World Bank Indicators (pending)
+## Security: OSV (Open Source Vulnerabilities) (pending)
 """
 
 from open_hallucination_index.adapters.outbound.knowledge_sources.base import (
@@ -31,9 +31,6 @@ from open_hallucination_index.adapters.outbound.knowledge_sources.dbpedia import
 from open_hallucination_index.adapters.outbound.knowledge_sources.europepmc import (
     EuropePMCAdapter,
 )
-from open_hallucination_index.adapters.outbound.knowledge_sources.gdelt import (
-    GDELTAdapter,
-)
 from open_hallucination_index.adapters.outbound.knowledge_sources.mediawiki import (
     MediaWikiAdapter,
 )
@@ -46,17 +43,11 @@ from open_hallucination_index.adapters.outbound.knowledge_sources.openalex impor
 from open_hallucination_index.adapters.outbound.knowledge_sources.opencitations import (
     OpenCitationsAdapter,
 )
-from open_hallucination_index.adapters.outbound.knowledge_sources.osv import (
-    OSVAdapter,
-)
 from open_hallucination_index.adapters.outbound.knowledge_sources.wikidata import (
     WikidataAdapter,
 )
 from open_hallucination_index.adapters.outbound.knowledge_sources.wikimedia_rest import (
     WikimediaRESTAdapter,
-)
-from open_hallucination_index.adapters.outbound.knowledge_sources.worldbank import (
-    WorldBankAdapter,
 )
 
 __all__ = [
@@ -67,13 +58,10 @@ __all__ = [
     "CrossrefAdapter",
     "DBpediaAdapter",
     "EuropePMCAdapter",
-    "GDELTAdapter",
     "MediaWikiAdapter",
     "NCBIAdapter",
     "OpenAlexAdapter",
     "OpenCitationsAdapter",
-    "OSVAdapter",
     "WikidataAdapter",
     "WikimediaRESTAdapter",
-    "WorldBankAdapter",
 ]

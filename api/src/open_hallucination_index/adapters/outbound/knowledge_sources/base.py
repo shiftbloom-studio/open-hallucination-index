@@ -26,13 +26,14 @@ logger = logging.getLogger(__name__)
 
 class HTTPKnowledgeSourceError(Exception):
     """Exception raised when HTTP knowledge source operations fail."""
+
     pass
 
 
 class HTTPKnowledgeSource(ABC):
     """
     Abstract base class for HTTP-based knowledge sources.
-    
+
     Provides common HTTP client functionality and connection pooling.
     Subclasses implement specific API protocols (REST, SPARQL, etc.).
     """
@@ -46,7 +47,7 @@ class HTTPKnowledgeSource(ABC):
     ) -> None:
         """
         Initialize the HTTP knowledge source.
-        
+
         Args:
             base_url: Base URL for the API.
             timeout: Request timeout in seconds.
@@ -58,7 +59,7 @@ class HTTPKnowledgeSource(ABC):
         self._user_agent = user_agent
         self._client: httpx.AsyncClient | None = None
         self._available = False
-        
+
         # Connection limits
         self._limits = httpx.Limits(
             max_connections=max_connections,
@@ -91,7 +92,7 @@ class HTTPKnowledgeSource(ABC):
         """Initialize the HTTP client."""
         if self._client is not None:
             return
-            
+
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
             timeout=httpx.Timeout(self._timeout),
@@ -102,7 +103,7 @@ class HTTPKnowledgeSource(ABC):
             },
             follow_redirects=True,
         )
-        
+
         # Test connection
         try:
             await self.health_check()
@@ -140,7 +141,7 @@ class HTTPKnowledgeSource(ABC):
         """Make a GET request."""
         if not self._client:
             raise HTTPKnowledgeSourceError("Client not connected")
-        
+
         response = await self._client.get(path, params=params, headers=headers)
         response.raise_for_status()
         return response
@@ -155,10 +156,8 @@ class HTTPKnowledgeSource(ABC):
         """Make a POST request."""
         if not self._client:
             raise HTTPKnowledgeSourceError("Client not connected")
-        
-        response = await self._client.post(
-            path, data=data, json=json, headers=headers
-        )
+
+        response = await self._client.post(path, data=data, json=json, headers=headers)
         response.raise_for_status()
         return response
 
@@ -166,10 +165,10 @@ class HTTPKnowledgeSource(ABC):
     async def find_evidence(self, claim: Claim) -> list[Evidence]:
         """
         Find evidence for a claim from this knowledge source.
-        
+
         Args:
             claim: The claim to find evidence for.
-            
+
         Returns:
             List of Evidence objects.
         """
@@ -179,11 +178,11 @@ class HTTPKnowledgeSource(ABC):
     async def search(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """
         Search this knowledge source.
-        
+
         Args:
             query: Search query string.
             limit: Maximum results.
-            
+
         Returns:
             List of result dictionaries.
         """
@@ -214,7 +213,7 @@ class HTTPKnowledgeSource(ABC):
 class SPARQLKnowledgeSource(HTTPKnowledgeSource):
     """
     Base class for SPARQL endpoint knowledge sources.
-    
+
     Provides SPARQL query execution functionality.
     """
 
@@ -225,22 +224,22 @@ class SPARQLKnowledgeSource(HTTPKnowledgeSource):
     ) -> dict[str, Any]:
         """
         Execute a SPARQL query.
-        
+
         Args:
             query: SPARQL query string.
             endpoint: Endpoint path (default uses base URL).
-            
+
         Returns:
             SPARQL results as JSON.
         """
         if not self._client:
             raise HTTPKnowledgeSourceError("Client not connected")
-        
+
         headers = {
             "Accept": "application/sparql-results+json",
             "Content-Type": "application/x-www-form-urlencoded",
         }
-        
+
         response = await self._client.post(
             endpoint or "/sparql",
             data={"query": query},

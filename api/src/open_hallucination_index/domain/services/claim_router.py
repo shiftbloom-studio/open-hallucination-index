@@ -337,11 +337,24 @@ class ClaimRouter:
         entities = []
         current_entity = []
 
+        sentence_starters = {
+            "the",
+            "a",
+            "an",
+            "this",
+            "that",
+            "it",
+            "is",
+            "was",
+            "are",
+            "were",
+        }
+
         for word in words:
             # Check if word starts with uppercase (potential entity)
             if word and word[0].isupper() and len(word) > 1:
                 # Skip common sentence starters
-                if word.lower() not in {"the", "a", "an", "this", "that", "it", "is", "was", "are", "were"}:
+                if word.lower() not in sentence_starters:
                     current_entity.append(word.rstrip(".,;:!?"))
             else:
                 if current_entity:
@@ -365,17 +378,103 @@ class ClaimRouter:
         """Extract significant keywords from claim."""
         # Remove common words and extract meaningful terms
         stopwords = {
-            "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-            "have", "has", "had", "do", "does", "did", "will", "would", "could",
-            "should", "may", "might", "must", "shall", "can", "need", "dare",
-            "ought", "used", "to", "of", "in", "for", "on", "with", "at", "by",
-            "from", "as", "into", "through", "during", "before", "after", "above",
-            "below", "between", "under", "again", "further", "then", "once", "here",
-            "there", "when", "where", "why", "how", "all", "each", "few", "more",
-            "most", "other", "some", "such", "no", "nor", "not", "only", "own",
-            "same", "so", "than", "too", "very", "just", "and", "but", "or", "if",
-            "because", "until", "while", "although", "though", "that", "which",
-            "who", "whom", "whose", "this", "these", "those", "what", "it", "its",
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "can",
+            "need",
+            "dare",
+            "ought",
+            "used",
+            "to",
+            "of",
+            "in",
+            "for",
+            "on",
+            "with",
+            "at",
+            "by",
+            "from",
+            "as",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "under",
+            "again",
+            "further",
+            "then",
+            "once",
+            "here",
+            "there",
+            "when",
+            "where",
+            "why",
+            "how",
+            "all",
+            "each",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "nor",
+            "not",
+            "only",
+            "own",
+            "same",
+            "so",
+            "than",
+            "too",
+            "very",
+            "just",
+            "and",
+            "but",
+            "or",
+            "if",
+            "because",
+            "until",
+            "while",
+            "although",
+            "though",
+            "that",
+            "which",
+            "who",
+            "whom",
+            "whose",
+            "this",
+            "these",
+            "those",
+            "what",
+            "it",
+            "its",
         }
 
         words = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
@@ -383,6 +482,7 @@ class ClaimRouter:
 
         # Count frequency and return top keywords
         from collections import Counter
+
         freq = Counter(keywords)
         return [word for word, _ in freq.most_common(10)]
 

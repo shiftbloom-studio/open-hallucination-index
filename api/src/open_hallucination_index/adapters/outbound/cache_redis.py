@@ -109,7 +109,7 @@ class RedisCacheAdapter(CacheProvider):
                 )
 
                 await self._client.ping()  # type: ignore[misc]
-                
+
                 if self._settings.socket_path:
                     logger.info(
                         "Connected to Redis via Unix socket: %s",
@@ -384,10 +384,7 @@ class RedisCacheAdapter(CacheProvider):
 
         try:
             # Compute all keys
-            keys_map = {
-                self._make_claim_key(claim_hash): claim_hash
-                for claim_hash in claim_hashes
-            }
+            keys_map = {self._make_claim_key(claim_hash): claim_hash for claim_hash in claim_hashes}
             keys = list(keys_map.keys())
 
             # Batch fetch with MGET
