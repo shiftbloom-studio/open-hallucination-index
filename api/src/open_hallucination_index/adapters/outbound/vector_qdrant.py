@@ -129,6 +129,9 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
         """
         Ensure the knowledge base collection exists with correct configuration.
         Handles concurrency between multiple workers.
+        
+        IMPORTANT: This method will NOT delete existing collections with data.
+        It supports both simple vectors and Named Vectors (hybrid collections).
         """
         if self._client is None:
             return
@@ -142,29 +145,67 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             try:
                 config = await self._client.get_collection(collection_name)
                 exists = True
+                points_count = config.points_count or 0
 
-                # Check for dimension mismatch
+                # Get dimension - handle both simple and named vectors
                 existing_size = 0
                 vectors_params = config.config.params.vectors
 
-                if hasattr(vectors_params, "size"):
+                # Case 1: Simple vector config (has .size directly)
+                if hasattr(vectors_params, "size") and vectors_params.size:
                     existing_size = vectors_params.size
-                elif isinstance(vectors_params, dict) and "size" in vectors_params:
-                    existing_size = vectors_params["size"]
-                elif hasattr(vectors_params, "__dict__") and "size" in vectors_params.__dict__:
-                    existing_size = vectors_params.__dict__["size"]
+                # Case 2: Named vectors (dict with vector names like "dense", "sparse")
+                elif isinstance(vectors_params, dict):
+                    # Check for "dense" vector first (common in hybrid setups)
+                    if "dense" in vectors_params:
+                        dense_config = vectors_params["dense"]
+                        if hasattr(dense_config, "size"):
+                            existing_size = dense_config.size
+                        elif isinstance(dense_config, dict) and "size" in dense_config:
+                            existing_size = dense_config["size"]
+                    # Fallback to any vector with matching size
+                    elif not existing_size:
+                        for vec_config in vectors_params.values():
+                            if hasattr(vec_config, "size") and vec_config.size == vector_size:
+                                existing_size = vec_config.size
+                                break
+                            elif isinstance(vec_config, dict) and vec_config.get("size") == vector_size:
+                                existing_size = vec_config["size"]
+                                break
+                    # Still no size? Just use first available
+                    if not existing_size and vectors_params:
+                        first_vec = next(iter(vectors_params.values()))
+                        if hasattr(first_vec, "size"):
+                            existing_size = first_vec.size
+                        elif isinstance(first_vec, dict):
+                            existing_size = first_vec.get("size", 0)
 
-                if existing_size != vector_size:
-                    logger.warning(
-                        f"Qdrant collection '{collection_name}' has wrong dimension: "
-                        f"expected {vector_size}, found {existing_size}. Recreating..."
-                    )
-                    try:
-                        await self._client.delete_collection(collection_name)
-                    except Exception as e:
-                        # Ignore if already deleted by another worker
-                        logger.debug(f"Delete collection failed (likely already deleted): {e}")
-                    exists = False
+                # Log collection info
+                logger.info(
+                    f"Qdrant collection '{collection_name}' exists with {points_count} points, "
+                    f"vector dimension: {existing_size}"
+                )
+
+                # Check dimension - but NEVER delete a collection with data!
+                if existing_size and existing_size != vector_size:
+                    if points_count > 0:
+                        logger.warning(
+                            f"Qdrant collection '{collection_name}' has different dimension "
+                            f"(expected {vector_size}, found {existing_size}), but contains "
+                            f"{points_count} points. Keeping existing collection. "
+                            f"Search may still work if using named 'dense' vectors."
+                        )
+                        # Don't delete - just proceed with existing collection
+                    else:
+                        # Empty collection with wrong dimension - safe to recreate
+                        logger.info(
+                            f"Empty collection '{collection_name}' has wrong dimension. Recreating..."
+                        )
+                        try:
+                            await self._client.delete_collection(collection_name)
+                        except Exception as e:
+                            logger.debug(f"Delete collection failed: {e}")
+                        exists = False
             except Exception:
                 # Collection does not exist or error getting it
                 exists = False

@@ -271,11 +271,13 @@ async def _initialize_adapters() -> None:
         persist_to_vector=settings.verification.persist_to_vector,
         evidence_collector=evidence_collector,
         mcp_selector=mcp_selector,
+        llm_provider=_llm_provider,  # Enable LLM-based evidence classification
     )
     logger.info(
-        "Verification oracle initialized: strategy=%s, mcp_sources=%s",
+        "Verification oracle initialized: strategy=%s, mcp_sources=%s, llm_enabled=%s",
         strategy.value,
         len(_mcp_sources),
+        _llm_provider is not None,
     )
 
     _scorer = WeightedScorer()

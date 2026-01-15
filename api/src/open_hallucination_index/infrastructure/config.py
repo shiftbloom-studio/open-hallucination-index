@@ -29,7 +29,7 @@ class LLMSettings(BaseSettings):
         description="API key (some OpenAI-compatible servers require a value)",
     )
     model: str = Field(
-        default="Qwen/Qwen2.5-14B-Instruct-AWQ",
+        default="TheBloke/openinstruct-mistral-7B-AWQ",
         description="Model name/ID to use",
     )
     timeout_seconds: float = Field(default=60.0, ge=1.0)

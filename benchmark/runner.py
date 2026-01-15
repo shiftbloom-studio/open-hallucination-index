@@ -322,7 +322,7 @@ class OHIBenchmarkRunner:
                         "strategy": strategy,
                         "use_cache": self.config.use_cache,
                         "target_sources": self.config.target_sources,
-                        "skip_decomposition": True,
+                        # "skip_decomposition": True,  # Disabled to allowing full pipeline testing
                     },
                     timeout=self.config.timeout_seconds,
                 )

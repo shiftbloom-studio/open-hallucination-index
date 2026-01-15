@@ -9,7 +9,9 @@ Includes ADAPTIVE strategy with intelligent tiered collection.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from open_hallucination_index.domain.entities import Evidence
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
         GraphKnowledgeStore,
         VectorKnowledgeStore,
     )
+    from open_hallucination_index.ports.llm_provider import LLMProvider
     from open_hallucination_index.ports.mcp_source import MCPKnowledgeSource
 
 logger = logging.getLogger(__name__)
@@ -66,6 +69,8 @@ class HybridVerificationOracle(VerificationOracle):
         # New components for ADAPTIVE strategy
         evidence_collector: AdaptiveEvidenceCollector | None = None,
         mcp_selector: SmartMCPSelector | None = None,
+        # LLM for evidence classification
+        llm_provider: LLMProvider | None = None,
     ) -> None:
         """
         Initialize the oracle.
@@ -79,6 +84,7 @@ class HybridVerificationOracle(VerificationOracle):
             persist_to_vector: Whether to also persist to vector store.
             evidence_collector: AdaptiveEvidenceCollector for ADAPTIVE strategy.
             mcp_selector: SmartMCPSelector for intelligent source selection.
+            llm_provider: LLM provider for intelligent evidence classification.
         """
         self._graph_store = graph_store
         self._vector_store = vector_store
@@ -88,6 +94,7 @@ class HybridVerificationOracle(VerificationOracle):
         self._persist_to_vector = persist_to_vector
         self._evidence_collector = evidence_collector
         self._mcp_selector = mcp_selector
+        self._llm_provider = llm_provider
 
     @property
     def current_strategy(self) -> VerificationStrategy:
@@ -165,7 +172,7 @@ class HybridVerificationOracle(VerificationOracle):
             return self._unverifiable_result(claim, str(e), active_strategy)
 
         # Classify evidence as supporting or refuting
-        supporting_evidence, refuting_evidence = self._classify_evidence(claim, all_evidence)
+        supporting_evidence, refuting_evidence = await self._classify_evidence(claim, all_evidence)
 
         # Determine verification status
         status, confidence, reasoning = self._determine_status(
@@ -505,13 +512,30 @@ class HybridVerificationOracle(VerificationOracle):
         except Exception as e:
             logger.debug(f"Failed to persist evidence to vector store: {e}")
 
-    def _classify_evidence(
+    async def _classify_evidence(
         self, claim: Claim, evidence: list[Evidence]
     ) -> tuple[list[Evidence], list[Evidence]]:
         """
         Classify evidence as supporting or refuting.
 
-        Uses similarity scores and simple heuristics.
+        Uses LLM-based classification for accurate semantic understanding.
+        Falls back to heuristics if LLM is not available.
+        """
+        # If we have an LLM provider, use it for classification
+        if self._llm_provider is not None and evidence:
+            try:
+                return await self._classify_evidence_with_llm(claim, evidence)
+            except Exception as e:
+                logger.warning(f"LLM classification failed, falling back to heuristics: {e}")
+
+        # Fallback to heuristic-based classification
+        return self._classify_evidence_heuristic(claim, evidence)
+
+    def _classify_evidence_heuristic(
+        self, claim: Claim, evidence: list[Evidence]
+    ) -> tuple[list[Evidence], list[Evidence]]:
+        """
+        Classify evidence using simple heuristics (fallback).
         """
         supporting: list[Evidence] = []
         refuting: list[Evidence] = []
@@ -543,6 +567,133 @@ class HybridVerificationOracle(VerificationOracle):
                     supporting.append(ev)
 
         return supporting, refuting
+
+    async def _classify_evidence_with_llm(
+        self, claim: Claim, evidence: list[Evidence]
+    ) -> tuple[list[Evidence], list[Evidence]]:
+        """
+        Classify evidence as supporting or refuting using LLM.
+
+        This method uses the LLM to semantically understand whether each piece
+        of evidence supports or refutes the claim. This is much more accurate
+        than heuristic-based classification.
+        """
+        supporting: list[Evidence] = []
+        refuting: list[Evidence] = []
+        neutral: list[Evidence] = []
+
+        if not self._llm_provider or not evidence:
+            return supporting, refuting
+
+        # Process evidence in batches to avoid token limits
+        batch_size = 5
+        for i in range(0, len(evidence), batch_size):
+            batch = evidence[i : i + batch_size]
+
+            # Build evidence descriptions for the prompt
+            evidence_descriptions = []
+            for idx, ev in enumerate(batch):
+                content_preview = ev.content[:500] if len(ev.content) > 500 else ev.content
+                evidence_descriptions.append(
+                    f"Evidence {idx + 1} (source: {ev.source.value}):\n{content_preview}"
+                )
+
+            evidence_text = "\n\n".join(evidence_descriptions)
+
+            prompt = f"""You are a fact-checking assistant. Your task is to classify whether each piece of evidence SUPPORTS, REFUTES, or is NEUTRAL regarding the given claim.
+
+CLAIM: "{claim.text}"
+
+EVIDENCE:
+{evidence_text}
+
+For each piece of evidence, determine:
+- SUPPORTS: The evidence confirms the claim is true
+- REFUTES: The evidence contradicts the claim or proves it false
+- NEUTRAL: The evidence is unrelated or doesn't help verify the claim
+
+IMPORTANT: Pay careful attention to factual details like locations, dates, names, and numbers.
+For example, if the claim says something is in "Berlin" but the evidence says it's in "Paris", that is REFUTING evidence.
+
+Respond in JSON format:
+{{
+  "classifications": [
+    {{"evidence_index": 1, "classification": "SUPPORTS|REFUTES|NEUTRAL", "reason": "brief explanation"}},
+    ...
+  ]
+}}
+
+Only output valid JSON, no other text."""
+
+            try:
+                from open_hallucination_index.ports.llm_provider import LLMMessage
+
+                messages = [
+                    LLMMessage(role="system", content="You are a fact-checking assistant that classifies evidence."),
+                    LLMMessage(role="user", content=prompt),
+                ]
+                response = await self._llm_provider.complete(
+                    messages=messages,
+                    max_tokens=512,
+                    temperature=0.1,  # Low temperature for consistent classification
+                )
+
+                # Parse the LLM response
+                classifications = self._parse_classification_response(response.content)
+
+                for classification in classifications:
+                    ev_idx = classification.get("evidence_index", 0) - 1
+                    if 0 <= ev_idx < len(batch):
+                        ev = batch[ev_idx]
+                        label = classification.get("classification", "NEUTRAL").upper()
+
+                        if label == "SUPPORTS":
+                            supporting.append(ev)
+                            logger.debug(
+                                f"LLM classified evidence as SUPPORTING: {ev.content[:100]}..."
+                            )
+                        elif label == "REFUTES":
+                            refuting.append(ev)
+                            logger.debug(
+                                f"LLM classified evidence as REFUTING: {ev.content[:100]}..."
+                            )
+                        else:
+                            neutral.append(ev)
+
+            except Exception as e:
+                logger.warning(f"Failed to classify evidence batch with LLM: {e}")
+                # Fall back to heuristic for this batch
+                batch_supporting, batch_refuting = self._classify_evidence_heuristic(claim, batch)
+                supporting.extend(batch_supporting)
+                refuting.extend(batch_refuting)
+
+        logger.info(
+            f"LLM classified {len(evidence)} evidence pieces: "
+            f"{len(supporting)} supporting, {len(refuting)} refuting, {len(neutral)} neutral"
+        )
+
+        return supporting, refuting
+
+    def _parse_classification_response(self, response: str) -> list[dict]:
+        """Parse the LLM classification response."""
+        try:
+            # Try to extract JSON from the response
+            # Handle cases where LLM might wrap JSON in markdown code blocks
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", response)
+            if json_match:
+                response = json_match.group(1)
+
+            # Try to find JSON object in the response
+            json_start = response.find("{")
+            json_end = response.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                json_str = response[json_start:json_end]
+                data = json.loads(json_str)
+                return data.get("classifications", [])
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Failed to parse LLM classification response: {e}")
+
+        return []
 
     def _has_contradiction_signals(self, claim: str, evidence: str) -> bool:
         """Check for contradiction signals between claim and evidence."""
