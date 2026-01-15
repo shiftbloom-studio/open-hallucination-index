@@ -27,6 +27,7 @@ See /ingestion/README.md for documentation.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -34,6 +35,22 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
+# Force GPU venv if available
+gpu_python = (
+    project_root / ".venv-gpu" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+)
+
+if (
+    gpu_python.exists()
+    and Path(sys.executable).resolve() != gpu_python.resolve()
+    and os.environ.get("OHI_FORCE_GPU") != "1"
+):
+    os.environ["OHI_FORCE_GPU"] = "1"
+    args = [str(gpu_python), str(Path(__file__).resolve())] + sys.argv[1:]
+    if "--embedding-device" not in sys.argv:
+        args += ["--embedding-device", "cuda"]
+    os.execv(str(gpu_python), args)
 
 # Import and run the new modular pipeline
 from ingestion.__main__ import main
