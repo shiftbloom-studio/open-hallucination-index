@@ -181,6 +181,7 @@ class QdrantHybridStore:
         """Initialize collection with hybrid vector configuration."""
         if self.client.collection_exists(self.collection):
             logger.info(f"Collection '{self.collection}' exists, using it.")
+            self._create_payload_indexes()
             return
 
         logger.info(f"Creating Qdrant collection: {self.collection}")
@@ -244,6 +245,20 @@ class QdrantHybridStore:
                 field_schema=KeywordIndexParams(type=KeywordIndexType.KEYWORD),
             )
 
+            # Keyword indexes for structured metadata
+            for field_name in [
+                "infobox_type",
+                "instance_of",
+                "country",
+                "occupation",
+                "nationality",
+            ]:
+                self.client.create_payload_index(
+                    collection_name=self.collection,
+                    field_name=field_name,
+                    field_schema=KeywordIndexParams(type=KeywordIndexType.KEYWORD),
+                )
+
             logger.info("✅ Payload indexes created")
         except Exception as e:
             logger.warning(f"Payload index creation: {e}")
@@ -259,14 +274,15 @@ class QdrantHybridStore:
                         done_event.set()
                     break
 
-                all_chunks = [c for a in articles for c in a.chunks]
-                if not all_chunks:
+                chunk_items = [(a, c) for a in articles for c in a.chunks]
+                chunks = [c for _, c in chunk_items]
+                if not chunks:
                     done_event.set()
                     done_event = None
                     continue
 
-                dense_vectors, sparse_vectors = self.compute_embeddings(all_chunks)
-                points = self.prepare_points(all_chunks, dense_vectors, sparse_vectors)
+                dense_vectors, sparse_vectors = self.compute_embeddings(chunks)
+                points = self.prepare_points(chunk_items, dense_vectors, sparse_vectors)
 
                 self._upload_queue.put((points, done_event))
                 done_event = None  # Ownership transferred to upload queue
@@ -342,14 +358,14 @@ class QdrantHybridStore:
 
     def prepare_points(
         self,
-        chunks: list[ProcessedChunk],
+        chunk_items: list[tuple[ProcessedArticle, ProcessedChunk]],
         dense_vectors: np.ndarray,
         sparse_vectors: list[tuple[list[int], list[float]]],
     ) -> list[PointStruct]:
         """Build PointStruct objects for upload."""
         points = []
 
-        for i, chunk in enumerate(chunks):
+        for i, (article, chunk) in enumerate(chunk_items):
             # Generate deterministic point ID
             point_id = abs(hash(chunk.chunk_id)) % (2**63)
 
@@ -368,6 +384,7 @@ class QdrantHybridStore:
                 },
                 payload={
                     "page_id": chunk.page_id,
+                    "article_id": chunk.page_id,
                     "title": chunk.title,
                     "text": text,
                     "section": chunk.section,
@@ -376,6 +393,18 @@ class QdrantHybridStore:
                     "word_count": chunk.word_count,
                     "is_first": chunk.is_first_chunk,
                     "source": "wikipedia",
+                    "infobox_type": article.article.infobox.type if article.article.infobox else None,
+                    "instance_of": article.article.instance_of,
+                    "birth_date": article.article.birth_date,
+                    "death_date": article.article.death_date,
+                    "location": article.article.location,
+                    "occupation": article.article.occupation,
+                    "nationality": article.article.nationality,
+                    "country": article.article.country,
+                    "industry": article.article.industry,
+                    "headquarters": article.article.headquarters,
+                    "categories": list(article.article.categories)[:20],
+                    "entities": list(article.article.entities)[:20],
                 },
             )
             points.append(point)
@@ -413,15 +442,16 @@ class QdrantHybridStore:
 
         Returns the number of chunks uploaded.
         """
-        all_chunks = [c for a in articles for c in a.chunks]
-        if not all_chunks:
+        chunk_items = [(a, c) for a in articles for c in a.chunks]
+        chunks = [c for _, c in chunk_items]
+        if not chunks:
             return 0
 
         # Compute embeddings
-        dense_vectors, sparse_vectors = self.compute_embeddings(all_chunks)
+        dense_vectors, sparse_vectors = self.compute_embeddings(chunks)
 
         # Build and upload points
-        points = self.prepare_points(all_chunks, dense_vectors, sparse_vectors)
+        points = self.prepare_points(chunk_items, dense_vectors, sparse_vectors)
         self._do_upload(points)
 
         return len(points)
@@ -436,12 +466,13 @@ class QdrantHybridStore:
                     if event is not None:
                         event.set()
                     continue
-                all_chunks = [c for a in articles for c in a.chunks]
-                if not all_chunks:
+                chunk_items = [(a, c) for a in articles for c in a.chunks]
+                chunks = [c for _, c in chunk_items]
+                if not chunks:
                     event.set()
                     continue
-                dense_vectors, sparse_vectors = self.compute_embeddings(all_chunks)
-                points = self.prepare_points(all_chunks, dense_vectors, sparse_vectors)
+                dense_vectors, sparse_vectors = self.compute_embeddings(chunks)
+                points = self.prepare_points(chunk_items, dense_vectors, sparse_vectors)
                 self._do_upload(points)
                 event.set()
             except Empty:

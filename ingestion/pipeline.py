@@ -271,6 +271,8 @@ class IngestionPipeline:
             # Check for completed downloads
             completed = self.downloader.get_completed_downloads()
             ready_to_process.extend(completed)
+            if ready_to_process:
+                ready_to_process.sort(key=lambda p: p.index)
             with self._stats_lock:
                 self.stats.parts_downloaded += len(completed)
 

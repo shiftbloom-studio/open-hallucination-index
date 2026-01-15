@@ -39,23 +39,23 @@ class IngestionConfig:
 
     # Processing settings
     limit: int | None = None
-    batch_size: int = 256  # Increased from 128 for fewer round-trips
+    batch_size: int = 384  # Balanced throughput/stability for 64GB RAM
     chunk_size: int = 512
     chunk_overlap: int = 64
     min_chunk_size: int = 100
 
     # Parallelism settings - aggressive defaults for maximum throughput
     download_workers: int = 4  # Parallel downloads
-    dump_workers: int = 4  # Parallel dump file processing workers
-    preprocess_workers: int = 8  # Text preprocessing threads
-    embedding_workers: int = 4  # GPU embedding workers
+    dump_workers: int = 3  # Parallel dump file processing workers
+    preprocess_workers: int = 12  # Text preprocessing threads
+    embedding_workers: int = 3  # GPU embedding workers
     upload_workers: int = 2  # Parallel DB uploads (reduced to avoid Neo4j deadlocks)
-    embedding_batch_size: int = 768  # Tuned for ~70% utilization on RTX 4090
+    embedding_batch_size: int = 768  # Tuned for RTX 4090
 
     # Queue sizes for producer-consumer pattern
     download_queue_size: int = 8  # Downloaded files awaiting processing
-    preprocess_queue_size: int = 2048  # Articles awaiting embedding
-    upload_queue_size: int = 16  # Batches awaiting upload
+    preprocess_queue_size: int = 1536  # Articles awaiting embedding
+    upload_queue_size: int = 12  # Batches awaiting upload
 
     # Download settings
     download_dir: str = ".wiki_dumps"

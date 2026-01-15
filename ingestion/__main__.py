@@ -78,7 +78,7 @@ def parse_args() -> argparse.Namespace:
     proc_group.add_argument(
         "--batch-size",
         type=int,
-        default=256,
+        default=384,
         help="Articles per batch (larger = faster, more memory)",
     )
     proc_group.add_argument(
@@ -99,13 +99,13 @@ def parse_args() -> argparse.Namespace:
     parallel_group.add_argument(
         "--preprocess-workers",
         type=int,
-        default=8,
+        default=12,
         help="Number of preprocessing worker threads",
     )
     parallel_group.add_argument(
         "--dump-workers",
         type=int,
-        default=4,
+        default=3,
         help="Number of dump file worker threads",
     )
     parallel_group.add_argument(
@@ -117,7 +117,7 @@ def parse_args() -> argparse.Namespace:
     parallel_group.add_argument(
         "--embedding-workers",
         type=int,
-        default=4,
+        default=3,
         help="Number of embedding worker threads",
     )
     parallel_group.add_argument(
