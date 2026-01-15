@@ -8,6 +8,7 @@ from typing import List, Dict, Any
 
 API_BASE = "http://ohi-api:8080"
 API_KEY = os.environ.get("API_API_KEY", "")
+SKIP_WORLD_BANK = os.environ.get("SKIP_WORLD_BANK", "false").lower() in {"1", "true", "yes"}
 
 # Distinct queries designed to trigger specific tools or domains where those tools are primary
 TOOL_TESTS = [
@@ -54,12 +55,7 @@ TOOL_TESTS = [
     {
         "tool_match": "search_gdelt",
         "name": "GDELT",
-        "query": "The 2024 diverse elections in India had significant voter turnout.",
-    },
-    {
-        "tool_match": "get_world_bank_indicator",
-        "name": "World Bank",
-        "query": "The GDP growth of Brazil in 2022 was positive.",
+        "query": "The 2024 Taiwan presidential election resulted in a victory for Lai Ching-te.",
     },
     {
         "tool_match": "search_vulnerabilities",
@@ -70,6 +66,11 @@ TOOL_TESTS = [
         "tool_match": "query-docs",
         "name": "Context7",
         "query": "Next.js App Router uses Server Components by default.",
+    },
+    {
+        "tool_match": "get_world_bank_indicator",
+        "name": "World Bank",
+        "query": "The GDP growth of Brazil in 2022 was positive.",
     }
 ]
 
@@ -100,6 +101,10 @@ def run_individual_tests():
         tool_match = test["tool_match"]
         name = test["name"]
         query = test["query"]
+
+        if SKIP_WORLD_BANK and tool_match == "get_world_bank_indicator":
+            print("Skipping World Bank test (SKIP_WORLD_BANK enabled).")
+            continue
         
         print(f"\n----------------------------------------------------------------")
         print(f"Testing Tool: {name} (expected: {tool_match})")
@@ -116,7 +121,8 @@ def run_individual_tests():
         
         try:
             start_ts = time.time()
-            res = requests.post(f"{API_BASE}/api/v1/verify", json=payload, headers=headers, timeout=120)
+            # User requested timeouts to avoid infinite hangs
+            res = requests.post(f"{API_BASE}/api/v1/verify", json=payload, headers=headers, timeout=30)
             duration = time.time() - start_ts
             
             if res.status_code != 200:
@@ -162,6 +168,9 @@ def run_individual_tests():
                 print(f"   Sources found: {list(all_sources_found)}")
                 results.append({"name": name, "status": "FAIL", "duration": f"{duration:.2f}s", "sources": list(all_sources_found)})
 
+        except requests.exceptions.Timeout:
+            print(f"❌ TIMEOUT: Request timed out after 30 seconds.")
+            results.append({"name": name, "status": "TIMEOUT", "msg": "Timeout (30s)"})
         except Exception as e:
             print(f"❌ Exception: {e}")
             results.append({"name": name, "status": "ERROR", "msg": str(e)})
