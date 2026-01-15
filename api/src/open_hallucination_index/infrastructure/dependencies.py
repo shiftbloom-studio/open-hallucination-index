@@ -23,9 +23,7 @@ from open_hallucination_index.adapters.outbound.cache_redis import RedisCacheAda
 from open_hallucination_index.adapters.outbound.embeddings_local import LocalEmbeddingAdapter
 from open_hallucination_index.adapters.outbound.graph_neo4j import Neo4jGraphAdapter
 from open_hallucination_index.adapters.outbound.llm_openai import OpenAILLMAdapter
-from open_hallucination_index.adapters.outbound.mcp_context7 import Context7MCPAdapter
 from open_hallucination_index.adapters.outbound.mcp_ohi import OHIMCPAdapter
-from open_hallucination_index.adapters.outbound.mcp_wikipedia import WikipediaMCPAdapter
 from open_hallucination_index.adapters.outbound.trace_redis import RedisTraceAdapter
 from open_hallucination_index.adapters.outbound.vector_qdrant import QdrantVectorAdapter
 from open_hallucination_index.application.knowledge_track_service import (
@@ -155,26 +153,8 @@ async def _initialize_adapters() -> None:
         _trace_store = None
         logger.info("Cache disabled")
 
-    # Initialize MCP sources (Wikipedia, Context7)
+    # Initialize MCP sources (unified OHI MCP server)
     _mcp_sources = []
-
-    if settings.mcp.wikipedia_enabled:
-        try:
-            wikipedia_adapter = WikipediaMCPAdapter(settings.mcp)
-            await wikipedia_adapter.connect()
-            _mcp_sources.append(wikipedia_adapter)
-            logger.info(f"Wikipedia MCP connected: {settings.mcp.wikipedia_url}")
-        except Exception as e:
-            logger.warning(f"Wikipedia MCP unavailable (will use fallback): {e}")
-
-    if settings.mcp.context7_enabled:
-        try:
-            context7_adapter = Context7MCPAdapter(settings.mcp)
-            await context7_adapter.connect()
-            _mcp_sources.append(context7_adapter)
-            logger.info(f"Context7 MCP connected: {settings.mcp.context7_url}")
-        except Exception as e:
-            logger.warning(f"Context7 MCP unavailable (will use fallback): {e}")
 
     if settings.mcp.ohi_enabled:
         try:
@@ -183,7 +163,7 @@ async def _initialize_adapters() -> None:
             _mcp_sources.append(ohi_adapter)
             logger.info(f"OHI MCP connected: {settings.mcp.ohi_url}")
         except Exception as e:
-            logger.warning(f"OHI MCP unavailable (will use fallback): {e}")
+            logger.warning(f"OHI MCP unavailable: {e}")
 
     # Initialize domain services
     _claim_decomposer = LLMClaimDecomposer(
@@ -215,6 +195,10 @@ async def _initialize_adapters() -> None:
     logger.info("SmartMCPSelector initialized")
 
     # Initialize AdaptiveEvidenceCollector for tiered collection
+    enable_background_completion = (
+        settings.verification.enable_background_completion and not settings.mcp.ohi_enabled
+    )
+
     evidence_collector = AdaptiveEvidenceCollector(
         graph_store=_graph_store,
         vector_store=_vector_store,
@@ -225,7 +209,7 @@ async def _initialize_adapters() -> None:
         local_timeout_ms=settings.verification.local_timeout_ms,
         mcp_timeout_ms=settings.verification.mcp_timeout_ms,
         total_timeout_ms=settings.verification.total_timeout_ms,
-        enable_background_completion=settings.verification.enable_background_completion,
+        enable_background_completion=enable_background_completion,
     )
 
     # Add persist callbacks for dual-write to Neo4j and Qdrant
