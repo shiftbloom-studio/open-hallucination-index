@@ -190,6 +190,48 @@ Environment Variables:
         help="Path to existing report JSON (for --charts-only)",
     )
 
+    # OHI Strategy Options
+    parser.add_argument(
+        "--ohi-strategy",
+        type=str,
+        default="adaptive",
+        help="OHI verification strategy (vector_semantic, graph_exact, hybrid, cascading, mcp_enhanced, adaptive)",
+    )
+
+    parser.add_argument(
+        "--ohi-all-strategies",
+        action="store_true",
+        help="Compare all OHI verification strategies (detailed mode)",
+    )
+
+    parser.add_argument(
+        "--ohi-strategies",
+        type=str,
+        default=None,
+        help="Comma-separated list of OHI strategies to compare (with --ohi-all-strategies)",
+    )
+
+    # Cache Testing Options
+    parser.add_argument(
+        "--cache-testing",
+        action="store_true",
+        help="Run cache comparison tests (with/without Redis cache, cache cleared before run)",
+    )
+
+    parser.add_argument(
+        "--redis-host",
+        type=str,
+        default=None,
+        help="Redis host for cache testing (default: from env or 'redis')",
+    )
+
+    parser.add_argument(
+        "--redis-port",
+        type=int,
+        default=None,
+        help="Redis port for cache testing (default: 6379)",
+    )
+
     return parser.parse_args()
 
 
@@ -205,6 +247,11 @@ def build_config(args: argparse.Namespace) -> ComparisonBenchmarkConfig:
     categories = None
     if args.truthfulqa_categories:
         categories = [c.strip() for c in args.truthfulqa_categories.split(",")]
+
+    # Parse OHI strategies if provided
+    ohi_strategies = None
+    if args.ohi_strategies:
+        ohi_strategies = [s.strip() for s in args.ohi_strategies.split(",")]
 
     # Start with environment-based config
     config = ComparisonBenchmarkConfig.from_env()
@@ -230,6 +277,19 @@ def build_config(args: argparse.Namespace) -> ComparisonBenchmarkConfig:
 
     # FActScore config
     config.factscore.max_samples = args.factscore_max
+
+    # OHI strategy options
+    config.ohi_strategy = args.ohi_strategy
+    config.ohi_all_strategies = args.ohi_all_strategies
+    if ohi_strategies:
+        config.ohi_strategies = ohi_strategies
+
+    # Cache testing options
+    config.cache_testing = args.cache_testing
+    if args.redis_host:
+        config.redis_host = args.redis_host
+    if args.redis_port:
+        config.redis_port = args.redis_port
 
     return config
 

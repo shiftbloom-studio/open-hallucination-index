@@ -519,16 +519,23 @@ class HybridVerificationOracle(VerificationOracle):
         Classify evidence as supporting or refuting.
 
         Uses LLM-based classification for accurate semantic understanding.
-        Falls back to heuristics if LLM is not available.
+        Falls back to heuristics ONLY if LLM is not available.
         """
         # If we have an LLM provider, use it for classification
         if self._llm_provider is not None and evidence:
+            # STRICT MODE: If LLM is available, we MUST use it.
+            # We do not fall back to heuristics on error, because the user
+            # explicitly requires LLM verification for all evidence.
+            # If LLM methods fail, we let the exception propagate so the
+            # claim is marked as UNVERIFIABLE rather than potentially
+            # incorrect due to weak heuristics.
             try:
                 return await self._classify_evidence_with_llm(claim, evidence)
             except Exception as e:
-                logger.warning(f"LLM classification failed, falling back to heuristics: {e}")
+                logger.error(f"Strict LLM classification failed: {e}")
+                raise  # Propagate error to mark claim as UNVERIFIABLE
 
-        # Fallback to heuristic-based classification
+        # Fallback to heuristic-based classification (only if no LLM configured)
         return self._classify_evidence_heuristic(claim, evidence)
 
     def _classify_evidence_heuristic(
