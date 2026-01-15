@@ -46,7 +46,7 @@ def _get_model(model_name: str):
             model_kwargs={
                 "low_cpu_mem_usage": False,
                 "device_map": None,
-                "torch_dtype": torch.float32,
+                "dtype": torch.float32,
             },
         )
 

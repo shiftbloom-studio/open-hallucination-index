@@ -134,7 +134,9 @@ class LiveBenchmarkDisplay:
     - Running statistics table
     """
     
-    REFRESH_RATE = 1.0  # Update every second
+    # Git Bash on Windows in VS Code can freeze with high refresh rates.
+    # We use a conservative rate and manual refreshing to prevent buffer overflows.
+    REFRESH_RATE = 2.0
     
     def __init__(self, console: Console, stats: LiveStats) -> None:
         self.console = console
@@ -156,11 +158,15 @@ class LiveBenchmarkDisplay:
     
     def __enter__(self) -> "LiveBenchmarkDisplay":
         """Start the live display."""
+        # Use auto_refresh=False and manual updates to prevent freezing in some formatting contexts
         self._live = Live(
             self._render(),
             console=self.console,
             refresh_per_second=self.REFRESH_RATE,
+            auto_refresh=False,
             transient=False,
+            redirect_stdout=False,
+            redirect_stderr=False,
         )
         self._live.__enter__()
         return self
@@ -217,7 +223,7 @@ class LiveBenchmarkDisplay:
     def _update(self) -> None:
         """Update the live display."""
         if self._live:
-            self._live.update(self._render())
+            self._live.update(self._render(), refresh=True)
     
     def _render(self) -> Group:
         """Render the full display."""
