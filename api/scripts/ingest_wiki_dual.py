@@ -32,7 +32,6 @@ import html
 import json
 import logging
 import math
-import os
 import re
 import signal
 import sys
@@ -47,6 +46,8 @@ from urllib.parse import urljoin, quote
 from xml.etree.ElementTree import iterparse
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from tqdm import tqdm
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -603,12 +604,41 @@ class AdvancedTextPreprocessor:
 class WikiDownloader:
     """Handles finding and streaming the Wikipedia dump file."""
 
+    # Retry configuration for network resilience
+    MAX_RETRIES = 5
+    RETRY_BACKOFF = 2  # seconds, will be exponentially increased
+    CHUNK_SIZE = 512 * 1024  # 512KB chunks for better network handling
+    STREAM_TIMEOUT = (30, 300)  # (connect, read) timeouts
+
+    @staticmethod
+    def _create_session() -> requests.Session:
+        """Create a requests session with retry logic."""
+        session = requests.Session()
+        
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=WikiDownloader.MAX_RETRIES,
+            backoff_factor=WikiDownloader.RETRY_BACKOFF,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "HEAD"],
+        )
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=10,
+            pool_maxsize=10,
+        )
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        return session
+
     @staticmethod
     def get_latest_url() -> str:
         """Find the latest dump file URL."""
         logger.info(f"Finding latest dump at {DUMPS_URL}...")
         try:
-            resp = requests.get(DUMPS_URL, timeout=30)
+            session = WikiDownloader._create_session()
+            resp = session.get(DUMPS_URL, timeout=30)
             resp.raise_for_status()
             matches = re.findall(f'href="({DUMP_PATTERN})"', resp.text)
             if not matches:
@@ -622,12 +652,24 @@ class WikiDownloader:
 
     @staticmethod
     def stream_articles(url: str) -> Generator[WikiArticle]:
-        """Stream articles from BZ2-compressed XML dump."""
+        """Stream articles from BZ2-compressed XML dump with retry support."""
         logger.info("🚀 Starting stream download...")
 
-        with requests.get(url, stream=True, timeout=60) as response:
-            response.raise_for_status()
+        session = WikiDownloader._create_session()
+        
+        # Use longer timeouts and keep-alive for large file streaming
+        response = session.get(
+            url,
+            stream=True,
+            timeout=WikiDownloader.STREAM_TIMEOUT,
+            headers={
+                "Connection": "keep-alive",
+                "Accept-Encoding": "identity",  # No compression on top of bz2
+            },
+        )
+        response.raise_for_status()
 
+        try:
             class MultistreamBZ2Reader:
                 """
                 Reader for multistream bz2 files (like Wikipedia dumps).
@@ -636,22 +678,43 @@ class WikiDownloader:
 
                 def __init__(self, response):
                     self.response = response
-                    self.chunk_iter = response.iter_content(chunk_size=256 * 1024)
+                    self.chunk_iter = response.iter_content(
+                        chunk_size=WikiDownloader.CHUNK_SIZE
+                    )
                     self.raw_buffer = b""
                     self.decompressed_buffer = b""
                     self.decompressor = bz2.BZ2Decompressor()
                     self.finished = False
+                    self.bytes_read = 0
+                    self.network_errors = 0
 
                 def _refill_raw(self) -> bool:
-                    """Refill raw buffer from network."""
-                    try:
-                        chunk = next(self.chunk_iter)
-                        if chunk:
-                            self.raw_buffer += chunk
-                            return True
-                        return False
-                    except StopIteration:
-                        return False
+                    """Refill raw buffer from network with error handling."""
+                    max_network_errors = 10
+                    
+                    while self.network_errors < max_network_errors:
+                        try:
+                            chunk = next(self.chunk_iter)
+                            if chunk:
+                                self.raw_buffer += chunk
+                                self.bytes_read += len(chunk)
+                                self.network_errors = 0  # Reset on success
+                                return True
+                            return False
+                        except StopIteration:
+                            return False
+                        except Exception as e:
+                            self.network_errors += 1
+                            if self.network_errors >= max_network_errors:
+                                logger.error(
+                                    f"Network error after {self.bytes_read:,} bytes: {e}"
+                                )
+                                raise
+                            # Brief pause before retry
+                            time.sleep(1)
+                            continue
+                    
+                    return False
 
                 def _decompress_available(self) -> None:
                     """Decompress as much as possible from raw buffer."""
@@ -712,10 +775,21 @@ class WikiDownloader:
 
                 tag_name = elem.tag.split("}")[-1]
                 if tag_name == "page":
-                    title = elem.findtext("{*}title") or elem.findtext("title")
-                    page_id = elem.findtext("{*}id") or elem.findtext("id")
-                    revision = elem.find("{*}revision") or elem.find("revision")
-                    ns = elem.findtext("{*}ns") or elem.findtext("ns")
+                    title = elem.findtext("{*}title")
+                    if title is None:
+                        title = elem.findtext("title")
+                    
+                    page_id = elem.findtext("{*}id")
+                    if page_id is None:
+                        page_id = elem.findtext("id")
+                    
+                    revision = elem.find("{*}revision")
+                    if revision is None:
+                        revision = elem.find("revision")
+                    
+                    ns = elem.findtext("{*}ns")
+                    if ns is None:
+                        ns = elem.findtext("ns")
 
                     text = ""
                     if revision is not None:
@@ -744,6 +818,10 @@ class WikiDownloader:
                         )
 
                     elem.clear()
+        finally:
+            # Ensure response is closed properly
+            response.close()
+            session.close()
 
 
 # =============================================================================
@@ -854,22 +932,39 @@ class QdrantHybridStore:
         except Exception as e:
             logger.warning(f"Payload index creation: {e}")
 
+    # Maximum points per upload to stay under Qdrant's 32MB payload limit
+    MAX_POINTS_PER_UPLOAD = 100
+    # Maximum text length per chunk to prevent oversized payloads
+    MAX_TEXT_LENGTH = 4000
+
     def upload_batch(self, chunks: list[ProcessedChunk]):
         """Upload a batch of chunks with both dense and sparse vectors."""
         if not chunks:
             return
 
+        # Truncate oversized texts to prevent payload limit errors
+        max_ctx_len = self.MAX_TEXT_LENGTH + 200
+        for chunk in chunks:
+            if len(chunk.text) > self.MAX_TEXT_LENGTH:
+                chunk.text = chunk.text[:self.MAX_TEXT_LENGTH] + "..."
+            if len(chunk.contextualized_text) > max_ctx_len:
+                chunk.contextualized_text = chunk.contextualized_text[:max_ctx_len] + "..."
+
         # Update IDF scores with this batch
         texts = [c.contextualized_text for c in chunks]
         self.tokenizer.update_idf(texts)
 
-        # Compute dense embeddings
-        dense_vectors = self.model.encode(
-            texts,
-            batch_size=64,
-            show_progress_bar=False,
-            normalize_embeddings=True,
-        )
+        # Compute dense embeddings in smaller batches to prevent OOM
+        try:
+            dense_vectors = self.model.encode(
+                texts,
+                batch_size=32,  # Reduced batch size for memory safety
+                show_progress_bar=False,
+                normalize_embeddings=True,
+            )
+        except Exception as e:
+            logger.error(f"Embedding error: {e}")
+            return
 
         # Build points with hybrid vectors
         points = []
@@ -902,12 +997,34 @@ class QdrantHybridStore:
             )
             points.append(point)
 
-        # Batch upsert (async for speed)
-        self.client.upsert(
-            collection_name=self.collection,
-            points=points,
-            wait=False,
-        )
+        # Upload in smaller chunks to stay under payload limit
+        self._upload_points_chunked(points)
+
+    def _upload_points_chunked(self, points: list[PointStruct]) -> None:
+        """Upload points in chunks to avoid payload size limits."""
+        for i in range(0, len(points), self.MAX_POINTS_PER_UPLOAD):
+            chunk = points[i : i + self.MAX_POINTS_PER_UPLOAD]
+            try:
+                self.client.upsert(
+                    collection_name=self.collection,
+                    points=chunk,
+                    wait=False,
+                )
+            except Exception as e:
+                # If still too large, try even smaller chunks
+                if "larger than allowed" in str(e):
+                    logger.warning("Payload too large, retrying with smaller chunks")
+                    for point in chunk:
+                        try:
+                            self.client.upsert(
+                                collection_name=self.collection,
+                                points=[point],
+                                wait=False,
+                            )
+                        except Exception as pe:
+                            logger.error(f"Failed to upload point: {pe}")
+                else:
+                    logger.error(f"Upload error: {e}")
 
 
 # =============================================================================
@@ -1381,6 +1498,17 @@ def main():
         action="store_true",
         help="Clear existing checkpoint and exit",
     )
+    parser.add_argument(
+        "--endless",
+        action="store_true",
+        help="Keep retrying on network errors until the entire dump is processed",
+    )
+    parser.add_argument(
+        "--endless-retry-delay",
+        type=int,
+        default=30,
+        help="Seconds to wait before retrying after a network error (default: 30)",
+    )
 
     args = parser.parse_args()
 
@@ -1447,47 +1575,86 @@ def main():
     # Thread pool for parallel uploads
     executor = ThreadPoolExecutor(max_workers=args.workers)
 
-    try:
-        for article in WikiDownloader.stream_articles(url):
-            if shutdown_requested:
-                logger.warning("⚠️  Shutdown requested, saving checkpoint...")
-                break
+    # Endless mode: track connection attempts
+    connection_attempts = 0
+    max_connection_attempts = 1000 if args.endless else 1
+    completed_successfully = False
 
-            # Skip already processed articles
-            if checkpoint.should_skip(article.id):
-                skipped_count += 1
-                continue
-
-            # 1. Clean and extract all metadata
-            (
-                clean_text,
-                links,
-                categories,
-                infobox,
-                entities,
-            ) = preprocessor.clean_and_extract(article.text)
-
-            article.links = links
-            article.categories = categories
-            article.infobox = infobox
-            article.entities = entities
-            article.sections = preprocessor.extract_sections(article.text)
-            article.first_paragraph = preprocessor.extract_first_paragraph(
-                article.text
+    while connection_attempts < max_connection_attempts and not shutdown_requested:
+        connection_attempts += 1
+        
+        if connection_attempts > 1:
+            logger.info(
+                f"🔄 Reconnection attempt {connection_attempts} "
+                f"(waiting {args.endless_retry_delay}s)..."
             )
+            time.sleep(args.endless_retry_delay)
+            # Reload checkpoint to get latest state
+            checkpoint.load()
+            logger.info(f"📍 {checkpoint.get_resume_info()}")
 
-            # 2. Create semantic chunks
-            chunks = preprocessor.chunk_article(article, clean_text)
+        try:
+            for article in WikiDownloader.stream_articles(url):
+                if shutdown_requested:
+                    logger.warning("⚠️  Shutdown requested, saving checkpoint...")
+                    break
 
-            if chunks:
-                article_batch.append((article, chunks))
+                # Skip already processed articles
+                if checkpoint.should_skip(article.id):
+                    skipped_count += 1
+                    continue
 
-            # 3. Process batch when full
-            if len(article_batch) >= args.batch_size:
-                # Process the batch
+                # 1. Clean and extract all metadata
+                (
+                    clean_text,
+                    links,
+                    categories,
+                    infobox,
+                    entities,
+                ) = preprocessor.clean_and_extract(article.text)
+
+                article.links = links
+                article.categories = categories
+                article.infobox = infobox
+                article.entities = entities
+                article.sections = preprocessor.extract_sections(article.text)
+                article.first_paragraph = preprocessor.extract_first_paragraph(
+                    article.text
+                )
+
+                # 2. Create semantic chunks
+                chunks = preprocessor.chunk_article(article, clean_text)
+
+                if chunks:
+                    article_batch.append((article, chunks))
+
+                # 3. Process batch when full
+                if len(article_batch) >= args.batch_size:
+                    # Process the batch
+                    process_batch(article_batch, qdrant, neo4j, stats, executor)
+                    
+                    # Record in checkpoint
+                    batch_articles = [a for a, _ in article_batch]
+                    batch_chunks = sum(len(c) for _, c in article_batch)
+                    checkpoint.record_batch(batch_articles, batch_chunks)
+                    
+                    pbar.update(len(article_batch))
+                    article_batch = []
+
+                    if remaining_limit and stats.articles_processed >= remaining_limit:
+                        logger.info("✅ Limit reached")
+                        completed_successfully = True
+                        break
+
+            # If we got here without exception, stream completed
+            if not shutdown_requested:
+                completed_successfully = True
+                
+            # Process final batch
+            if article_batch and not shutdown_requested:
                 process_batch(article_batch, qdrant, neo4j, stats, executor)
                 
-                # Record in checkpoint
+                # Record final batch in checkpoint
                 batch_articles = [a for a, _ in article_batch]
                 batch_chunks = sum(len(c) for _, c in article_batch)
                 checkpoint.record_batch(batch_articles, batch_chunks)
@@ -1495,45 +1662,70 @@ def main():
                 pbar.update(len(article_batch))
                 article_batch = []
 
-                if remaining_limit and stats.articles_processed >= remaining_limit:
-                    logger.info("✅ Limit reached")
-                    break
+            # Exit the retry loop if completed or shutdown
+            if completed_successfully or shutdown_requested:
+                break
 
-        # Process final batch
-        if article_batch and not shutdown_requested:
-            process_batch(article_batch, qdrant, neo4j, stats, executor)
+        except (
+            requests.exceptions.RequestException,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.ChunkedEncodingError,
+            ConnectionResetError,
+            TimeoutError,
+            OSError,
+        ) as e:
+            # Network-related errors - save checkpoint and retry if endless mode
+            logger.warning(f"⚠️  Network error: {e}")
+            checkpoint.save()
+            stats.update(errors=1)
             
-            # Record final batch in checkpoint
-            batch_articles = [a for a, _ in article_batch]
-            batch_chunks = sum(len(c) for _, c in article_batch)
-            checkpoint.record_batch(batch_articles, batch_chunks)
-            
-            pbar.update(len(article_batch))
+            if args.endless:
+                logger.info(
+                    f"💾 Checkpoint saved at {checkpoint.articles_processed:,} articles. "
+                    f"Will retry..."
+                )
+                # Clear the current batch (will be re-processed after reconnect)
+                article_batch = []
+                continue
+            else:
+                logger.error("Network error. Use --endless to auto-retry.")
+                break
 
-    except Exception as e:
-        logger.error(f"Critical failure: {e}", exc_info=True)
-        stats.update(errors=1)
-        # Save checkpoint on error
-        checkpoint.save()
-    finally:
-        pbar.close()
-        executor.shutdown(wait=True)
-        neo4j.close()
-        
-        # Final checkpoint save
-        checkpoint.save()
-        
-        # Show summary
-        logger.info(stats.summary())
-        
-        if skipped_count > 0:
-            logger.info(f"⏭️  Skipped {skipped_count:,} already-processed articles")
-        
-        if shutdown_requested:
-            logger.info(
-                f"💾 Checkpoint saved. Run again to resume from "
-                f"{checkpoint.articles_processed:,} articles."
-            )
+        except Exception as e:
+            # Other errors - save and exit
+            logger.error(f"Critical failure: {e}", exc_info=True)
+            stats.update(errors=1)
+            checkpoint.save()
+            break
+
+    # Cleanup
+    pbar.close()
+    executor.shutdown(wait=True)
+    neo4j.close()
+    
+    # Final checkpoint save
+    checkpoint.save()
+    
+    # Show summary
+    logger.info(stats.summary())
+    
+    if skipped_count > 0:
+        logger.info(f"⏭️  Skipped {skipped_count:,} already-processed articles")
+    
+    if completed_successfully and not shutdown_requested:
+        logger.info("🎉 Ingestion completed successfully!")
+        if args.endless:
+            logger.info(f"📊 Total connection attempts: {connection_attempts}")
+    elif shutdown_requested:
+        logger.info(
+            f"💾 Checkpoint saved. Run again to resume from "
+            f"{checkpoint.articles_processed:,} articles."
+        )
+    elif args.endless:
+        logger.warning(
+            f"❌ Failed after {connection_attempts} connection attempts. "
+            f"Checkpoint saved at {checkpoint.articles_processed:,} articles."
+        )
 
 
 if __name__ == "__main__":
