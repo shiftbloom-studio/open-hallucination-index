@@ -180,9 +180,31 @@ class QdrantHybridStore:
     def _init_collection(self):
         """Initialize collection with hybrid vector configuration."""
         if self.client.collection_exists(self.collection):
-            logger.info(f"Collection '{self.collection}' exists, using it.")
-            self._create_payload_indexes()
-            return
+            # Check if schema is valid (has 'dense' and 'sparse' vectors)
+            try:
+                info = self.client.get_collection(self.collection)
+                vectors = info.config.params.vectors
+                sparse_vectors = info.config.params.sparse_vectors
+                
+                # Check for named vectors configuration
+                # vectors can be VectorParams (single) or dict (named)
+                has_dense = isinstance(vectors, dict) and "dense" in vectors
+                has_sparse = isinstance(sparse_vectors, dict) and "sparse" in sparse_vectors
+                
+                if has_dense and has_sparse:
+                    logger.info(f"Collection '{self.collection}' exists and is valid, using it.")
+                    self._create_payload_indexes()
+                    return
+                
+                logger.warning(f"⚠️ Collection '{self.collection}' has invalid schema (missing named vectors). Recreating...")
+                self.client.delete_collection(self.collection)
+                
+            except Exception as e:
+                logger.warning(f"Error validating collection '{self.collection}': {e}. Recreating to be safe...")
+                try:
+                    self.client.delete_collection(self.collection)
+                except Exception:
+                    pass
 
         logger.info(f"Creating Qdrant collection: {self.collection}")
 
