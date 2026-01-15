@@ -46,10 +46,10 @@ class IngestionConfig:
 
     # Parallelism settings - aggressive defaults for maximum throughput
     download_workers: int = 4  # Parallel downloads
-    dump_workers: int = 2  # Parallel dump file processing workers
-    preprocess_workers: int = 8  # Text preprocessing threads
-    embedding_workers: int = 2  # GPU workers (if multi-GPU)
-    upload_workers: int = 4  # Parallel DB uploads
+    dump_workers: int = 4  # Parallel dump file processing workers
+    preprocess_workers: int = 12  # Text preprocessing threads
+    embedding_workers: int = 4  # GPU embedding workers
+    upload_workers: int = 2  # Parallel DB uploads (reduced to avoid Neo4j deadlocks)
     embedding_batch_size: int = 512  # Large batches for GPU efficiency
 
     # Queue sizes for producer-consumer pattern

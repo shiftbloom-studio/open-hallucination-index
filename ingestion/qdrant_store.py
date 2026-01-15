@@ -140,6 +140,9 @@ class QdrantHybridStore:
         # BM25 tokenizer for sparse vectors
         self.tokenizer = BM25Tokenizer(vocab_size=50000)
 
+        # Shutdown flag - MUST be set before starting any threads
+        self._shutdown = False
+
         # Embedding queue and workers (GPU-accelerated)
         self._embedding_workers = max(1, embedding_workers)
         self._embed_queue: Queue[
@@ -163,7 +166,6 @@ class QdrantHybridStore:
         self._upload_executor = ThreadPoolExecutor(
             max_workers=upload_workers, thread_name_prefix="qdrant_upload"
         )
-        self._shutdown = False
 
         # Start upload worker threads
         self._upload_threads = []
@@ -248,26 +250,33 @@ class QdrantHybridStore:
 
     def _embed_worker(self):
         """Worker thread that computes embeddings and enqueues uploads."""
+        done_event: threading.Event | None = None
         while not self._shutdown:
             try:
                 articles, done_event = self._embed_queue.get(timeout=1.0)
                 if articles is None:  # Shutdown signal
+                    if done_event is not None:
+                        done_event.set()
                     break
 
                 all_chunks = [c for a in articles for c in a.chunks]
                 if not all_chunks:
                     done_event.set()
+                    done_event = None
                     continue
 
                 dense_vectors, sparse_vectors = self.compute_embeddings(all_chunks)
                 points = self.prepare_points(all_chunks, dense_vectors, sparse_vectors)
 
                 self._upload_queue.put((points, done_event))
+                done_event = None  # Ownership transferred to upload queue
             except Empty:
                 continue
             except Exception as e:
                 logger.error(f"Embedding worker error: {e}")
-                done_event.set()
+                if done_event is not None:
+                    done_event.set()
+                    done_event = None
 
     def _upload_worker(self):
         """Worker thread that processes upload queue."""
@@ -379,25 +388,22 @@ class QdrantHybridStore:
         """
         Upload a batch of articles asynchronously.
 
-        Returns an Event that will be set when upload completes.
-        This allows the pipeline to continue processing while upload happens.
+        Enqueues articles for embedding computation by worker threads,
+        then automatic upload. Returns an Event that will be set when
+        the full pipeline (embed -> upload) completes.
+
+        This is fully non-blocking - embedding happens in separate threads.
         """
-        # Collect all chunks
+        # Check for empty batch
         all_chunks = [c for a in articles for c in a.chunks]
         if not all_chunks:
             event = threading.Event()
             event.set()
             return event
 
-        # Compute embeddings (this is the slow part, GPU-accelerated)
-        dense_vectors, sparse_vectors = self.compute_embeddings(all_chunks)
-
-        # Build points
-        points = self.prepare_points(all_chunks, dense_vectors, sparse_vectors)
-
-        # Queue for async upload
+        # Queue for async embedding -> upload pipeline
         done_event = threading.Event()
-        self._upload_queue.put((points, done_event))
+        self._embed_queue.put((articles, done_event))
 
         return done_event
 
@@ -421,11 +427,34 @@ class QdrantHybridStore:
         return len(points)
 
     def flush(self):
-        """Wait for all pending uploads to complete."""
-        # Drain the queue
+        """Wait for all pending embeddings and uploads to complete."""
+        # Drain embedding queue first (process synchronously)
+        while not self._embed_queue.empty():
+            try:
+                articles, event = self._embed_queue.get_nowait()
+                if articles is None:
+                    if event is not None:
+                        event.set()
+                    continue
+                all_chunks = [c for a in articles for c in a.chunks]
+                if not all_chunks:
+                    event.set()
+                    continue
+                dense_vectors, sparse_vectors = self.compute_embeddings(all_chunks)
+                points = self.prepare_points(all_chunks, dense_vectors, sparse_vectors)
+                self._do_upload(points)
+                event.set()
+            except Empty:
+                break
+
+        # Drain upload queue
         while not self._upload_queue.empty():
             try:
                 points, event = self._upload_queue.get_nowait()
+                if points is None:
+                    if event is not None:
+                        event.set()
+                    continue
                 self._do_upload(points)
                 event.set()
             except Empty:
@@ -435,14 +464,25 @@ class QdrantHybridStore:
         """Clean up resources."""
         self._shutdown = True
 
-        # Signal workers to stop
+        # Signal embedding workers to stop
+        for _ in self._embed_threads:
+            try:
+                self._embed_queue.put((None, threading.Event()), timeout=1.0)
+            except Exception:
+                pass
+
+        # Signal upload workers to stop
         for _ in self._upload_threads:
             try:
                 self._upload_queue.put((None, threading.Event()), timeout=1.0)  # type: ignore[arg-type]
             except Exception:
                 pass
 
-        # Wait for workers
+        # Wait for embedding workers
+        for t in self._embed_threads:
+            t.join(timeout=5.0)
+
+        # Wait for upload workers
         for t in self._upload_threads:
             t.join(timeout=5.0)
 
