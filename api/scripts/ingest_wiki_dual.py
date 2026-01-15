@@ -42,31 +42,31 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, quote
-from xml.etree.ElementTree import iterparse
+from urllib.parse import quote, urljoin
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from tqdm import tqdm
+from lxml import etree  # type: ignore[import-untyped]
+from neo4j import GraphDatabase
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
-    VectorParams,
-    PointStruct,
     HnswConfigDiff,
-    SparseVectorParams,
-    SparseVector,
+    KeywordIndexParams,
+    KeywordIndexType,
     Modifier,
+    OptimizersConfigDiff,
+    PointStruct,
+    SparseVector,
+    SparseVectorParams,
     TextIndexParams,
     TextIndexType,
     TokenizerType,
-    OptimizersConfigDiff,
-    KeywordIndexParams,
-    KeywordIndexType,
+    VectorParams,
 )
+from requests.adapters import HTTPAdapter
 from sentence_transformers import SentenceTransformer
-from neo4j import GraphDatabase
+from tqdm import tqdm
+from urllib3.util.retry import Retry
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -683,6 +683,7 @@ class WikiDownloader:
                 """
                 Reader for multistream bz2 files (like Wikipedia dumps).
                 These files contain multiple concatenated bz2 streams.
+                Implements proper file-like interface for lxml.
                 """
 
                 def __init__(self, response):
@@ -696,6 +697,8 @@ class WikiDownloader:
                     self.finished = False
                     self.bytes_read = 0
                     self.network_errors = 0
+                    self.decompress_errors = 0
+                    self.max_decompress_errors = 1000  # Allow some corruption
 
                 def _refill_raw(self) -> bool:
                     """Refill raw buffer from network with error handling."""
@@ -734,10 +737,11 @@ class WikiDownloader:
                             self.decompressed_buffer += result
                             
                             if self.decompressor.eof:
-                                # Stream ended, check for more data and create new decompressor
+                                # Stream ended, check for more data
                                 unused = self.decompressor.unused_data
                                 self.raw_buffer = unused
                                 if unused:
+                                    # Start new decompressor for next stream
                                     self.decompressor = bz2.BZ2Decompressor()
                                 else:
                                     break
@@ -745,16 +749,47 @@ class WikiDownloader:
                                 # Need more input
                                 self.raw_buffer = b""
                                 break
-                        except Exception:
-                            # Invalid data, skip a byte and retry
+                        except OSError:
+                            # BZ2 decompression error - likely end of valid data
+                            self.decompress_errors += 1
+                            if self.decompress_errors > self.max_decompress_errors:
+                                logger.warning(
+                                    "Too many decompression errors, "
+                                    "treating as end of data"
+                                )
+                                self.raw_buffer = b""
+                                self.finished = True
+                                break
+                            # Skip corrupted byte and try again
+                            self.raw_buffer = self.raw_buffer[1:]
+                            if not self.raw_buffer:
+                                break
+                        except Exception as e:
+                            # Unexpected error - log and skip
+                            logger.debug(f"Decompress error: {e}")
                             self.raw_buffer = self.raw_buffer[1:]
                             if not self.raw_buffer:
                                 break
 
-                def read(self, n: int) -> bytes:
-                    """Read n bytes of decompressed data."""
+                def read(self, n: int = -1) -> bytes:
+                    """
+                    Read n bytes of decompressed data.
+                    If n is -1, read all available data.
+                    """
                     if shutdown_requested:
                         return b""
+                    
+                    if n == -1:
+                        # Read all remaining data
+                        while not self.finished:
+                            self._decompress_available()
+                            if not self._refill_raw():
+                                self.finished = True
+                                break
+                            self._decompress_available()
+                        result = self.decompressed_buffer
+                        self.decompressed_buffer = b""
+                        return result
 
                     while len(self.decompressed_buffer) < n and not self.finished:
                         # First try to decompress what we have
@@ -776,41 +811,68 @@ class WikiDownloader:
                     return result
 
             source = MultistreamBZ2Reader(response)
-            context = iterparse(source, events=("end",))  # type: ignore[arg-type]
+            
+            # Use lxml's iterparse which is more robust for large/malformed XML
+            # recover=True allows parsing to continue past errors
+            context = etree.iterparse(
+                source,
+                events=("end",),
+                tag="{http://www.mediawiki.org/xml/export-0.11/}page",
+                recover=True,
+                huge_tree=True,
+            )
+            
+            articles_yielded = 0
+            parse_errors = 0
+            max_consecutive_errors = 100
+            consecutive_errors = 0
 
-            for _event, elem in context:
-                if shutdown_requested:
-                    break
+            try:
+                for _event, elem in context:
+                    if shutdown_requested:
+                        break
+                    
+                    consecutive_errors = 0  # Reset on successful parse
 
-                tag_name = elem.tag.split("}")[-1]
-                if tag_name == "page":
-                    title = elem.findtext("{*}title")
+                    # Use namespace-aware lookups
+                    ns = {"mw": "http://www.mediawiki.org/xml/export-0.11/"}
+                    
+                    title = elem.findtext("mw:title", namespaces=ns)
+                    if title is None:
+                        title = elem.findtext("{http://www.mediawiki.org/xml/export-0.11/}title")
                     if title is None:
                         title = elem.findtext("title")
                     
-                    page_id = elem.findtext("{*}id")
+                    page_id = elem.findtext("mw:id", namespaces=ns)
+                    if page_id is None:
+                        page_id = elem.findtext("{http://www.mediawiki.org/xml/export-0.11/}id")
                     if page_id is None:
                         page_id = elem.findtext("id")
                     
-                    revision = elem.find("{*}revision")
+                    revision = elem.find("mw:revision", namespaces=ns)
+                    if revision is None:
+                        revision = elem.find("{http://www.mediawiki.org/xml/export-0.11/}revision")
                     if revision is None:
                         revision = elem.find("revision")
                     
-                    ns = elem.findtext("{*}ns")
-                    if ns is None:
-                        ns = elem.findtext("ns")
+                    page_ns = elem.findtext("mw:ns", namespaces=ns)
+                    if page_ns is None:
+                        page_ns = elem.findtext("{http://www.mediawiki.org/xml/export-0.11/}ns")
+                    if page_ns is None:
+                        page_ns = elem.findtext("ns")
 
                     text = ""
                     if revision is not None:
                         text = (
-                            revision.findtext("{*}text")
+                            revision.findtext("mw:text", namespaces=ns)
+                            or revision.findtext("{http://www.mediawiki.org/xml/export-0.11/}text")
                             or revision.findtext("text")
                             or ""
                         )
 
                     # Only process main namespace articles, skip redirects
                     if (
-                        ns == "0"
+                        page_ns == "0"
                         and text
                         and title is not None
                         and page_id is not None
@@ -825,8 +887,33 @@ class WikiDownloader:
                             url=f"https://en.wikipedia.org/wiki/{safe_title}",
                             word_count=len(text.split()),
                         )
+                        articles_yielded += 1
 
+                    # Clear element to free memory
                     elem.clear()
+                    # Also clear preceding siblings to prevent memory growth
+                    while elem.getprevious() is not None:
+                        del elem.getparent()[0]
+                        
+            except etree.XMLSyntaxError as e:
+                consecutive_errors += 1
+                parse_errors += 1
+                if consecutive_errors < max_consecutive_errors:
+                    logger.warning(f"XML parse error (recoverable): {e}")
+                else:
+                    logger.error(f"Too many consecutive XML errors, stopping: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error during XML parsing: {e}")
+            
+            if parse_errors > 0:
+                logger.warning(
+                    f"Completed with {parse_errors} parse errors, "
+                    f"{articles_yielded} articles yielded"
+                )
+            else:
+                logger.info(
+                    f"Parsing completed successfully: {articles_yielded} articles yielded"
+                )
         finally:
             # Ensure response is closed properly
             response.close()
@@ -1109,7 +1196,7 @@ class Neo4jGraphStore:
 
             for query in constraints + indexes:
                 try:
-                    session.run(query)
+                    session.run(query)  # type: ignore[arg-type]
                 except Exception as e:
                     if "already exists" not in str(e).lower():
                         logger.warning(f"Schema setup: {e}")
