@@ -12,6 +12,7 @@ import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+from threading import Lock
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -21,12 +22,14 @@ logger = logging.getLogger(__name__)
 
 # Thread pool for running sync model inference
 _executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="embedding")
+_model_load_lock = Lock()
 
 
 @lru_cache(maxsize=1)
 def _get_model(model_name: str):
     """Load and cache the sentence transformer model."""
     from sentence_transformers import SentenceTransformer
+    import torch
 
     logger.info(f"Loading embedding model: {model_name}")
 
@@ -35,15 +38,17 @@ def _get_model(model_name: str):
 
     # Load model without problematic kwargs that can cause meta tensor issues
     # Force CPU to avoid GPU memory conflicts with vLLM
-    model = SentenceTransformer(
-        model_name,
-        device=device,
-        trust_remote_code=False,
-        model_kwargs={
-            "low_cpu_mem_usage": False,
-            "device_map": None,
-        },
-    )
+    with _model_load_lock:
+        model = SentenceTransformer(
+            model_name,
+            device=device,
+            trust_remote_code=False,
+            model_kwargs={
+                "low_cpu_mem_usage": False,
+                "device_map": None,
+                "torch_dtype": torch.float32,
+            },
+        )
 
     # Verify model is ready
     model.eval()

@@ -58,6 +58,7 @@ class BenchmarkConfig:
     # API Configuration
     api_host: str = DEFAULT_API_HOST
     api_port: str = DEFAULT_API_PORT
+    api_key: str | None = None
 
     # Dataset
     dataset_path: Path = field(default_factory=lambda: Path("benchmark/benchmark_dataset.csv"))
@@ -80,6 +81,7 @@ class BenchmarkConfig:
     verbose: bool = False
     use_cache: bool = False
     target_sources: int = 10
+    no_progress: bool = False
 
     # Output Configuration
     output_formats: list[Literal["csv", "json", "markdown", "html"]] = field(
@@ -94,12 +96,12 @@ class BenchmarkConfig:
     @property
     def api_verify_url(self) -> str:
         """API verify endpoint URL."""
-        return f"{self.api_base_url}/verify"
+        return f"{self.api_base_url}/api/v1/verify"
 
     @property
     def api_batch_url(self) -> str:
         """API batch verify endpoint URL."""
-        return f"{self.api_base_url}/verify/batch"
+        return f"{self.api_base_url}/api/v1/verify/batch"
 
     @property
     def api_health_url(self) -> str:
@@ -134,14 +136,23 @@ def get_config() -> BenchmarkConfig:
     Returns:
         BenchmarkConfig with values from environment.
     """
+    def _parse_bool(value: str | None, default: bool = False) -> bool:
+        if value is None:
+            return default
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+
+    api_key_env = os.getenv("OHI_API_KEY") or os.getenv("API_API_KEY")
+
     return BenchmarkConfig(
         api_host=os.getenv("OHI_API_HOST", DEFAULT_API_HOST),
         api_port=os.getenv("OHI_API_PORT", DEFAULT_API_PORT),
+        api_key=api_key_env,
         dataset_path=Path(os.getenv("BENCHMARK_DATASET", "benchmark/benchmark_dataset.csv")),
         output_dir=Path(os.getenv("BENCHMARK_OUTPUT_DIR", "benchmark_results")),
         concurrency=int(os.getenv("BENCHMARK_CONCURRENCY", str(DEFAULT_CONCURRENCY))),
         threshold=float(os.getenv("BENCHMARK_THRESHOLD", str(DEFAULT_THRESHOLD))),
         warmup_requests=int(os.getenv("BENCHMARK_WARMUP", str(DEFAULT_WARMUP))),
+        no_progress=_parse_bool(os.getenv("BENCHMARK_NO_PROGRESS"), False),
         timeout_seconds=float(
             os.getenv("BENCHMARK_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS))
         ),

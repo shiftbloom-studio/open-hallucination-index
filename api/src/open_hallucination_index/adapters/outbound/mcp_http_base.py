@@ -11,6 +11,7 @@ SSE should only be used for streaming/real-time updates.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import abstractmethod
 from datetime import datetime
@@ -80,6 +81,8 @@ class HTTPMCPAdapter(MCPKnowledgeSource):
             max_connections=max_connections,
             max_keepalive_connections=max_keepalive,
         )
+        # Serialize tool calls to avoid upstream rate limits (429s)
+        self._call_semaphore = asyncio.Semaphore(1)
 
     @property
     @abstractmethod
@@ -166,12 +169,13 @@ class HTTPMCPAdapter(MCPKnowledgeSource):
             raise MCPQueryError(f"{self.source_name} not connected")
 
         try:
-            response = await self._client.post(
-                f"{self._api_url}/call",
-                json={"tool": tool_name, "arguments": arguments},
-            )
-            response.raise_for_status()
-            data = response.json()
+            async with self._call_semaphore:
+                response = await self._client.post(
+                    f"{self._api_url}/call",
+                    json={"tool": tool_name, "arguments": arguments},
+                )
+                response.raise_for_status()
+                data = response.json()
 
             # Normalize response to list format
             if isinstance(data, dict):

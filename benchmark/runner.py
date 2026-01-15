@@ -137,7 +137,10 @@ class OHIBenchmarkRunner:
 
     async def __aenter__(self) -> "OHIBenchmarkRunner":
         """Async context manager entry."""
-        self.client = httpx.AsyncClient(timeout=self.config.timeout_seconds)
+        headers = {}
+        if self.config.api_key:
+            headers["X-API-Key"] = self.config.api_key
+        self.client = httpx.AsyncClient(timeout=self.config.timeout_seconds, headers=headers)
         self.semaphore = asyncio.Semaphore(self.config.concurrency)
         return self
 
@@ -435,6 +438,8 @@ class OHIBenchmarkRunner:
             )
         )
 
+        disable_progress = self.config.no_progress or not self.console.is_terminal
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -445,6 +450,7 @@ class OHIBenchmarkRunner:
             TimeRemainingColumn(),
             console=self.console,
             expand=True,
+            disable=disable_progress,
         ) as progress:
             overall_task = progress.add_task(
                 "[bold cyan]Overall Progress", total=total_tasks

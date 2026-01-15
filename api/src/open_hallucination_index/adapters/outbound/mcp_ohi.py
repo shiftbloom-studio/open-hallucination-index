@@ -93,8 +93,8 @@ class OHIMCPAdapter(HTTPMCPAdapter):
             base_url=settings.ohi_url,
             timeout=30.0,
             connect_timeout=10.0,
-            max_connections=10,
-            max_keepalive=5,
+            max_connections=1,
+            max_keepalive=1,
         )
         self._settings = settings
 
