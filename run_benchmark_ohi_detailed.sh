@@ -20,6 +20,7 @@
 
 set -e
 
+CONTAINER="ohi-benchmark"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 OUTPUT_DIR="/app/benchmark_results/ohi_detailed_${TIMESTAMP}"
 
@@ -29,17 +30,16 @@ echo "║                                                                       
 echo "║ Tests: All Strategies + Cache Performance                              ║"
 echo "╚═══════════════════════════════════════════════════════════════════════╝"
 echo ""
-echo "Output directory: ${OUTPUT_DIR}"
-echo ""
 
-# Check if running inside Docker or locally
-if [ -f /.dockerenv ]; then
-    PYTHON_CMD="python"
-else
-    PYTHON_CMD="docker exec ohi-benchmark python"
+# Check if container is running
+if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+    echo "❌ Container ${CONTAINER} is not running."
+    echo "   Start with: docker compose -f docker/compose/docker-compose.yml up -d"
+    exit 1
 fi
 
-mkdir -p "${OUTPUT_DIR}"
+echo "Output directory: ${OUTPUT_DIR}"
+echo ""
 
 # =============================================================================
 # PHASE 1: Strategy Comparison
@@ -49,7 +49,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "PHASE 1: OHI Strategy Comparison"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-$PYTHON_CMD -m benchmark.comparison_benchmark \
+docker exec ${CONTAINER} python -m benchmark.comparison_benchmark \
     --evaluators ohi \
     --ohi-all-strategies \
     --ohi-strategies vector_semantic,graph_exact,hybrid,cascading,mcp_enhanced,adaptive \
@@ -69,7 +69,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "PHASE 2: Cache Performance Testing (Cold vs Warm)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-$PYTHON_CMD -m benchmark.comparison_benchmark \
+docker exec ${CONTAINER} python -m benchmark.comparison_benchmark \
     --evaluators ohi \
     --cache-testing \
     --redis-host redis \
@@ -88,7 +88,7 @@ echo "╔═══════════════════════�
 echo "║ Detailed OHI Analysis Complete                                         ║"
 echo "╚═══════════════════════════════════════════════════════════════════════╝"
 echo ""
-echo "Results saved to: ${OUTPUT_DIR}"
+echo "Results saved to: ./benchmark_results/ohi_detailed_${TIMESTAMP}"
 echo ""
 echo "Analysis includes:"
 echo "  📊 strategies/     - All 6 verification strategies compared"
@@ -97,4 +97,3 @@ echo ""
 echo "Key output files:"
 echo "  - comparison_dashboard.png   Combined visualization"
 echo "  - *_report.json              Raw benchmark data"
-echo ""
