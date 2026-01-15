@@ -1,116 +1,116 @@
-# Open Hallucination Index – Frontend‑Dokumentation
+# Open Hallucination Index – Frontend Documentation
 
-> **Zielsetzung:** Das Frontend bietet eine wissenschaftlich orientierte Oberfläche zur Interpretation von Verifikationsergebnissen, Evidenzketten und Trust‑Scores. Der Schwerpunkt liegt auf Transparenz, Nachvollziehbarkeit und kognitiver Ergonomie.
-
----
-
-## 🧭 Informationsarchitektur
-
-Die UI folgt einer klaren Hierarchie:
-
-1. **Landing & Produktstory** (Problem → Architektur → Features → CTA)
-2. **Analyse‑Fluss** (Text → Claims → Evidenz → Trust‑Score)
-3. **Ergebnis‑Validierung** (verifizierte vs. widerlegte Claims)
-4. **Reproduzierbarkeit** (Export, Quellen, Knowledge‑Track‑Einblicke)
-
-**Primäre Ziele**
-
-- **Transparenz**: Jede Entscheidung ist auf Evidenz rückführbar.
-- **Interpretierbarkeit**: Scores werden kontextualisiert.
-- **Wissenschaftliche Strenge**: Keine Black‑Box‑Darstellung.
+> **Objective:** The frontend provides a scientifically oriented interface for interpreting verification results, evidence chains, and trust scores. The focus is on transparency, traceability, and cognitive ergonomics.
 
 ---
 
-## 🎨 Designprinzipien
+## 🧭 Information Architecture
 
-- **Semantische Typografie**: Statuslabels (supported, refuted, unknown) mit konsistenter Farbsemantik.
-- **Progressive Disclosure**: Tiefe Evidenz nur bei Bedarf.
-- **Daten‑Dense UI**: Hohe Informationsdichte ohne visuelle Überladung.
+The UI follows a clear hierarchy:
+
+1. **Landing & Product Story** (Problem → Architecture → Features → CTA)
+2. **Analysis Flow** (Text → Claims → Evidence → Trust Score)
+3. **Result Validation** (Verified vs. Refuted Claims)
+4. **Reproducibility** (Export, Sources, Knowledge Track Insights)
+
+**Primary Goals**
+
+- **Transparency**: Every decision is traceable to evidence.
+- **Interpretability**: Scores are contextualized.
+- **Scientific Rigor**: No black-box representation.
 
 ---
 
-## 🧩 Hauptkomponenten (konzeptionell)
+## 🎨 Design Principles
 
-| Komponente | Aufgabe |
+- **Semantic Typography**: Status labels (supported, refuted, unknown) with consistent color semantics.
+- **Progressive Disclosure**: Detailed evidence only when needed.
+- **Data-Dense UI**: High information density without visual overload.
+
+---
+
+## 🧩 Main Components (Conceptual)
+
+| Component | Task |
 |-----------|---------|
-| **Landing Sections** | Hero, Problem, Architekturfluss, Feature‑Grid, CTA |
-| **Claim List** | Aggregierte Anzeige aller Claims mit Status |
-| **Evidence Panel** | Quellen‑Snippets, Scores, Links |
-| **Trust Score Card** | Gesamt‑Score + Confidence |
-| **Knowledge Track View** | Provenienz‑Mesh & Quellenliste (API‑gestützt) |
+| **Landing Sections** | Hero, Problem, Architecture Flow, Feature Grid, CTA |
+| **Claim List** | Aggregated display of all claims with status |
+| **Evidence Panel** | Source snippets, scores, links |
+| **Trust Score Card** | Overall score + confidence |
+| **Knowledge Track View** | Provenance mesh & source list (API-supported) |
 | **Export/Report** | CSV/JSON/Markdown Export |
 
 ---
 
-## 🧪 Datenflüsse & State
+## 🧪 Data Flows & State
 
-**Frontend‑State**
+**Frontend State**
 
-- `analysisInput`: Nutzertext
-- `analysisResult`: API‑Response
-- `activeClaim`: aktuell selektierter Claim
-- `showTrace`: Pipeline‑Metadaten
-- `knowledgeTrack`: Provenienz‑Response zu Claim‑ID
+- `analysisInput`: User text
+- `analysisResult`: API response
+- `activeClaim`: Currently selected claim
+- `showTrace`: Pipeline metadata
+- `knowledgeTrack`: Provenance response for claim ID
 
-**Empfohlenes Muster**: Server‑driven Rendering mit asynchroner Hydration
-
----
-
-## 📐 UX‑Metriken (empfohlen)
-
-- **Time‑to‑Insight**: Zeit bis erste Ergebnisse sichtbar sind
-- **Evidence Depth Rate**: Anteil explorierter Evidenzen
-- **Trust Score Comprehension**: Nutzerverständnis via Befragung
+**Recommended Pattern**: Server-driven rendering with asynchronous hydration
 
 ---
 
-## 🔬 Wissenschaftliche Darstellung
+## 📐 UX Metrics (Recommended)
 
-**Claim‑Statuslegende**
-
-- **Supported**: Evidenz bestätigt Claim
-- **Refuted**: Evidenz widerspricht Claim
-- **Unknown**: keine ausreichende Evidenz
-
-**Score‑Interpretation**
-
-- $0.00$ – $0.39$: niedriges Vertrauen
-- $0.40$ – $0.69$: moderates Vertrauen
-- $0.70$ – $1.00$: hohes Vertrauen
+- **Time‑to‑Insight**: Time until first results are visible
+- **Evidence Depth Rate**: Percentage of explored evidence
+- **Trust Score Comprehension**: User understanding via survey
 
 ---
 
-## 🧪 Teststrategie
+## 🔬 Scientific Representation
 
-Empfohlene Testpyramide:
+**Claim Status Legend**
 
-1. **Unit Tests** (Komponentenlogik)
-2. **Integration Tests** (API‑Flows)
-3. **E2E Tests** (Kritische Journeys)
+- **Supported**: Evidence confirms claim
+- **Refuted**: Evidence contradicts claim
+- **Unknown**: Insufficient evidence
 
-Beispiele und Konfigurationen befinden sich im Frontend‑Ordner.
+**Score Interpretation**
 
-## 🔌 API‑Proxy (Frontend)
+- $0.00$ – $0.39$: Low trust
+- $0.40$ – $0.69$: Moderate trust
+- $0.70$ – $1.00$: High trust
 
-Das Frontend nutzt eine serverseitige Proxy‑Route:
+---
 
-- `GET/POST /api/ohi/*` → leitet an `DEFAULT_API_URL` weiter
-- Header `X-API-KEY` wird automatisch mit `DEFAULT_API_KEY` gesetzt
-- Optional wird `X-User-Id` aus Supabase ergänzt
+## 🧪 Test Strategy
 
-Damit können UI‑Requests ohne direkte API‑Key‑Weitergabe an den Client erfolgen.
+Recommended test pyramid:
 
-## ⚙️ Relevante Umgebungsvariablen
+1. **Unit Tests** (Component logic)
+2. **Integration Tests** (API flows)
+3. **E2E Tests** (Critical journeys)
 
-- `DEFAULT_API_URL` (Backend‑Base‑URL)
-- `DEFAULT_API_KEY` (Server‑seitiger API‑Key)
+Examples and configurations are located in the frontend folder.
+
+## 🔌 API Proxy (Frontend)
+
+The frontend uses a server-side proxy route:
+
+- `GET/POST /api/ohi/*` → forwards to `DEFAULT_API_URL`
+- Header `X-API-KEY` is automatically set with `DEFAULT_API_KEY`
+- Optionally `X-User-Id` is added from Supabase
+
+This allows UI requests to occur without direct API key disclosure to the client.
+
+## ⚙️ Relevant Environment Variables
+
+- `DEFAULT_API_URL` (Backend base URL)
+- `DEFAULT_API_KEY` (Server-side API key)
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_APP_URL`
 
 ---
 
-## 🔗 Verknüpfte Dokumente
+## 🔗 Linked Documents
 
 - [docs/API.md](API.md)
 - [docs/CONTRIBUTING.md](CONTRIBUTING.md)

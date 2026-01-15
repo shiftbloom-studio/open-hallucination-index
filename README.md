@@ -5,15 +5,15 @@
 <h1 align="center">Open Hallucination Index</h1>
 
 <p align="center">
-  <strong>🔍 Wissenschaftlich fundiertes Fact-Checking für LLM-Ausgaben in Echtzeit</strong>
+  <strong>🔍 Scientifically grounded real-time fact-checking for LLM outputs</strong>
 </p>
 
 <p align="center">
-  <a href="#project-overview">Projektüberblick</a> •
-  <a href="#documentation">Dokumentation</a> •
-  <a href="#project-structure">Struktur</a> •
-  <a href="#getting-started">Start</a> •
-  <a href="#contributing">Mitwirkung</a>
+  <a href="#project-overview">Project Overview</a> •
+  <a href="#documentation">Documentation</a> •
+  <a href="#project-structure">Structure</a> •
+  <a href="#getting-started">Getting Started</a> •
+  <a href="#contributing">Contributing</a>
 </p>
 
 <p align="center">
@@ -24,26 +24,26 @@
 
 ---
 
-**Open Hallucination Index (OHI)** ist eine hochperformante Middleware- und Analyseplattform, die LLM‑Ausgaben in atomare Claims zerlegt, diese gegen kuratierte Wissensquellen verifiziert und eine nachvollziehbare Vertrauensbewertung in Echtzeit berechnet. Der Fokus liegt auf reproduzierbarer, evidenzbasierter Halluzinationsdetektion mit klaren Schnittstellen für Forschung, Produktivbetrieb und Auditierbarkeit.
+**Open Hallucination Index (OHI)** is a high-performance middleware and analysis platform that decomposes LLM outputs into atomic claims, verifies them against curated knowledge sources, and calculates a traceable trust score in real-time. The focus is on reproducible, evidence-based hallucination detection with clear interfaces for research, production use, and auditability.
 
-## 🧭 Projektüberblick
+## 🧭 Project Overview
 
-OHI verbindet **Claim‑Decomposition**, **Multi‑Source‑Evidenzsuche** und **quantitative Trust‑Scoring‑Modelle**. Die Architektur folgt einem hexagonalen Design, sodass Wissensquellen, Scoring‑Strategien und Retrieval‑Pipelines austauschbar bleiben. Das System besteht aus:
+OHI combines **Claim Decomposition**, **Multi-Source Evidence Retrieval**, and **Quantitative Trust Scoring Models**. The architecture follows a hexagonal design, ensuring that knowledge sources, scoring strategies, and retrieval pipelines remain interchangeable. The system consists of:
 
-- **API (FastAPI):** Orchestriert Verifikation, Evidence‑Aggregation und Scoring.
-- **Knowledge Track API:** Liefert Provenienz, Quellenlisten und 3D‑Mesh‑Daten für Claims.
-- **Frontend (Next.js):** Wissenschaftlich orientierte UI für Analyse, Nachvollziehbarkeit und Reporting.
-- **Infrastruktur‑Layer:** Neo4j, Qdrant, Redis und MCP‑Quellen für externe Evidenz.
+- **API (FastAPI):** Orchestrates verification, evidence aggregation, and scoring.
+- **Knowledge Track API:** Provides provenance, source lists, and 3D mesh data for claims.
+- **Frontend (Next.js):** A scientifically oriented UI for analysis, traceability, and reporting.
+- **Infrastructure Layer:** Neo4j, Qdrant, Redis, and MCP sources for external evidence.
 
-## 📚 Dokumentation
+## 📚 Documentation
 
-Die detaillierte Dokumentation ist im Ordner docs abgelegt:
+Detailed documentation is stored in the docs folder:
 
-- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) – Beitragspraxis, Konventionen und Review‑Prozess
-- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) – Community‑Standards
-- [docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md) – Öffentlicher Zugriff und Nutzungsrahmen
-- [docs/API.md](docs/API.md) – Vollständige API‑Spezifikation, Modelle, Beispiele
-- [docs/FRONTEND.md](docs/FRONTEND.md) – UI‑Architektur, Seitenstruktur, Designprinzipien
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) – Contribution guidelines, conventions, and review process
+- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) – Community standards
+- [docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md) – Public access and usage framework
+- [docs/API.md](docs/API.md) – Full API specification, models, examples
+- [docs/FRONTEND.md](docs/FRONTEND.md) – UI architecture, page structure, design principles
 
 ## ✨ Features
 
@@ -194,7 +194,7 @@ You can deploy these services using:
 
 ## 📖 API Reference
 
-Die vollständige API‑Dokumentation mit Request/Response‑Schemas, Beispielaufrufen, Error‑Konzept und Strategien befindet sich in [docs/API.md](docs/API.md).
+Full API documentation including request/response schemas, example calls, error concepts, and strategies can be found in [docs/API.md](docs/API.md).
 
 ## 🧪 Development
 

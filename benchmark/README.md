@@ -88,7 +88,7 @@ asyncio.run(run_benchmark())
 |----------|-------------|---------|
 | `OHI_API_HOST` | API host | `localhost` |
 | `OHI_API_PORT` | API port | `8080` |
-| `BENCHMARK_DATASET` | Path to CSV dataset | `benchmark_dataset.csv` |
+| `BENCHMARK_DATASET` | Path to CSV dataset | `benchmark/benchmark_dataset.csv` |
 | `BENCHMARK_OUTPUT_DIR` | Output directory | `benchmark_results` |
 | `BENCHMARK_CONCURRENCY` | Parallel requests | `3` |
 | `BENCHMARK_THRESHOLD` | Decision threshold | `0.7` |
