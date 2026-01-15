@@ -7,8 +7,6 @@ import time
 import threading
 from unittest.mock import MagicMock
 
-import pytest
-
 from open_hallucination_index.adapters.outbound.mcp_session_pool import (
     MCPPoolManager,
     PooledSession,
