@@ -20,6 +20,7 @@ from open_hallucination_index.domain.services.verification_oracle import (
 from open_hallucination_index.ports.knowledge_store import (
     GraphKnowledgeStore,
     VectorKnowledgeStore,
+    VectorQuery,
 )
 from open_hallucination_index.ports.verification_oracle import VerificationStrategy
 
@@ -69,9 +70,7 @@ class MockVectorStore(VectorKnowledgeStore):
     async def health_check(self) -> bool:
         return True
 
-    async def search_similar(self, query, **kwargs):
-        from open_hallucination_index.ports.knowledge_store import VectorQuery
-
+    async def search_similar(self, query: VectorQuery | str, **kwargs):
         if isinstance(query, VectorQuery):
             return []
         return []
@@ -163,7 +162,15 @@ class TestHybridVerificationOracle:
             vector_store=MockVectorStore([]),
         )
 
-        claims = [sample_claim, sample_claim]  # Same claim twice for test
+        another_claim = Claim(
+            id=uuid4(),
+            text=f"{sample_claim.text} (variant)",
+            claim_type=sample_claim.claim_type,
+            subject=sample_claim.subject,
+            predicate=sample_claim.predicate,
+            object=sample_claim.object,
+        )
+        claims = [sample_claim, another_claim]
         results = await oracle.verify_claims(claims)
 
         assert len(results) == 2
@@ -177,7 +184,6 @@ class TestHybridVerificationOracle:
         supporting_evidence: list[Evidence],
     ) -> None:
         """Test graph-only strategy."""
-        graph_evidence = supporting_evidence
         vector_evidence = [
             Evidence(
                 id=uuid4(),
@@ -188,7 +194,7 @@ class TestHybridVerificationOracle:
         ]
 
         oracle = HybridVerificationOracle(
-            graph_store=MockGraphStore(graph_evidence),
+            graph_store=MockGraphStore(supporting_evidence),
             vector_store=MockVectorStore(vector_evidence),
             default_strategy=VerificationStrategy.GRAPH_EXACT,
         )
@@ -196,7 +202,7 @@ class TestHybridVerificationOracle:
         status, trace = await oracle.verify_claim(sample_claim)
 
         # Should only use graph evidence
-        assert len(trace.supporting_evidence) == len(graph_evidence)
+        assert len(trace.supporting_evidence) == len(supporting_evidence)
 
     @pytest.mark.asyncio
     async def test_strategy_vector_only(
@@ -230,7 +236,11 @@ class TestHybridVerificationOracle:
     @pytest.mark.asyncio
     async def test_health_check_no_stores(self) -> None:
         """Test health check with no stores."""
-        oracle = HybridVerificationOracle()
+        oracle = HybridVerificationOracle(
+            graph_store=None,
+            vector_store=None,
+            default_strategy=VerificationStrategy.HYBRID,
+        )
 
         result = await oracle.health_check()
         assert result is False
