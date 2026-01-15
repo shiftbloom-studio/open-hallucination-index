@@ -5,8 +5,6 @@ Tests for Domain Results
 
 from uuid import uuid4
 
-import pytest
-
 from open_hallucination_index.domain.entities import Claim, ClaimType
 from open_hallucination_index.domain.results import (
     CitationTrace,

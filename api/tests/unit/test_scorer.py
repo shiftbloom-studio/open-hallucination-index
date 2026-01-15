@@ -13,7 +13,7 @@ from open_hallucination_index.domain.results import (
     ClaimVerification,
     VerificationStatus,
 )
-from open_hallucination_index.domain.services.scorer import WeightedScorer, StrictScorer
+from open_hallucination_index.domain.services.scorer import StrictScorer, WeightedScorer
 
 
 def create_verification(
