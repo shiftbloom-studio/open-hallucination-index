@@ -720,8 +720,9 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
 
         Args:
             entity: The entity name to search for.
-            relationship_types: List of relationship types to filter (e.g., ['MARRIED_TO', 'CHILD_OF']).
-                              If None, searches all relationship types.
+            relationship_types: List of relationship types to filter
+                              (e.g., ['MARRIED_TO', 'CHILD_OF']). If None,
+                              searches all relationship types.
             direction: 'outgoing', 'incoming', or 'both'.
             limit: Maximum results to return.
 
@@ -732,10 +733,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
             raise Neo4jError("Not connected to Neo4j")
 
         # Build relationship type filter
-        if relationship_types:
-            rel_filter = ":" + "|".join(relationship_types)
-        else:
-            rel_filter = ""
+        rel_filter = ":" + "|".join(relationship_types) if relationship_types else ""
 
         # Build direction pattern
         if direction == "outgoing":
