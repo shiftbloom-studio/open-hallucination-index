@@ -78,7 +78,7 @@ class TestClaim:
             claim_type=ClaimType.UNCLASSIFIED,
         )
 
-        with pytest.raises(Exception):  # ValidationError or similar
+        with pytest.raises(TypeError):
             claim.text = "Modified claim"  # type: ignore[misc]
 
 

@@ -27,12 +27,12 @@ from open_hallucination_index.domain.entities import Evidence, EvidenceSource
 
 if TYPE_CHECKING:
     from open_hallucination_index.domain.entities import Claim
+    from open_hallucination_index.domain.services.mcp_selector import SmartMCPSelector
     from open_hallucination_index.ports.knowledge_store import (
         GraphKnowledgeStore,
         VectorKnowledgeStore,
     )
     from open_hallucination_index.ports.mcp_source import MCPKnowledgeSource
-    from open_hallucination_index.domain.services.mcp_selector import SmartMCPSelector
 
 logger = logging.getLogger(__name__)
 

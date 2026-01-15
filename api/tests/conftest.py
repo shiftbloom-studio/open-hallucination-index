@@ -22,7 +22,6 @@ from open_hallucination_index.domain.results import (
     CitationTrace,
     ClaimVerification,
     TrustScore,
-    VerificationResult,
     VerificationStatus,
 )
 from open_hallucination_index.ports.verification_oracle import VerificationStrategy

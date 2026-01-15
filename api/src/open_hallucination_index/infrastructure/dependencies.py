@@ -16,29 +16,28 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
-from open_hallucination_index.infrastructure.config import get_settings
-
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
 from open_hallucination_index.adapters.outbound.cache_redis import RedisCacheAdapter
+from open_hallucination_index.adapters.outbound.embeddings_local import LocalEmbeddingAdapter
 from open_hallucination_index.adapters.outbound.graph_neo4j import Neo4jGraphAdapter
 from open_hallucination_index.adapters.outbound.llm_openai import OpenAILLMAdapter
-from open_hallucination_index.adapters.outbound.vector_qdrant import QdrantVectorAdapter
-from open_hallucination_index.adapters.outbound.mcp_wikipedia import WikipediaMCPAdapter
 from open_hallucination_index.adapters.outbound.mcp_context7 import Context7MCPAdapter
 from open_hallucination_index.adapters.outbound.mcp_ohi import OHIMCPAdapter
-from open_hallucination_index.adapters.outbound.embeddings_local import LocalEmbeddingAdapter
+from open_hallucination_index.adapters.outbound.mcp_wikipedia import WikipediaMCPAdapter
+from open_hallucination_index.adapters.outbound.vector_qdrant import QdrantVectorAdapter
 from open_hallucination_index.application.verify_text import VerifyTextUseCase
 from open_hallucination_index.domain.services.claim_decomposer import LLMClaimDecomposer
-from open_hallucination_index.domain.services.scorer import WeightedScorer
-from open_hallucination_index.domain.services.verification_oracle import (
-    HybridVerificationOracle,
-)
 from open_hallucination_index.domain.services.evidence_collector import (
     AdaptiveEvidenceCollector,
 )
 from open_hallucination_index.domain.services.mcp_selector import SmartMCPSelector
+from open_hallucination_index.domain.services.scorer import WeightedScorer
+from open_hallucination_index.domain.services.verification_oracle import (
+    HybridVerificationOracle,
+)
+from open_hallucination_index.infrastructure.config import get_settings
 from open_hallucination_index.ports.cache import CacheProvider
 from open_hallucination_index.ports.claim_decomposer import ClaimDecomposer
 from open_hallucination_index.ports.knowledge_store import (
@@ -249,7 +248,11 @@ async def _initialize_adapters() -> None:
         evidence_collector=evidence_collector,
         mcp_selector=mcp_selector,
     )
-    logger.info(f"Verification oracle initialized: strategy={strategy.value}, mcp_sources={len(_mcp_sources)}")
+    logger.info(
+        "Verification oracle initialized: strategy=%s, mcp_sources=%s",
+        strategy.value,
+        len(_mcp_sources),
+    )
 
     _scorer = WeightedScorer()
     logger.info("Scorer initialized")
@@ -285,7 +288,7 @@ async def _cleanup_adapters() -> None:
                 asyncio.wait_for(source.disconnect(), timeout=5.0)
             )
             logger.debug(f"Disconnected MCP source: {source.source_name}")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"MCP source disconnect timed out: {source.source_name}")
         except asyncio.CancelledError:
             logger.warning(f"MCP source disconnect cancelled: {source.source_name}")
@@ -300,7 +303,7 @@ async def _cleanup_adapters() -> None:
                 asyncio.wait_for(_cache_provider.disconnect(), timeout=5.0)
             )
             logger.debug("Disconnected cache provider")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Cache provider disconnect timed out")
         except asyncio.CancelledError:
             logger.warning("Cache provider disconnect cancelled")
@@ -315,7 +318,7 @@ async def _cleanup_adapters() -> None:
                 asyncio.wait_for(_vector_store.disconnect(), timeout=5.0)
             )
             logger.debug("Disconnected vector store")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Vector store disconnect timed out")
         except asyncio.CancelledError:
             logger.warning("Vector store disconnect cancelled")
@@ -331,7 +334,7 @@ async def _cleanup_adapters() -> None:
                 asyncio.wait_for(_graph_store.disconnect(), timeout=10.0)
             )
             logger.debug("Disconnected graph store")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Graph store disconnect timed out")
         except asyncio.CancelledError:
             logger.warning("Graph store disconnect cancelled (graceful shutdown)")

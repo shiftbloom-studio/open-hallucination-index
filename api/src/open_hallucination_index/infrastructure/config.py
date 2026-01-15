@@ -81,7 +81,10 @@ class QdrantSettings(BaseSettings):
     grpc_port: int = Field(default=6334)
     api_key: SecretStr | None = Field(default=None)
     collection_name: str = Field(default="knowledge_base")
-    vector_size: int = Field(default=384, description="Embedding dimension (384 for all-MiniLM-L6-v2)")
+    vector_size: int = Field(
+        default=384,
+        description="Embedding dimension (384 for all-MiniLM-L6-v2)",
+    )
     use_grpc: bool = Field(default=False)
 
 

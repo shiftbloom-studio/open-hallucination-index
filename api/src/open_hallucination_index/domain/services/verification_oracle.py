@@ -24,15 +24,15 @@ from open_hallucination_index.ports.verification_oracle import (
 
 if TYPE_CHECKING:
     from open_hallucination_index.domain.entities import Claim
+    from open_hallucination_index.domain.services.evidence_collector import (
+        AdaptiveEvidenceCollector,
+    )
+    from open_hallucination_index.domain.services.mcp_selector import SmartMCPSelector
     from open_hallucination_index.ports.knowledge_store import (
         GraphKnowledgeStore,
         VectorKnowledgeStore,
     )
     from open_hallucination_index.ports.mcp_source import MCPKnowledgeSource
-    from open_hallucination_index.domain.services.evidence_collector import (
-        AdaptiveEvidenceCollector,
-    )
-    from open_hallucination_index.domain.services.mcp_selector import SmartMCPSelector
 
 logger = logging.getLogger(__name__)
 
@@ -445,8 +445,6 @@ class HybridVerificationOracle(VerificationOracle):
         except Exception as e:
             logger.debug(f"Failed to persist evidence to vector store: {e}")
 
-        return all_evidence
-
     def _classify_evidence(
         self, claim: Claim, evidence: list[Evidence]
     ) -> tuple[list[Evidence], list[Evidence]]:
@@ -631,7 +629,10 @@ class HybridVerificationOracle(VerificationOracle):
             return (
                 VerificationStatus.PARTIALLY_SUPPORTED,
                 confidence,
-                f"Moderately supported: {support_count} supporting vs {refute_count} contradicting.",
+                (
+                    "Moderately supported: "
+                    f"{support_count} supporting vs {refute_count} contradicting."
+                ),
             )
 
         # Slight support (1:1 to 2:1)
