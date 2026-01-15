@@ -15,18 +15,31 @@ Additional modes:
 - Cache Testing: Compare performance with/without Redis cache
 
 Generates comprehensive comparison reports and visualizations.
+
+Features:
+- Real-time live progress display (updates every second)
+- Rich console styling with KPI cards and visual metrics
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import statistics
 import time
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import redis
-from rich.console import Console
+from rich.align import Align
+from rich.box import ROUNDED
+from rich.columns import Columns
+from rich.console import Console, Group
+from rich.layout import Layout
+from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
@@ -36,8 +49,11 @@ from rich.progress import (
     TaskProgressColumn,
     TextColumn,
     TimeElapsedColumn,
+    TimeRemainingColumn,
 )
+from rich.rule import Rule
 from rich.table import Table
+from rich.text import Text
 
 from benchmark.comparison_config import ComparisonBenchmarkConfig
 from benchmark.comparison_metrics import (
@@ -57,6 +73,262 @@ from benchmark.evaluators import (
 )
 
 logger = logging.getLogger("OHI-Comparison-Benchmark")
+
+
+# ============================================================================
+# Formatting Constants (from console.py style)
+# ============================================================================
+
+@dataclass(frozen=True)
+class _Fmt:
+    """Color scheme consistent with ConsoleReporter."""
+    good: str = "green"
+    warn: str = "yellow"
+    bad: str = "red"
+    dim: str = "dim"
+    cyan: str = "cyan"
+    accent: str = "bright_magenta"
+
+
+FMT = _Fmt()
+
+
+# ============================================================================
+# Live Benchmark Display
+# ============================================================================
+
+@dataclass
+class LiveStats:
+    """Real-time benchmark statistics."""
+    # Overall progress
+    total_evaluators: int = 0
+    completed_evaluators: int = 0
+    current_evaluator: str = ""
+    current_metric: str = ""
+    
+    # Current task progress
+    current_total: int = 0
+    current_completed: int = 0
+    
+    # Timing
+    start_time: float = field(default_factory=time.perf_counter)
+    current_latencies: list[float] = field(default_factory=list)
+    
+    # Accumulated results
+    correct: int = 0
+    errors: int = 0
+    total_processed: int = 0
+    
+    # Per-evaluator results
+    evaluator_results: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+class LiveBenchmarkDisplay:
+    """
+    Real-time benchmark display with Rich Live.
+    
+    Updates every second with:
+    - Overall progress (evaluators, metrics)
+    - Current task progress bar
+    - Live KPI cards (throughput, accuracy, latency)
+    - Running statistics table
+    """
+    
+    REFRESH_RATE = 1.0  # Update every second
+    
+    def __init__(self, console: Console, stats: LiveStats) -> None:
+        self.console = console
+        self.stats = stats
+        self._live: Live | None = None
+        self._progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}[/bold cyan]"),
+            BarColumn(bar_width=40),
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            TextColumn("•"),
+            TimeRemainingColumn(),
+            console=console,
+            expand=True,
+        )
+        self._task_id: int | None = None
+    
+    def __enter__(self) -> "LiveBenchmarkDisplay":
+        """Start the live display."""
+        self._live = Live(
+            self._render(),
+            console=self.console,
+            refresh_per_second=self.REFRESH_RATE,
+            transient=False,
+        )
+        self._live.__enter__()
+        return self
+    
+    def __exit__(self, *args) -> None:
+        """Stop the live display."""
+        if self._live:
+            self._live.__exit__(*args)
+    
+    def start_task(self, description: str, total: int) -> None:
+        """Start a new progress task."""
+        self.stats.current_metric = description
+        self.stats.current_total = total
+        self.stats.current_completed = 0
+        self.stats.current_latencies = []
+        
+        # Reset or create progress task
+        if self._task_id is not None:
+            self._progress.remove_task(self._task_id)
+        self._task_id = self._progress.add_task(description, total=total)
+        self._update()
+    
+    def advance(self, n: int = 1, latency_ms: float | None = None) -> None:
+        """Advance progress by n items."""
+        self.stats.current_completed += n
+        self.stats.total_processed += n
+        
+        if latency_ms is not None:
+            self.stats.current_latencies.append(latency_ms)
+        
+        if self._task_id is not None:
+            self._progress.update(self._task_id, advance=n)
+        self._update()
+    
+    def set_evaluator(self, name: str) -> None:
+        """Set current evaluator being tested."""
+        self.stats.current_evaluator = name
+        self._update()
+    
+    def complete_evaluator(self, name: str, metrics: dict[str, Any]) -> None:
+        """Mark an evaluator as complete with its metrics."""
+        self.stats.completed_evaluators += 1
+        self.stats.evaluator_results[name] = metrics
+        self._update()
+    
+    def add_result(self, correct: bool, error: bool = False) -> None:
+        """Record a result."""
+        if correct:
+            self.stats.correct += 1
+        if error:
+            self.stats.errors += 1
+        self._update()
+    
+    def _update(self) -> None:
+        """Update the live display."""
+        if self._live:
+            self._live.update(self._render())
+    
+    def _render(self) -> Group:
+        """Render the full display."""
+        return Group(
+            self._render_header(),
+            self._render_progress(),
+            self._render_kpis(),
+            self._render_results_table(),
+        )
+    
+    def _render_header(self) -> Panel:
+        """Render header panel."""
+        elapsed = time.perf_counter() - self.stats.start_time
+        
+        status = "[bold green]● RUNNING[/bold green]"
+        if self.stats.completed_evaluators == self.stats.total_evaluators:
+            status = "[bold cyan]✓ COMPLETE[/bold cyan]"
+        
+        lines = [
+            f"{status}  [dim]Evaluator[/dim] [bold]{self.stats.current_evaluator or 'initializing'}[/bold]",
+            f"[dim]Progress[/dim] {self.stats.completed_evaluators}/{self.stats.total_evaluators} evaluators • [dim]elapsed[/dim] {elapsed:.1f}s",
+        ]
+        
+        return Panel(
+            Align.left("\n".join(lines)),
+            border_style="cyan",
+            box=ROUNDED,
+            padding=(0, 2),
+        )
+    
+    def _render_progress(self) -> Panel:
+        """Render progress bar panel."""
+        return Panel(
+            self._progress,
+            title=f"[dim]{self.stats.current_metric}[/dim]",
+            border_style="dim",
+            box=ROUNDED,
+            padding=(0, 1),
+        )
+    
+    def _render_kpis(self) -> Columns:
+        """Render live KPI cards."""
+        elapsed = time.perf_counter() - self.stats.start_time
+        
+        # Calculate live metrics
+        throughput = self.stats.total_processed / elapsed if elapsed > 0 else 0.0
+        accuracy = (self.stats.correct / self.stats.total_processed * 100) if self.stats.total_processed > 0 else 0.0
+        
+        # Latency stats
+        p50 = p95 = avg_lat = 0.0
+        if self.stats.current_latencies:
+            sorted_lat = sorted(self.stats.current_latencies)
+            avg_lat = statistics.mean(sorted_lat)
+            p50 = sorted_lat[int(len(sorted_lat) * 0.5)] if sorted_lat else 0
+            p95 = sorted_lat[int(len(sorted_lat) * 0.95)] if sorted_lat else 0
+        
+        cards = [
+            self._kpi_card("⚡ Throughput", f"{throughput:.2f} req/s", style="bold cyan"),
+            self._kpi_card("🎯 Accuracy", f"{accuracy:.1f}%", 
+                          style="bold green" if accuracy >= 80 else ("bold yellow" if accuracy >= 60 else "bold red")),
+            self._kpi_card("⏱️ P50 / P95", f"{p50:.0f}ms / {p95:.0f}ms"),
+            self._kpi_card("📊 Processed", f"{self.stats.total_processed}", style="bold"),
+            self._kpi_card("⚠️ Errors", f"{self.stats.errors}", 
+                          style="bold red" if self.stats.errors > 0 else "dim"),
+        ]
+        
+        return Columns(cards, equal=True, expand=True)
+    
+    def _kpi_card(self, title: str, value: str, style: str = "") -> Panel:
+        """Create a styled KPI card (consistent with ConsoleReporter)."""
+        txt = Text()
+        txt.append(title + "\n", style="dim")
+        txt.append(str(value), style=style or "bold")
+        return Panel(txt, box=ROUNDED, padding=(0, 1), border_style="dim")
+    
+    def _render_results_table(self) -> Panel:
+        """Render completed evaluator results table."""
+        if not self.stats.evaluator_results:
+            return Panel("[dim]No results yet...[/dim]", border_style="dim", box=ROUNDED)
+        
+        table = Table(box=ROUNDED, expand=True, show_header=True, header_style="bold cyan")
+        table.add_column("Evaluator", style="cyan", no_wrap=True)
+        table.add_column("Accuracy", justify="right")
+        table.add_column("F1", justify="right")
+        table.add_column("P50", justify="right")
+        table.add_column("P95", justify="right")
+        table.add_column("Status", justify="center")
+        
+        for name, metrics in self.stats.evaluator_results.items():
+            acc = metrics.get("accuracy", 0) * 100
+            f1 = metrics.get("f1", 0) * 100
+            p50 = metrics.get("p50", 0)
+            p95 = metrics.get("p95", 0)
+            
+            acc_style = "green" if acc >= 80 else ("yellow" if acc >= 60 else "red")
+            
+            table.add_row(
+                name,
+                f"[{acc_style}]{acc:.1f}%[/{acc_style}]",
+                f"{f1:.1f}%",
+                f"{p50:.0f}ms",
+                f"{p95:.0f}ms",
+                "[green]✓[/green]",
+            )
+        
+        return Panel(table, title="[dim]Completed Evaluators[/dim]", border_style="dim", box=ROUNDED)
+
+
+# ============================================================================
+# Main Runner Class
+# ============================================================================
 
 
 class ComparisonBenchmarkRunner:
@@ -244,18 +516,34 @@ class ComparisonBenchmarkRunner:
         return report
     
     async def _run_standard_comparison(self, report: ComparisonReport) -> None:
-        """Run standard evaluator comparison."""
-        for eval_name, evaluator in self._evaluators.items():
-            self.console.print(f"\n[bold]Benchmarking {evaluator.name}...[/bold]")
-            
-            metrics = await self._benchmark_evaluator(evaluator)
-            report.add_evaluator(metrics)
-            
-            self._print_evaluator_summary(metrics)
+        """Run standard evaluator comparison with live display."""
+        # Initialize live stats
+        stats = LiveStats(
+            total_evaluators=len(self._evaluators),
+            start_time=time.perf_counter(),
+        )
+        
+        with LiveBenchmarkDisplay(self.console, stats) as display:
+            for eval_name, evaluator in self._evaluators.items():
+                display.set_evaluator(evaluator.name)
+                
+                metrics = await self._benchmark_evaluator_live(evaluator, display, stats)
+                report.add_evaluator(metrics)
+                
+                # Record completed evaluator
+                display.complete_evaluator(
+                    evaluator.name,
+                    {
+                        "accuracy": metrics.hallucination.accuracy,
+                        "f1": metrics.hallucination.f1_score,
+                        "p50": metrics.latency.p50,
+                        "p95": metrics.latency.p95,
+                    }
+                )
     
     async def _run_strategy_comparison(self, report: ComparisonReport) -> None:
         """
-        Run OHI strategy comparison mode.
+        Run OHI strategy comparison mode with live display.
         
         Tests each verification strategy separately to find the optimal one.
         """
@@ -265,41 +553,65 @@ class ComparisonBenchmarkRunner:
             border_style="yellow",
         ))
         
-        # Run non-OHI evaluators first (standard mode)
-        for eval_name, evaluator in self._evaluators.items():
-            if eval_name != "ohi":
-                self.console.print(f"\n[bold]Benchmarking {evaluator.name}...[/bold]")
-                metrics = await self._benchmark_evaluator(evaluator)
-                report.add_evaluator(metrics)
-                self._print_evaluator_summary(metrics)
+        # Calculate total evaluators: non-OHI + OHI strategies
+        non_ohi_count = sum(1 for e in self._evaluators if e != "ohi")
+        total_evals = non_ohi_count + len(self.config.ohi_strategies)
         
-        # Run each OHI strategy
-        ohi_evaluator = self._evaluators.get("ohi")
-        if ohi_evaluator:
-            for strategy in self.config.ohi_strategies:
-                self.console.print(f"\n[bold cyan]Testing OHI Strategy: {strategy}[/bold cyan]")
-                
-                # Create strategy-specific evaluator
-                strategy_config = ComparisonBenchmarkConfig.from_env()
-                strategy_config.ohi_strategy = strategy
-                
-                from benchmark.evaluators import OHIEvaluator
-                strategy_evaluator = OHIEvaluator(strategy_config)
-                
-                try:
-                    if await strategy_evaluator.health_check():
-                        metrics = await self._benchmark_evaluator(strategy_evaluator)
-                        metrics.evaluator_name = f"OHI ({strategy})"
-                        report.add_evaluator(metrics)
-                        self._print_evaluator_summary(metrics)
-                    else:
-                        self.console.print(f"  [yellow]⚠ Strategy {strategy} health check failed[/yellow]")
-                finally:
-                    await strategy_evaluator.close()
+        stats = LiveStats(
+            total_evaluators=total_evals,
+            start_time=time.perf_counter(),
+        )
+        
+        with LiveBenchmarkDisplay(self.console, stats) as display:
+            # Run non-OHI evaluators first
+            for eval_name, evaluator in self._evaluators.items():
+                if eval_name != "ohi":
+                    display.set_evaluator(evaluator.name)
+                    metrics = await self._benchmark_evaluator_live(evaluator, display, stats)
+                    report.add_evaluator(metrics)
+                    display.complete_evaluator(
+                        evaluator.name,
+                        {
+                            "accuracy": metrics.hallucination.accuracy,
+                            "f1": metrics.hallucination.f1_score,
+                            "p50": metrics.latency.p50,
+                            "p95": metrics.latency.p95,
+                        }
+                    )
+            
+            # Run each OHI strategy
+            ohi_evaluator = self._evaluators.get("ohi")
+            if ohi_evaluator:
+                for strategy in self.config.ohi_strategies:
+                    display.set_evaluator(f"OHI ({strategy})")
+                    
+                    # Create strategy-specific evaluator
+                    strategy_config = ComparisonBenchmarkConfig.from_env()
+                    strategy_config.ohi_strategy = strategy
+                    
+                    from benchmark.evaluators import OHIEvaluator
+                    strategy_evaluator = OHIEvaluator(strategy_config)
+                    
+                    try:
+                        if await strategy_evaluator.health_check():
+                            metrics = await self._benchmark_evaluator_live(strategy_evaluator, display, stats)
+                            metrics.evaluator_name = f"OHI ({strategy})"
+                            report.add_evaluator(metrics)
+                            display.complete_evaluator(
+                                f"OHI ({strategy})",
+                                {
+                                    "accuracy": metrics.hallucination.accuracy,
+                                    "f1": metrics.hallucination.f1_score,
+                                    "p50": metrics.latency.p50,
+                                    "p95": metrics.latency.p95,
+                                }
+                            )
+                    finally:
+                        await strategy_evaluator.close()
     
     async def _run_cache_comparison(self, report: ComparisonReport) -> None:
         """
-        Run cache comparison mode.
+        Run cache comparison mode with live display.
         
         Tests each evaluator twice:
         1. Cold cache: Cache cleared before run
@@ -311,44 +623,87 @@ class ComparisonBenchmarkRunner:
             border_style="yellow",
         ))
         
-        for eval_name, evaluator in self._evaluators.items():
-            # Test 1: Cold cache (cleared before run)
-            self.console.print(f"\n[bold]Benchmarking {evaluator.name} (Cold Cache)...[/bold]")
-            
-            deleted = self._clear_cache()
-            self.console.print(f"  [dim]Cleared {deleted} cache keys[/dim]")
-            
-            metrics_cold = await self._benchmark_evaluator(evaluator)
-            metrics_cold.evaluator_name = f"{evaluator.name} (Cold)"
-            report.add_evaluator(metrics_cold)
-            self._print_evaluator_summary(metrics_cold)
-            
-            # Test 2: Warm cache (use cache from previous run)
-            self.console.print(f"\n[bold]Benchmarking {evaluator.name} (Warm Cache)...[/bold]")
-            
-            metrics_warm = await self._benchmark_evaluator(evaluator)
-            metrics_warm.evaluator_name = f"{evaluator.name} (Warm)"
-            report.add_evaluator(metrics_warm)
-            self._print_evaluator_summary(metrics_warm)
-            
-            # Print cache impact
-            if metrics_cold.latency.p50 > 0 and metrics_warm.latency.p50 > 0:
-                speedup = metrics_cold.latency.p50 / metrics_warm.latency.p50
-                self.console.print(
-                    f"  [green]Cache speedup: {speedup:.2f}x (P50: {metrics_cold.latency.p50:.0f}ms → {metrics_warm.latency.p50:.0f}ms)[/green]"
-                )
+        # Each evaluator runs twice (cold + warm)
+        stats = LiveStats(
+            total_evaluators=len(self._evaluators) * 2,
+            start_time=time.perf_counter(),
+        )
         
-        return report
+        with LiveBenchmarkDisplay(self.console, stats) as display:
+            for eval_name, evaluator in self._evaluators.items():
+                # Test 1: Cold cache (cleared before run)
+                display.set_evaluator(f"{evaluator.name} (Cold)")
+                
+                deleted = self._clear_cache()
+                logger.info(f"Cleared {deleted} cache keys")
+                
+                metrics_cold = await self._benchmark_evaluator_live(evaluator, display, stats)
+                metrics_cold.evaluator_name = f"{evaluator.name} (Cold)"
+                report.add_evaluator(metrics_cold)
+                
+                display.complete_evaluator(
+                    f"{evaluator.name} (Cold)",
+                    {
+                        "accuracy": metrics_cold.hallucination.accuracy,
+                        "f1": metrics_cold.hallucination.f1_score,
+                        "p50": metrics_cold.latency.p50,
+                        "p95": metrics_cold.latency.p95,
+                    }
+                )
+                
+                # Test 2: Warm cache (use cache from previous run)
+                display.set_evaluator(f"{evaluator.name} (Warm)")
+                
+                metrics_warm = await self._benchmark_evaluator_live(evaluator, display, stats)
+                metrics_warm.evaluator_name = f"{evaluator.name} (Warm)"
+                report.add_evaluator(metrics_warm)
+                
+                display.complete_evaluator(
+                    f"{evaluator.name} (Warm)",
+                    {
+                        "accuracy": metrics_warm.hallucination.accuracy,
+                        "f1": metrics_warm.hallucination.f1_score,
+                        "p50": metrics_warm.latency.p50,
+                        "p95": metrics_warm.latency.p95,
+                    }
+                )
+                
+                # Print cache impact after live display
+                if metrics_cold.latency.p50 > 0 and metrics_warm.latency.p50 > 0:
+                    speedup = metrics_cold.latency.p50 / metrics_warm.latency.p50
+                    logger.info(
+                        f"Cache speedup for {evaluator.name}: {speedup:.2f}x "
+                        f"(P50: {metrics_cold.latency.p50:.0f}ms → {metrics_warm.latency.p50:.0f}ms)"
+                    )
+        
+        # Print cache comparison summary
+        self.console.print(Rule("📊 Cache Impact Summary", style="cyan"))
+        for eval_name in self._evaluators:
+            cold_name = f"{eval_name} (Cold)"
+            warm_name = f"{eval_name} (Warm)"
+            if cold_name in report.evaluators and warm_name in report.evaluators:
+                cold = report.evaluators[cold_name]
+                warm = report.evaluators[warm_name]
+                if cold.latency.p50 > 0 and warm.latency.p50 > 0:
+                    speedup = cold.latency.p50 / warm.latency.p50
+                    self.console.print(
+                        f"  [green]✓[/green] {eval_name}: {speedup:.2f}x speedup "
+                        f"(P50: {cold.latency.p50:.0f}ms → {warm.latency.p50:.0f}ms)"
+                    )
     
-    async def _benchmark_evaluator(
+    async def _benchmark_evaluator_live(
         self,
         evaluator: BaseEvaluator,
+        display: LiveBenchmarkDisplay,
+        stats: LiveStats,
     ) -> EvaluatorMetrics:
         """
-        Run all benchmarks for a single evaluator.
+        Run all benchmarks for a single evaluator with live display updates.
         
         Args:
             evaluator: The evaluator to benchmark.
+            display: Live display for progress updates.
+            stats: Shared statistics object.
             
         Returns:
             EvaluatorMetrics with all metric results.
@@ -357,23 +712,192 @@ class ComparisonBenchmarkRunner:
         
         # 1. Hallucination Detection
         if "hallucination" in self.config.metrics:
-            halluc_metrics, latencies = await self._run_hallucination_benchmark(evaluator)
+            halluc_metrics, latencies = await self._run_hallucination_benchmark_live(
+                evaluator, display, stats
+            )
             metrics.hallucination = halluc_metrics
             metrics.latency.latencies_ms.extend(latencies)
         
         # 2. TruthfulQA
         if "truthfulqa" in self.config.metrics:
-            tqa_metrics, latencies = await self._run_truthfulqa_benchmark(evaluator)
+            tqa_metrics, latencies = await self._run_truthfulqa_benchmark_live(
+                evaluator, display, stats
+            )
             metrics.truthfulqa = tqa_metrics
             metrics.latency.latencies_ms.extend(latencies)
         
         # 3. FActScore
         if "factscore" in self.config.metrics:
-            fac_metrics, latencies = await self._run_factscore_benchmark(evaluator)
+            fac_metrics, latencies = await self._run_factscore_benchmark_live(
+                evaluator, display, stats
+            )
             metrics.factscore = fac_metrics
             metrics.latency.latencies_ms.extend(latencies)
         
         return metrics
+    
+    # ========================================================================
+    # Live Benchmark Methods (with real-time display updates)
+    # ========================================================================
+    
+    async def _run_hallucination_benchmark_live(
+        self,
+        evaluator: BaseEvaluator,
+        display: LiveBenchmarkDisplay,
+        stats: LiveStats,
+    ) -> tuple[HallucinationMetrics, list[float]]:
+        """Run hallucination detection benchmark with live display."""
+        loader = HallucinationLoader(self.config.hallucination_dataset)
+        
+        # Load dataset
+        try:
+            if self.config.extended_dataset and self.config.extended_dataset.exists():
+                dataset = loader.load_combined(
+                    csv_path=self.config.hallucination_dataset,
+                    include_huggingface=False,
+                )
+            else:
+                dataset = loader.load_csv()
+        except FileNotFoundError:
+            # Try loading from HuggingFace only
+            dataset = loader.load_from_huggingface(max_samples=200)
+        
+        metrics = HallucinationMetrics(total=dataset.total)
+        latencies: list[float] = []
+        
+        # Start task in live display
+        display.start_task(
+            f"Hallucination Detection ({evaluator.name})",
+            total=len(dataset.cases)
+        )
+        
+        # Process in batches
+        batch_size = self.config.concurrency
+        for i in range(0, len(dataset.cases), batch_size):
+            batch = dataset.cases[i:i + batch_size]
+            claims = [case.text for case in batch]
+            
+            results = await evaluator.verify_batch(claims, concurrency=batch_size)
+            
+            for case, result in zip(batch, results, strict=True):
+                latencies.append(result.latency_ms)
+                
+                # Compare prediction to ground truth
+                predicted = result.predicted_label
+                expected = case.label
+                
+                is_correct = False
+                if predicted and expected:
+                    metrics.true_positives += 1
+                    metrics.correct += 1
+                    is_correct = True
+                elif not predicted and not expected:
+                    metrics.true_negatives += 1
+                    metrics.correct += 1
+                    is_correct = True
+                elif predicted and not expected:
+                    metrics.false_positives += 1  # Dangerous!
+                else:
+                    metrics.false_negatives += 1
+                
+                # Update live display
+                display.advance(1, latency_ms=result.latency_ms)
+                display.add_result(correct=is_correct, error=result.error is not None)
+        
+        return metrics, latencies
+    
+    async def _run_truthfulqa_benchmark_live(
+        self,
+        evaluator: BaseEvaluator,
+        display: LiveBenchmarkDisplay,
+        stats: LiveStats,
+    ) -> tuple[TruthfulQAMetrics, list[float]]:
+        """Run TruthfulQA benchmark with live display."""
+        loader = TruthfulQALoader()
+        
+        try:
+            claims = loader.load_for_verification(
+                max_samples=self.config.truthfulqa.max_samples,
+                categories=self.config.truthfulqa.categories,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load TruthfulQA: {e}")
+            return TruthfulQAMetrics(), []
+        
+        metrics = TruthfulQAMetrics(total_questions=len(claims))
+        latencies: list[float] = []
+        
+        # Start task in live display
+        display.start_task(
+            f"TruthfulQA ({evaluator.name})",
+            total=len(claims)
+        )
+        
+        # Process claims
+        for claim_text, is_correct in claims:
+            result = await evaluator.verify(claim_text)
+            latencies.append(result.latency_ms)
+            
+            # Check if evaluator agrees with ground truth
+            predicted = result.predicted_label
+            correct = (predicted == is_correct)
+            if correct:
+                metrics.correct_predictions += 1
+            
+            # Update live display
+            display.advance(1, latency_ms=result.latency_ms)
+            display.add_result(correct=correct, error=result.error is not None)
+        
+        return metrics, latencies
+    
+    async def _run_factscore_benchmark_live(
+        self,
+        evaluator: BaseEvaluator,
+        display: LiveBenchmarkDisplay,
+        stats: LiveStats,
+    ) -> tuple[FActScoreMetrics, list[float]]:
+        """Run FActScore benchmark with live display."""
+        # Sample texts for FActScore evaluation
+        sample_texts = [
+            "Albert Einstein was born in Germany in 1879. He developed the theory of relativity and won the Nobel Prize in Physics in 1921 for his explanation of the photoelectric effect.",
+            "The Eiffel Tower is located in Paris, France. It was constructed in 1889 for the World's Fair and stands at 324 meters tall. It is made of iron and was designed by Gustave Eiffel.",
+            "Python is a programming language created by Guido van Rossum in 1991. It is known for its simple syntax and is widely used in web development, data science, and artificial intelligence.",
+            "The human heart has four chambers and pumps blood throughout the body. It beats approximately 100,000 times per day and is located in the chest cavity.",
+            "World War II ended in 1945. It involved most of the world's nations and resulted in significant geopolitical changes including the formation of the United Nations.",
+        ]
+        
+        max_samples = self.config.factscore.max_samples or len(sample_texts)
+        sample_texts = sample_texts[:max_samples]
+        
+        metrics = FActScoreMetrics(total_texts=len(sample_texts))
+        latencies: list[float] = []
+        
+        # Start task in live display
+        display.start_task(
+            f"FActScore ({evaluator.name})",
+            total=len(sample_texts)
+        )
+        
+        for text in sample_texts:
+            result = await evaluator.decompose_and_verify(text)
+            latencies.append(result.latency_ms)
+            
+            metrics.total_facts += result.total_facts
+            metrics.supported_facts += result.supported_facts
+            metrics.facts_per_text.append(result.total_facts)
+            
+            if result.total_facts > 0:
+                metrics.scores.append(result.factscore)
+            
+            # Update live display
+            display.advance(1, latency_ms=result.latency_ms)
+            display.add_result(correct=True)  # FActScore doesn't have pass/fail
+        
+        return metrics, latencies
+    
+    # ========================================================================
+    # Legacy Benchmark Methods (without live display, kept for compatibility)
+    # ========================================================================
     
     async def _run_hallucination_benchmark(
         self,
