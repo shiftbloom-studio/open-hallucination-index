@@ -246,12 +246,15 @@ services:
       API_API_KEY: "${API_API_KEY}"
       BENCHMARK_OUTPUT_DIR: "/app/benchmark_results"
       BENCHMARK_NO_PROGRESS: "true"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
     depends_on:
       - ohi-api
     networks:
       - ohi-net
     volumes:
       - ../../benchmark_results:/app/benchmark_results
+      - ../../src/benchmark:/app/benchmark
 
   # 8. Nginx Reverse Proxy with SSL
   nginx:
