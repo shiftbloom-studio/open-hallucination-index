@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
+import threading
 
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -33,6 +34,9 @@ if TYPE_CHECKING:
     from open_hallucination_index.infrastructure.config import MCPSettings
 
 logger = logging.getLogger(__name__)
+
+# Timeout used when validating an existing MCP session (in seconds).
+SESSION_VALIDATION_TIMEOUT_SECONDS = 10.0
 
 
 class MCPTransportType(Enum):
@@ -74,6 +78,16 @@ class PooledSession:
     def idle_seconds(self) -> float:
         """Return seconds since last use."""
         return time.time() - self.last_used_at
+
+    def has_expired(self, ttl_seconds: float) -> bool:
+        """
+        Return True if this session has exceeded its time-to-live.
+
+        A ttl_seconds value <= 0 disables TTL-based expiry.
+        """
+        if ttl_seconds <= 0:
+            return False
+        return self.age_seconds > ttl_seconds
 
 
 @dataclass
@@ -364,9 +378,9 @@ class MCPSessionPool:
             pooled.is_healthy = False
             logger.debug(f"Session worker for {self._source_name} stopped")
 
-    async def _close_session(self, pooled: PooledSession) -> None:
+    async def _close_session(self, pooled: PooledSession | None) -> None:
         """Close a pooled session by signaling its worker task."""
-        if not pooled:
+        if pooled is None:
             return
 
         try:
@@ -398,7 +412,7 @@ class MCPSessionPool:
         try:
             # Quick health check - list tools
             # We use a slightly longer timeout and don't immediately fail on first transient error
-            async with asyncio.timeout(10.0):
+            async with asyncio.timeout(SESSION_VALIDATION_TIMEOUT_SECONDS):
                 await pooled.session.list_tools()
 
             return True
@@ -632,6 +646,8 @@ class MCPPoolManager:
 
     _instance: MCPPoolManager | None = None
 
+    _lock: threading.Lock = threading.Lock()
+    
     def __init__(self) -> None:
         self._pools: dict[str, MCPSessionPool] = {}
         self._initialized = False
@@ -640,7 +656,9 @@ class MCPPoolManager:
     def get_instance(cls) -> MCPPoolManager:
         """Get singleton instance."""
         if cls._instance is None:
-            cls._instance = MCPPoolManager()
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = MCPPoolManager()
         return cls._instance
 
     async def initialize_from_settings(self, settings: MCPSettings) -> None:
