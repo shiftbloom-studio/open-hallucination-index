@@ -31,6 +31,12 @@ dependencies = [
     "pandas>=2.0.0",
     "rich>=13.0.0",
     "matplotlib>=3.7.0",
+    "datasets>=2.14.0",
+    # Comparison benchmark dependencies
+    "openai>=1.0.0",
+    "seaborn>=0.12.0",
+    "qdrant-client>=1.6.0",
+    "sentence-transformers>=2.2.0",
 ]
 
 [project.optional-dependencies]
@@ -43,6 +49,7 @@ dev = [
 
 [project.scripts]
 ohi-benchmark = "benchmark.__main__:main"
+ohi-comparison = "benchmark.comparison_benchmark:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["benchmark"]

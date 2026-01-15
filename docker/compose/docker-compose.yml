@@ -28,6 +28,7 @@ services:
       - ../../.env
     image: qdrant/qdrant:latest
     container_name: ohi-qdrant
+    user: root
     ports:
       - "127.0.0.1:6333:6333" # localhost only for dev
       - "127.0.0.1:6334:6334" # gRPC for ingestion
@@ -97,7 +98,6 @@ services:
       --enable-prefix-caching
       --enable-chunked-prefill
       --disable-log-requests
-      --log-level warning
     networks:
       - ohi-net
 

@@ -2,26 +2,47 @@
 Performance Charts Reporter
 ============================
 
-Generate publication-ready performance visualization charts:
-1. Latency Distribution (Box Plot) - Compare response times across strategies
-2. Throughput Comparison (Bar Chart) - Requests/second per strategy
-3. Latency Histogram (Stacked) - Response time distribution details
+Generate publication-ready performance visualization charts for RAG / verification benchmarks.
+
+Charts (PNG):
+1) latency_boxplot.png              - Box plot comparing latency distributions (P50/P95 annotated)
+2) throughput_bar.png               - Throughput bars (req/s) with latency annotations
+3) latency_histogram.png            - Overlapping histograms with smoothed count lines (no SciPy required)
+
+Additional charts:
+4) latency_violin.png               - Violin plot (distribution shape + quartiles)
+5) latency_ecdf.png                 - ECDF plot (empirical CDF) per strategy
+6) latency_percentile_curves.png    - Percentile curves (P50..P99) per strategy
+7) latency_quantiles_heatmap.png    - Heatmap of key latency quantiles (P50/P90/P95/P99)
+8) latency_ranking.png              - Ranked dotplot of medians with IQR whiskers
+9) throughput_latency_frontier.png  - Scatter of throughput vs P95 latency (trade-off view)
+10) error_rate.png                  - (Optional) Error rate per strategy if errors exist in results
+
+COMPARISON CHARTS (Multi-Evaluator):
+11) comparison_radar.png            - Radar chart comparing evaluators across all metrics
+12) comparison_grouped_bar.png      - Grouped bar chart for metric comparison
+13) comparison_heatmap.png          - Heatmap of normalized scores per evaluator
+14) comparison_latency_violin.png   - Violin plot of latencies by evaluator
+15) comparison_factscore_dist.png   - FActScore distribution comparison
+16) comparison_summary_table.png    - Summary table visualization
 """
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from benchmark.reporters.base import BaseReporter
 
 if TYPE_CHECKING:
+    from benchmark.comparison_metrics import ComparisonReport, EvaluatorMetrics
     from benchmark.models import BenchmarkReport, ResultMetric
 
 
-# Modern color palette for charts (accessible & print-friendly)
+# Modern color palette (accessible & print-friendly)
 CHART_COLORS = {
     "primary": "#2563eb",      # Blue
     "secondary": "#7c3aed",    # Purple
@@ -47,108 +68,215 @@ STRATEGY_COLORS = [
 class ChartsReporter(BaseReporter):
     """
     Generate performance visualization charts using matplotlib.
-    
-    Produces 3 publication-ready PNG charts:
-    1. latency_boxplot.png - Box plot comparing latency distributions
-    2. throughput_bar.png - Bar chart of throughput per strategy
-    3. latency_histogram.png - Stacked histogram of response times
+
+    Produces multiple publication-ready PNG charts into output_dir/charts.
     """
-    
-    def __init__(self, output_dir: Path, dpi: int = 150) -> None:
-        """
-        Initialize charts reporter.
-        
-        Args:
-            output_dir: Directory for chart PNG files.
-            dpi: Resolution for PNG export (default 150 for quality/size balance).
-        """
+
+    def __init__(self, output_dir: Path, dpi: int = 160) -> None:
         super().__init__(output_dir)
         self.dpi = dpi
         self._charts_dir = output_dir / "charts"
         self._charts_dir.mkdir(parents=True, exist_ok=True)
-    
+
     @property
     def file_extension(self) -> str:
         return "png"
-    
+
     def generate(
         self,
         report: BenchmarkReport,
         results: list[ResultMetric],
     ) -> str:
-        """
-        Generate all charts and return summary of created files.
-        
-        Returns:
-            Summary string listing created chart files.
-        """
         chart_files = self.generate_all_charts(report, results)
         return f"Generated {len(chart_files)} charts:\n" + "\n".join(
             f"  - {f.name}" for f in chart_files
         )
-    
+
     def generate_all_charts(
         self,
         report: BenchmarkReport,
         results: list[ResultMetric],
         base_filename: str | None = None,
     ) -> list[Path]:
-        """
-        Generate all 3 performance charts.
-        
-        Args:
-            report: Benchmark report with aggregated metrics.
-            results: Raw result metrics.
-            base_filename: Optional prefix for chart filenames.
-            
-        Returns:
-            List of paths to generated chart files.
-        """
         try:
             import matplotlib.pyplot as plt  # noqa: F401
         except ImportError:
-            # Return empty if matplotlib not available
             return []
-        
+
         prefix = f"{base_filename}_" if base_filename else ""
         chart_files: list[Path] = []
-        
-        # Filter valid results (no errors)
-        valid_results = [r for r in results if not r.has_error]
-        
-        if not valid_results:
+
+        if not results:
             return chart_files
-        
-        # Group by strategy
-        strategies = list(report.strategy_reports.keys())
-        results_by_strategy = {
-            s: [r for r in valid_results if r.strategy == s]
+
+        # Split valid vs all (keep "results" untouched)
+        valid_results = [r for r in results if not getattr(r, "has_error", False)]
+        if not valid_results:
+            # Still allow error chart if everything errored
+            err_chart = self._create_error_rate_chart(results, report, prefix)
+            if err_chart:
+                chart_files.append(err_chart)
+            return chart_files
+
+        # Strategy set: prefer report ordering, but include any extra found in results
+        report_strategies = list(getattr(report, "strategy_reports", {}).keys())
+        result_strategies = sorted({getattr(r, "strategy", "unknown") for r in results})
+        strategies = []
+        seen = set()
+        for s in report_strategies + result_strategies:
+            if s not in seen:
+                seen.add(s)
+                strategies.append(s)
+
+        results_by_strategy_valid = {
+            s: [r for r in valid_results if getattr(r, "strategy", "unknown") == s]
             for s in strategies
         }
-        
-        # 1. Latency Box Plot
-        chart1 = self._create_latency_boxplot(
-            results_by_strategy, strategies, report, prefix
-        )
-        if chart1:
-            chart_files.append(chart1)
-        
-        # 2. Throughput Bar Chart
-        chart2 = self._create_throughput_chart(
-            results_by_strategy, strategies, report, prefix
-        )
-        if chart2:
-            chart_files.append(chart2)
-        
-        # 3. Latency Histogram
-        chart3 = self._create_latency_histogram(
-            results_by_strategy, strategies, report, prefix
-        )
-        if chart3:
-            chart_files.append(chart3)
-        
+        results_by_strategy_all = {
+            s: [r for r in results if getattr(r, "strategy", "unknown") == s]
+            for s in strategies
+        }
+
+        # Remove strategies that are truly empty across all results
+        strategies = [s for s in strategies if results_by_strategy_all.get(s)]
+        results_by_strategy_valid = {s: results_by_strategy_valid.get(s, []) for s in strategies}
+        results_by_strategy_all = {s: results_by_strategy_all.get(s, []) for s in strategies}
+
+        if not strategies:
+            return chart_files
+
+        # Core 3 charts (compatible filenames)
+        c1 = self._create_latency_boxplot(results_by_strategy_valid, strategies, report, prefix)
+        if c1:
+            chart_files.append(c1)
+
+        c2 = self._create_throughput_chart(results_by_strategy_valid, strategies, report, prefix)
+        if c2:
+            chart_files.append(c2)
+
+        c3 = self._create_latency_histogram(results_by_strategy_valid, strategies, report, prefix)
+        if c3:
+            chart_files.append(c3)
+
+        # More / different charts
+        c4 = self._create_latency_violinplot(results_by_strategy_valid, strategies, report, prefix)
+        if c4:
+            chart_files.append(c4)
+
+        c5 = self._create_latency_ecdf(results_by_strategy_valid, strategies, report, prefix)
+        if c5:
+            chart_files.append(c5)
+
+        c6 = self._create_latency_percentile_curves(results_by_strategy_valid, strategies, report, prefix)
+        if c6:
+            chart_files.append(c6)
+
+        c7 = self._create_latency_quantile_heatmap(results_by_strategy_valid, strategies, report, prefix)
+        if c7:
+            chart_files.append(c7)
+
+        c8 = self._create_latency_ranking_dotplot(results_by_strategy_valid, report, prefix)
+        if c8:
+            chart_files.append(c8)
+
+        c9 = self._create_frontier_scatter(results_by_strategy_valid, report, prefix)
+        if c9:
+            chart_files.append(c9)
+
+        # Optional: error rate chart (uses ALL results including has_error)
+        c10 = self._create_error_rate_chart(results, report, prefix)
+        if c10:
+            chart_files.append(c10)
+
         return chart_files
-    
+
+    # -------------------------
+    # Styling / helpers
+    # -------------------------
+
+    @contextmanager
+    def _mpl_style(self):
+        import matplotlib as mpl
+
+        old = mpl.rcParams.copy()
+        mpl.rcParams.update(
+            {
+                "figure.facecolor": "white",
+                "axes.facecolor": "#fafafa",
+                "axes.edgecolor": "#e5e7eb",
+                "axes.labelcolor": "#374151",
+                "text.color": "#111827",
+                "xtick.color": "#374151",
+                "ytick.color": "#374151",
+                "grid.color": "#d1d5db",
+                "grid.linestyle": "--",
+                "grid.alpha": 0.7,
+                "axes.grid": True,
+                "axes.axisbelow": True,
+                "axes.titleweight": "bold",
+                "font.size": 11,
+            }
+        )
+        try:
+            yield
+        finally:
+            mpl.rcParams.update(old)
+
+    def _save_fig(self, fig, filename: str) -> Path:
+        import matplotlib.pyplot as plt
+
+        filepath = self._charts_dir / filename
+        fig.savefig(str(filepath), dpi=self.dpi, bbox_inches="tight", facecolor="white")
+        plt.close(fig)
+        return filepath
+
+    def _meta_line(self, report: BenchmarkReport) -> str:
+        dataset_size = getattr(report, "dataset_size", None)
+        threshold = getattr(report, "threshold_used", None)
+        run_id = getattr(report, "run_id", "n/a")
+
+        bits = []
+        if dataset_size is not None:
+            bits.append(f"Dataset: {dataset_size} cases")
+        if threshold is not None:
+            bits.append(f"Threshold: {threshold}")
+        bits.append(f"Run: {run_id}")
+        return " | ".join(bits)
+
+    def _latencies_for(self, rs: list[ResultMetric]) -> np.ndarray:
+        vals: list[float] = []
+        for r in rs:
+            v = getattr(r, "latency_ms", None)
+            if v is None:
+                continue
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite(fv) and fv >= 0:
+                vals.append(fv)
+        return np.asarray(vals, dtype=float)
+
+    def _quantiles(self, x: np.ndarray, qs: list[float]) -> dict[float, float]:
+        if x.size == 0:
+            return {q: float("nan") for q in qs}
+        return {q: float(np.percentile(x, q)) for q in qs}
+
+    def _smooth_counts(self, counts: np.ndarray, sigma_bins: float = 1.2) -> np.ndarray:
+        # Lightweight Gaussian smoothing on histogram counts (no SciPy dependency)
+        if counts.size < 5:
+            return counts.astype(float)
+
+        radius = int(max(2, round(3 * sigma_bins)))
+        kx = np.arange(-radius, radius + 1, dtype=float)
+        kernel = np.exp(-0.5 * (kx / sigma_bins) ** 2)
+        kernel /= kernel.sum()
+        return np.convolve(counts.astype(float), kernel, mode="same")
+
+    # -------------------------
+    # Chart 1: Boxplot
+    # -------------------------
+
     def _create_latency_boxplot(
         self,
         results_by_strategy: dict[str, list[ResultMetric]],
@@ -156,103 +284,89 @@ class ChartsReporter(BaseReporter):
         report: BenchmarkReport,
         prefix: str,
     ) -> Path | None:
-        """Create box plot comparing latency distributions across strategies."""
         try:
             import matplotlib.pyplot as plt
         except ImportError:
             return None
-        
-        # Prepare data
-        latencies = [
-            [r.latency_ms for r in results_by_strategy.get(s, [])]
-            for s in strategies
-        ]
-        
-        # Skip if no data
-        if not any(latencies):
+
+        latencies = [self._latencies_for(results_by_strategy.get(s, [])) for s in strategies]
+        if not any(arr.size for arr in latencies):
             return None
-        
-        # Create figure
-        fig, ax = plt.subplots(figsize=(12, 7), facecolor='white')
-        ax.set_facecolor('#fafafa')
-        
-        # Create box plot with custom styling
-        bp = ax.boxplot(
-            latencies,
-            labels=[self._format_strategy_name(s) for s in strategies],
-            patch_artist=True,
-            showfliers=True,
-            flierprops=dict(
-                marker='o',
-                markerfacecolor='#dc2626',
-                markersize=4,
-                alpha=0.5,
-                markeredgecolor='none',
-            ),
-            medianprops=dict(color='white', linewidth=2),
-            whiskerprops=dict(color='#374151', linewidth=1.5),
-            capprops=dict(color='#374151', linewidth=1.5),
-        )
-        
-        # Color boxes
-        for patch, color in zip(bp['boxes'], STRATEGY_COLORS[:len(strategies)], strict=False):
-            patch.set_facecolor(color)
-            patch.set_alpha(0.8)
-            patch.set_edgecolor('#1f2937')
-            patch.set_linewidth(1.5)
-        
-        # Add percentile annotations
-        for i, (_s, data) in enumerate(zip(strategies, latencies, strict=True)):
-            if data:
-                p50 = np.median(data)
-                p95 = np.percentile(data, 95)
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.5, 7.2))
+
+            bp = ax.boxplot(
+                [arr.tolist() for arr in latencies],
+                labels=[self._format_strategy_name(s) for s in strategies],
+                patch_artist=True,
+                showfliers=True,
+                flierprops=dict(
+                    marker="o",
+                    markerfacecolor=CHART_COLORS["danger"],
+                    markersize=3.5,
+                    alpha=0.35,
+                    markeredgecolor="none",
+                ),
+                medianprops=dict(color="white", linewidth=2.2),
+                whiskerprops=dict(color="#374151", linewidth=1.3),
+                capprops=dict(color="#374151", linewidth=1.3),
+            )
+
+            for i, patch in enumerate(bp["boxes"]):
+                color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+                patch.set_facecolor(color)
+                patch.set_alpha(0.82)
+                patch.set_edgecolor("#111827")
+                patch.set_linewidth(1.2)
+
+            # Annotate P50/P95 above each strategy (avoid huge offsets)
+            y_max = 0.0
+            for arr in latencies:
+                if arr.size:
+                    y_max = max(y_max, float(np.percentile(arr, 98)))
+            y_pad = max(25.0, y_max * 0.06)
+
+            for i, arr in enumerate(latencies):
+                if arr.size == 0:
+                    continue
+                p50 = float(np.median(arr))
+                p95 = float(np.percentile(arr, 95))
                 ax.annotate(
-                    f'P50: {p50:.0f}ms\nP95: {p95:.0f}ms',
+                    f"P50 {p50:.0f}ms\nP95 {p95:.0f}ms",
                     xy=(i + 1, p95),
-                    xytext=(i + 1.3, p95 + max(data) * 0.05),
+                    xytext=(i + 1, p95 + y_pad),
                     fontsize=9,
-                    color='#374151',
-                    ha='left',
-                    va='bottom',
+                    color="#374151",
+                    ha="center",
+                    va="bottom",
+                    bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.85, edgecolor="#e5e7eb"),
                 )
-        
-        # Styling
-        ax.set_title(
-            'Response Latency Distribution by Strategy',
-            fontsize=16,
-            fontweight='bold',
-            color='#1f2937',
-            pad=20,
-        )
-        ax.set_xlabel('Verification Strategy', fontsize=12, color='#374151')
-        ax.set_ylabel('Latency (ms)', fontsize=12, color='#374151')
-        
-        # Grid
-        ax.yaxis.grid(True, linestyle='--', alpha=0.7, color='#d1d5db')
-        ax.set_axisbelow(True)
-        
-        # Rotate x labels for better readability
-        plt.xticks(rotation=15, ha='right')
-        
-        # Add subtitle with test info
-        ax.text(
-            0.5, -0.12,
-            f'Dataset: {report.dataset_size} cases | Threshold: {report.threshold_used} | Run: {report.run_id}',
-            transform=ax.transAxes,
-            fontsize=10,
-            color='#6b7280',
-            ha='center',
-        )
-        
-        plt.tight_layout()
-        
-        # Save
-        filepath = self._charts_dir / f"{prefix}latency_boxplot.png"
-        fig.savefig(str(filepath), dpi=self.dpi, bbox_inches='tight', facecolor='white')
-        plt.close(fig)
-        
-        return filepath
-    
+
+            ax.set_title("Response Latency Distribution by Strategy", fontsize=16, pad=18)
+            ax.set_xlabel("Verification Strategy", fontsize=12)
+            ax.set_ylabel("Latency (ms)", fontsize=12)
+
+            plt.xticks(rotation=12, ha="right")
+
+            # Footnote meta line
+            ax.text(
+                0.5,
+                -0.12,
+                self._meta_line(report),
+                transform=ax.transAxes,
+                fontsize=10,
+                color=CHART_COLORS["neutral"],
+                ha="center",
+            )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}latency_boxplot.png")
+
+    # -------------------------
+    # Chart 2: Throughput bars
+    # -------------------------
+
     def _create_throughput_chart(
         self,
         results_by_strategy: dict[str, list[ResultMetric]],
@@ -260,140 +374,117 @@ class ChartsReporter(BaseReporter):
         report: BenchmarkReport,
         prefix: str,
     ) -> Path | None:
-        """Create bar chart showing throughput (requests/second) per strategy."""
         try:
             import matplotlib.pyplot as plt
         except ImportError:
             return None
-        
-        # Calculate throughput metrics
-        throughputs = []
-        avg_latencies = []
-        p95_latencies = []
-        
+
+        throughputs: list[float] = []
+        avg_latencies: list[float] = []
+        p95_latencies: list[float] = []
+        p50_latencies: list[float] = []
+
         for s in strategies:
-            strategy_results = results_by_strategy.get(s, [])
-            if strategy_results:
-                latencies = [r.latency_ms for r in strategy_results]
-                avg_lat = np.mean(latencies)
-                p95_lat = np.percentile(latencies, 95)
-                # Throughput based on P50 (realistic sustained throughput)
-                p50_lat = np.median(latencies)
-                throughput = 1000.0 / p50_lat if p50_lat > 0 else 0
-                throughputs.append(throughput)
-                avg_latencies.append(avg_lat)
-                p95_latencies.append(p95_lat)
+            arr = self._latencies_for(results_by_strategy.get(s, []))
+            if arr.size:
+                p50 = float(np.median(arr))
+                p95 = float(np.percentile(arr, 95))
+                avg = float(np.mean(arr))
+                tp = 1000.0 / p50 if p50 > 0 else 0.0
             else:
-                throughputs.append(0)
-                avg_latencies.append(0)
-                p95_latencies.append(0)
-        
+                p50, p95, avg, tp = 0.0, 0.0, 0.0, 0.0
+            p50_latencies.append(p50)
+            p95_latencies.append(p95)
+            avg_latencies.append(avg)
+            throughputs.append(tp)
+
         if not any(throughputs):
             return None
-        
-        # Create figure with two y-axes
-        fig, ax1 = plt.subplots(figsize=(12, 7), facecolor='white')
-        ax1.set_facecolor('#fafafa')
-        
-        x = np.arange(len(strategies))
-        width = 0.6
-        
-        # Throughput bars
-        bars = ax1.bar(
-            x,
-            throughputs,
-            width,
-            color=[STRATEGY_COLORS[i % len(STRATEGY_COLORS)] for i in range(len(strategies))],
-            edgecolor='#1f2937',
-            linewidth=1.5,
-            alpha=0.85,
-        )
-        
-        # Add value labels on bars
-        for bar, tp, avg, p95 in zip(bars, throughputs, avg_latencies, p95_latencies, strict=True):
-            height = bar.get_height()
-            ax1.annotate(
-                f'{tp:.1f} req/s',
-                xy=(bar.get_x() + bar.get_width() / 2, height),
-                xytext=(0, 5),
-                textcoords="offset points",
-                ha='center',
-                va='bottom',
-                fontsize=11,
-                fontweight='bold',
-                color='#1f2937',
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.5, 7.2))
+            x = np.arange(len(strategies))
+
+            bars = ax.bar(
+                x,
+                throughputs,
+                width=0.62,
+                color=[STRATEGY_COLORS[i % len(STRATEGY_COLORS)] for i in range(len(strategies))],
+                edgecolor="#111827",
+                linewidth=1.1,
+                alpha=0.9,
             )
-            # Add latency details inside bar
-            if height > 0:
-                ax1.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    height * 0.5,
-                    f'Avg: {avg:.0f}ms\nP95: {p95:.0f}ms',
-                    ha='center',
-                    va='center',
-                    fontsize=9,
-                    color='white',
-                    fontweight='medium',
+
+            # Labels / annotations
+            y_max = max(throughputs) if throughputs else 1.0
+            for i, (bar, tp, p50, p95, avg) in enumerate(zip(bars, throughputs, p50_latencies, p95_latencies, avg_latencies)):
+                h = bar.get_height()
+                ax.annotate(
+                    f"{tp:.2f} req/s",
+                    xy=(bar.get_x() + bar.get_width() / 2, h),
+                    xytext=(0, 6),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=10.5,
+                    fontweight="bold",
                 )
-        
-        # Styling
-        ax1.set_title(
-            'Throughput Comparison by Strategy',
-            fontsize=16,
-            fontweight='bold',
-            color='#1f2937',
-            pad=20,
-        )
-        ax1.set_xlabel('Verification Strategy', fontsize=12, color='#374151')
-        ax1.set_ylabel('Throughput (requests/second)', fontsize=12, color='#374151')
-        ax1.set_xticks(x)
-        ax1.set_xticklabels(
-            [self._format_strategy_name(s) for s in strategies],
-            rotation=15,
-            ha='right',
-        )
-        
-        # Grid
-        ax1.yaxis.grid(True, linestyle='--', alpha=0.7, color='#d1d5db')
-        ax1.set_axisbelow(True)
-        
-        # Y-axis starts at 0
-        ax1.set_ylim(0, max(throughputs) * 1.25)
-        
-        # Add total throughput annotation
-        total_requests = sum(len(results_by_strategy.get(s, [])) for s in strategies)
-        total_time = report.total_runtime_seconds
-        overall_throughput = total_requests / total_time if total_time > 0 else 0
-        
-        ax1.text(
-            0.02, 0.98,
-            f'Total: {total_requests} requests in {total_time:.1f}s\n'
-            f'Overall: {overall_throughput:.2f} req/s',
-            transform=ax1.transAxes,
-            fontsize=10,
-            verticalalignment='top',
-            bbox=dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor='#d1d5db'),
-        )
-        
-        # Subtitle
-        ax1.text(
-            0.5, -0.12,
-            f'Throughput based on P50 latency (sustainable rate) | Run: {report.run_id}',
-            transform=ax1.transAxes,
-            fontsize=10,
-            color='#6b7280',
-            ha='center',
-        )
-        
-        plt.tight_layout()
-        
-        # Save
-        filepath = self._charts_dir / f"{prefix}throughput_bar.png"
-        fig.savefig(str(filepath), dpi=self.dpi, bbox_inches='tight', facecolor='white')
-        plt.close(fig)
-        
-        return filepath
-    
+                if h > 0:
+                    ax.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        h * 0.52,
+                        f"P50 {p50:.0f}ms\nP95 {p95:.0f}ms\nAvg {avg:.0f}ms",
+                        ha="center",
+                        va="center",
+                        fontsize=9,
+                        color="white",
+                        fontweight="medium",
+                    )
+
+            ax.set_title("Throughput Comparison by Strategy", fontsize=16, pad=18)
+            ax.set_xlabel("Verification Strategy", fontsize=12)
+            ax.set_ylabel("Throughput (requests/second)", fontsize=12)
+
+            ax.set_xticks(x)
+            ax.set_xticklabels([self._format_strategy_name(s) for s in strategies], rotation=12, ha="right")
+
+            ax.set_ylim(0, y_max * 1.25)
+
+            # Overall throughput info if report provides runtime
+            total_time = getattr(report, "total_runtime_seconds", None)
+            total_requests = sum(len(results_by_strategy.get(s, [])) for s in strategies)
+            if total_time and total_time > 0:
+                overall = total_requests / float(total_time)
+                box = f"Total: {total_requests} requests\nRuntime: {float(total_time):.2f}s\nOverall: {overall:.3f} req/s"
+            else:
+                box = f"Total: {total_requests} requests"
+            ax.text(
+                0.02,
+                0.98,
+                box,
+                transform=ax.transAxes,
+                fontsize=10,
+                va="top",
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.9, edgecolor="#e5e7eb"),
+            )
+
+            ax.text(
+                0.5,
+                -0.12,
+                "Throughput computed as 1000 / P50 latency (sustainable estimate) | " + self._meta_line(report),
+                transform=ax.transAxes,
+                fontsize=10,
+                color=CHART_COLORS["neutral"],
+                ha="center",
+            )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}throughput_bar.png")
+
+    # -------------------------
+    # Chart 3: Histogram overlay (no SciPy)
+    # -------------------------
+
     def _create_latency_histogram(
         self,
         results_by_strategy: dict[str, list[ResultMetric]],
@@ -401,153 +492,574 @@ class ChartsReporter(BaseReporter):
         report: BenchmarkReport,
         prefix: str,
     ) -> Path | None:
-        """Create overlapping histogram showing latency distribution."""
         try:
-            import matplotlib.patches as mpatches
             import matplotlib.pyplot as plt
         except ImportError:
             return None
-        
-        # Prepare data
-        all_latencies = []
-        for s in strategies:
-            strategy_results = results_by_strategy.get(s, [])
-            all_latencies.extend([r.latency_ms for r in strategy_results])
-        
-        if not all_latencies:
+
+        all_lat = np.concatenate([self._latencies_for(results_by_strategy.get(s, [])) for s in strategies if results_by_strategy.get(s)], axis=0)
+        if all_lat.size == 0:
             return None
-        
-        # Create figure
-        fig, ax = plt.subplots(figsize=(14, 7), facecolor='white')
-        ax.set_facecolor('#fafafa')
-        
-        # Determine bin edges (shared across all strategies)
-        max_latency = np.percentile(all_latencies, 99)  # Exclude extreme outliers
-        bins = np.linspace(0, max_latency, 40)
-        
-        # Plot overlapping histograms
-        legend_handles = []
-        for i, s in enumerate(strategies):
-            strategy_results = results_by_strategy.get(s, [])
-            if not strategy_results:
+
+        # Cap at P99 to avoid extreme outliers dominating
+        cap = float(np.percentile(all_lat, 99))
+        cap = max(cap, 1.0)
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(13.8, 7.0))
+
+            bins = np.linspace(0.0, cap, 44)
+            centers = 0.5 * (bins[:-1] + bins[1:])
+
+            for i, s in enumerate(strategies):
+                arr = self._latencies_for(results_by_strategy.get(s, []))
+                if arr.size == 0:
+                    continue
+
+                arr = arr[arr <= cap]
+                if arr.size == 0:
+                    continue
+
+                color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+                counts, _ = np.histogram(arr, bins=bins)
+
+                ax.hist(
+                    arr,
+                    bins=bins,
+                    alpha=0.35,
+                    color=color,
+                    edgecolor=color,
+                    linewidth=1.2,
+                    label=f"{self._format_strategy_name(s)} (n={arr.size})",
+                )
+
+                smooth = self._smooth_counts(counts, sigma_bins=1.2)
+                ax.plot(centers, smooth, color=color, linewidth=2.2, alpha=0.95)
+
+            # Overall P50/P95 markers (within capped range)
+            capped_all = all_lat[all_lat <= cap]
+            if capped_all.size:
+                p50 = float(np.median(capped_all))
+                p95 = float(np.percentile(capped_all, 95))
+                ax.axvline(p50, color=CHART_COLORS["success"], linestyle="--", linewidth=2, label=f"Overall P50 {p50:.0f}ms")
+                ax.axvline(p95, color=CHART_COLORS["danger"], linestyle="--", linewidth=2, label=f"Overall P95 {p95:.0f}ms")
+
+            ax.set_title("Response Time Distribution (Histogram + Smoothed Counts)", fontsize=16, pad=18)
+            ax.set_xlabel("Latency (ms)", fontsize=12)
+            ax.set_ylabel("Frequency", fontsize=12)
+            ax.set_xlim(0, cap * 1.02)
+
+            ax.legend(loc="upper right", fontsize=10, framealpha=0.95, edgecolor="#e5e7eb")
+
+            # Performance bands
+            if cap > 500:
+                ax.axvspan(0, 500, alpha=0.06, color=CHART_COLORS["success"])
+            if cap > 2000:
+                ax.axvspan(500, 2000, alpha=0.06, color=CHART_COLORS["warning"])
+                ax.axvspan(2000, cap, alpha=0.06, color=CHART_COLORS["danger"])
+            elif cap > 500:
+                ax.axvspan(500, cap, alpha=0.06, color=CHART_COLORS["warning"])
+
+            ax.text(
+                0.5,
+                -0.10,
+                f"Distribution capped at P99 ({cap:.0f}ms) | Total samples: {all_lat.size} | {self._meta_line(report)}",
+                transform=ax.transAxes,
+                fontsize=10,
+                color=CHART_COLORS["neutral"],
+                ha="center",
+            )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}latency_histogram.png")
+
+    # -------------------------
+    # Chart 4: Violin plot
+    # -------------------------
+
+    def _create_latency_violinplot(
+        self,
+        results_by_strategy: dict[str, list[ResultMetric]],
+        strategies: list[str],
+        report: BenchmarkReport,
+        prefix: str,
+    ) -> Path | None:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        data = [self._latencies_for(results_by_strategy.get(s, [])) for s in strategies]
+        if not any(arr.size for arr in data):
+            return None
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.5, 7.2))
+
+            vp = ax.violinplot(
+                [arr.tolist() for arr in data],
+                showmeans=False,
+                showmedians=True,
+                showextrema=False,
+            )
+
+            for i, body in enumerate(vp["bodies"]):
+                color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+                body.set_facecolor(color)
+                body.set_edgecolor("#111827")
+                body.set_alpha(0.75)
+                body.set_linewidth(1.0)
+
+            # Median line style
+            if "cmedians" in vp:
+                vp["cmedians"].set_color("white")
+                vp["cmedians"].set_linewidth(2.2)
+
+            # Add quartile whiskers (P25/P75)
+            for i, arr in enumerate(data):
+                if arr.size == 0:
+                    continue
+                q25 = float(np.percentile(arr, 25))
+                q75 = float(np.percentile(arr, 75))
+                ax.vlines(i + 1, q25, q75, color="#111827", linewidth=2.2, alpha=0.9)
+                ax.scatter([i + 1], [float(np.median(arr))], s=28, color="white", edgecolors="#111827", linewidths=0.8, zorder=3)
+
+            ax.set_title("Latency Distribution (Violin + IQR)", fontsize=16, pad=18)
+            ax.set_xlabel("Verification Strategy", fontsize=12)
+            ax.set_ylabel("Latency (ms)", fontsize=12)
+
+            ax.set_xticks(np.arange(1, len(strategies) + 1))
+            ax.set_xticklabels([self._format_strategy_name(s) for s in strategies], rotation=12, ha="right")
+
+            ax.text(
+                0.5,
+                -0.12,
+                "IQR whiskers show P25–P75; white dot = median | " + self._meta_line(report),
+                transform=ax.transAxes,
+                fontsize=10,
+                color=CHART_COLORS["neutral"],
+                ha="center",
+            )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}latency_violin.png")
+
+    # -------------------------
+    # Chart 5: ECDF
+    # -------------------------
+
+    def _create_latency_ecdf(
+        self,
+        results_by_strategy: dict[str, list[ResultMetric]],
+        strategies: list[str],
+        report: BenchmarkReport,
+        prefix: str,
+    ) -> Path | None:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        # Use global cap to keep plot readable
+        all_lat = np.concatenate([self._latencies_for(results_by_strategy.get(s, [])) for s in strategies if results_by_strategy.get(s)], axis=0)
+        if all_lat.size == 0:
+            return None
+        cap = float(np.percentile(all_lat, 99))
+        cap = max(cap, 1.0)
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.8, 7.2))
+
+            for i, s in enumerate(strategies):
+                arr = self._latencies_for(results_by_strategy.get(s, []))
+                if arr.size == 0:
+                    continue
+                arr = np.sort(arr[arr <= cap])
+                if arr.size == 0:
+                    continue
+                y = np.arange(1, arr.size + 1) / arr.size
+                color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+                ax.plot(arr, y, color=color, linewidth=2.4, alpha=0.95, label=f"{self._format_strategy_name(s)} (n={arr.size})")
+
+            ax.set_title("Latency ECDF by Strategy (capped at P99)", fontsize=16, pad=18)
+            ax.set_xlabel("Latency (ms)", fontsize=12)
+            ax.set_ylabel("Cumulative Probability", fontsize=12)
+            ax.set_xlim(0, cap * 1.02)
+            ax.set_ylim(0, 1.02)
+
+            ax.legend(loc="lower right", fontsize=10, framealpha=0.95, edgecolor="#e5e7eb")
+
+            # Reference lines for common SLO points
+            for p, label in [(0.5, "P50"), (0.9, "P90"), (0.95, "P95")]:
+                ax.axhline(p, color="#9ca3af", linewidth=1.2, alpha=0.8)
+                ax.text(cap * 1.01, p, label, va="center", ha="left", fontsize=9, color="#6b7280")
+
+            ax.text(
+                0.5,
+                -0.12,
+                self._meta_line(report),
+                transform=ax.transAxes,
+                fontsize=10,
+                color=CHART_COLORS["neutral"],
+                ha="center",
+            )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}latency_ecdf.png")
+
+    # -------------------------
+    # Chart 6: Percentile curves
+    # -------------------------
+
+    def _create_latency_percentile_curves(
+        self,
+        results_by_strategy: dict[str, list[ResultMetric]],
+        strategies: list[str],
+        report: BenchmarkReport,
+        prefix: str,
+    ) -> Path | None:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        percentiles = [50, 75, 90, 95, 97, 99]
+
+        any_data = False
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.8, 7.2))
+
+            for i, s in enumerate(strategies):
+                arr = self._latencies_for(results_by_strategy.get(s, []))
+                if arr.size == 0:
+                    continue
+                qs = [float(np.percentile(arr, p)) for p in percentiles]
+                color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+                ax.plot(percentiles, qs, marker="o", linewidth=2.4, color=color, alpha=0.95, label=f"{self._format_strategy_name(s)} (n={arr.size})")
+                any_data = True
+
+            if not any_data:
+                return None
+
+            ax.set_title("Latency Percentile Curves by Strategy", fontsize=16, pad=18)
+            ax.set_xlabel("Percentile", fontsize=12)
+            ax.set_ylabel("Latency (ms)", fontsize=12)
+            ax.set_xticks(percentiles)
+
+            ax.legend(loc="upper left", fontsize=10, framealpha=0.95, edgecolor="#e5e7eb")
+
+            ax.text(
+                0.5,
+                -0.12,
+                "Shows tail behavior (P90–P99) clearly | " + self._meta_line(report),
+                transform=ax.transAxes,
+                fontsize=10,
+                color=CHART_COLORS["neutral"],
+                ha="center",
+            )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}latency_percentile_curves.png")
+
+    # -------------------------
+    # Chart 7: Quantile heatmap
+    # -------------------------
+
+    def _create_latency_quantile_heatmap(
+        self,
+        results_by_strategy: dict[str, list[ResultMetric]],
+        strategies: list[str],
+        report: BenchmarkReport,
+        prefix: str,
+    ) -> Path | None:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        qs = [50, 90, 95, 99]
+        rows = []
+        labels = []
+        for s in strategies:
+            arr = self._latencies_for(results_by_strategy.get(s, []))
+            if arr.size == 0:
                 continue
-            
-            latencies = [r.latency_ms for r in strategy_results if r.latency_ms <= max_latency]
-            
-            color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
-            
-            counts, _, patches = ax.hist(
-                latencies,
-                bins=bins,
-                alpha=0.5,
-                color=color,
-                edgecolor=color,
-                linewidth=1.5,
-                label=self._format_strategy_name(s),
+            qvals = [float(np.percentile(arr, q)) for q in qs]
+            rows.append(qvals)
+            labels.append(self._format_strategy_name(s))
+
+        if not rows:
+            return None
+
+        mat = np.asarray(rows, dtype=float)
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.6, 0.55 * len(labels) + 2.8))
+            im = ax.imshow(mat, aspect="auto")
+
+            ax.set_title("Latency Quantiles Heatmap (ms)", fontsize=16, pad=16)
+            ax.set_yticks(np.arange(len(labels)))
+            ax.set_yticklabels(labels)
+            ax.set_xticks(np.arange(len(qs)))
+            ax.set_xticklabels([f"P{q}" for q in qs])
+
+            # Annotate cells
+            for i in range(mat.shape[0]):
+                for j in range(mat.shape[1]):
+                    ax.text(j, i, f"{mat[i, j]:.0f}", ha="center", va="center", fontsize=10, color="#111827")
+
+            # Colorbar
+            cbar = fig.colorbar(im, ax=ax, fraction=0.035, pad=0.02)
+            cbar.set_label("Latency (ms)", fontsize=11)
+
+            ax.grid(False)
+
+            ax.text(
+                0.5,
+                -0.10,
+                self._meta_line(report),
+                transform=ax.transAxes,
+                fontsize=10,
+                color=CHART_COLORS["neutral"],
+                ha="center",
             )
-            
-            # Add density line (KDE approximation)
-            if len(latencies) > 10:
-                from scipy import stats
-                kde = stats.gaussian_kde(latencies)
-                x_smooth = np.linspace(0, max_latency, 200)
-                y_smooth = kde(x_smooth) * len(latencies) * (bins[1] - bins[0])
-                ax.plot(
-                    x_smooth,
-                    y_smooth,
-                    color=color,
-                    linewidth=2.5,
-                    linestyle='-',
-                    alpha=0.9,
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}latency_quantiles_heatmap.png")
+
+    # -------------------------
+    # Chart 8: Ranked dotplot (median + IQR)
+    # -------------------------
+
+    def _create_latency_ranking_dotplot(
+        self,
+        results_by_strategy: dict[str, list[ResultMetric]],
+        report: BenchmarkReport,
+        prefix: str,
+    ) -> Path | None:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        rows = []
+        for s, rs in results_by_strategy.items():
+            arr = self._latencies_for(rs)
+            if arr.size == 0:
+                continue
+            rows.append(
+                (
+                    s,
+                    float(np.median(arr)),
+                    float(np.percentile(arr, 25)),
+                    float(np.percentile(arr, 75)),
+                    arr.size,
                 )
-            
-            # Legend entry
-            legend_handles.append(
-                mpatches.Patch(
-                    color=color,
-                    alpha=0.6,
-                    label=f'{self._format_strategy_name(s)} (n={len(latencies)})',
+            )
+
+        if not rows:
+            return None
+
+        # Sort by median (fastest first)
+        rows.sort(key=lambda x: x[1])
+
+        names = [self._format_strategy_name(r[0]) for r in rows]
+        med = np.array([r[1] for r in rows], dtype=float)
+        q25 = np.array([r[2] for r in rows], dtype=float)
+        q75 = np.array([r[3] for r in rows], dtype=float)
+        n = [r[4] for r in rows]
+
+        y = np.arange(len(names))
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.8, 0.55 * len(names) + 3.0))
+
+            # IQR whiskers
+            ax.hlines(y, q25, q75, color="#111827", linewidth=2.2, alpha=0.9)
+            # Median dots
+            ax.scatter(med, y, s=70, color=CHART_COLORS["primary"], edgecolors="#111827", linewidths=0.8, zorder=3)
+
+            # Labels
+            for i, (m, nn) in enumerate(zip(med, n)):
+                ax.text(m, i, f"  {m:.0f}ms (n={nn})", va="center", ha="left", fontsize=10, color="#111827")
+
+            ax.set_yticks(y)
+            ax.set_yticklabels(names)
+            ax.invert_yaxis()
+
+            ax.set_title("Latency Ranking (Median with IQR)", fontsize=16, pad=16)
+            ax.set_xlabel("Latency (ms)", fontsize=12)
+
+            ax.text(
+                0.5,
+                -0.10,
+                "Whiskers: P25–P75 | Dot: P50 | " + self._meta_line(report),
+                transform=ax.transAxes,
+                fontsize=10,
+                color=CHART_COLORS["neutral"],
+                ha="center",
+            )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}latency_ranking.png")
+
+    # -------------------------
+    # Chart 9: Throughput vs tail latency frontier
+    # -------------------------
+
+    def _create_frontier_scatter(
+        self,
+        results_by_strategy: dict[str, list[ResultMetric]],
+        report: BenchmarkReport,
+        prefix: str,
+    ) -> Path | None:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        points = []
+        for s, rs in results_by_strategy.items():
+            arr = self._latencies_for(rs)
+            if arr.size == 0:
+                continue
+            p50 = float(np.median(arr))
+            p95 = float(np.percentile(arr, 95))
+            tp = 1000.0 / p50 if p50 > 0 else 0.0
+            points.append((s, tp, p95, arr.size))
+
+        if not points:
+            return None
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.8, 7.2))
+
+            for i, (s, tp, p95, n) in enumerate(points):
+                color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+                ax.scatter(tp, p95, s=120, color=color, alpha=0.9, edgecolors="#111827", linewidths=0.9)
+                ax.annotate(
+                    f"{self._format_strategy_name(s)}\n(n={n})",
+                    xy=(tp, p95),
+                    xytext=(8, 8),
+                    textcoords="offset points",
+                    fontsize=10,
+                    ha="left",
+                    va="bottom",
+                    bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.85, edgecolor="#e5e7eb"),
                 )
+
+            ax.set_title("Throughput vs Tail Latency (P95) Frontier", fontsize=16, pad=18)
+            ax.set_xlabel("Throughput (req/s, approx via 1000/P50)", fontsize=12)
+            ax.set_ylabel("P95 Latency (ms)", fontsize=12)
+
+            ax.text(
+                0.5,
+                -0.12,
+                "Top-left is ideal (high throughput, low tail latency) | " + self._meta_line(report),
+                transform=ax.transAxes,
+                fontsize=10,
+                color=CHART_COLORS["neutral"],
+                ha="center",
             )
-        
-        # Add vertical lines for overall percentiles
-        all_valid = [lat for lat in all_latencies if lat <= max_latency]
-        if all_valid:
-            p50 = np.median(all_valid)
-            p95 = np.percentile(all_valid, 95)
-            
-            ax.axvline(
-                p50,
-                color='#059669',
-                linestyle='--',
-                linewidth=2,
-                label=f'Overall P50: {p50:.0f}ms',
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}throughput_latency_frontier.png")
+
+    # -------------------------
+    # Chart 10: Error rate (optional)
+    # -------------------------
+
+    def _create_error_rate_chart(
+        self,
+        results: list[ResultMetric],
+        report: BenchmarkReport,
+        prefix: str,
+    ) -> Path | None:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        if not results:
+            return None
+
+        # Aggregate error rates by strategy (use ALL results)
+        by_strategy: dict[str, list[ResultMetric]] = {}
+        for r in results:
+            s = getattr(r, "strategy", "unknown")
+            by_strategy.setdefault(s, []).append(r)
+
+        strategies = sorted(by_strategy.keys())
+        totals = np.array([len(by_strategy[s]) for s in strategies], dtype=float)
+        errs = np.array([sum(1 for r in by_strategy[s] if getattr(r, "has_error", False)) for s in strategies], dtype=float)
+
+        if errs.sum() <= 0:
+            return None
+
+        rates = np.where(totals > 0, errs / totals, 0.0)
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.5, 6.6))
+            x = np.arange(len(strategies))
+
+            bars = ax.bar(
+                x,
+                rates * 100.0,
+                width=0.62,
+                color=CHART_COLORS["danger"],
+                edgecolor="#111827",
+                linewidth=1.1,
+                alpha=0.88,
             )
-            ax.axvline(
-                p95,
-                color='#dc2626',
-                linestyle='--',
-                linewidth=2,
-                label=f'Overall P95: {p95:.0f}ms',
+
+            for i, (bar, r, e, t) in enumerate(zip(bars, rates, errs, totals)):
+                h = bar.get_height()
+                ax.annotate(
+                    f"{r*100:.2f}%",
+                    xy=(bar.get_x() + bar.get_width() / 2, h),
+                    xytext=(0, 6),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=10.5,
+                    fontweight="bold",
+                )
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    max(0.5, h * 0.55),
+                    f"{int(e)}/{int(t)}",
+                    ha="center",
+                    va="center",
+                    fontsize=10,
+                    color="white",
+                    fontweight="medium",
+                )
+
+            ax.set_title("Error Rate by Strategy", fontsize=16, pad=18)
+            ax.set_xlabel("Verification Strategy", fontsize=12)
+            ax.set_ylabel("Error Rate (%)", fontsize=12)
+            ax.set_xticks(x)
+            ax.set_xticklabels([self._format_strategy_name(s) for s in strategies], rotation=12, ha="right")
+            ax.set_ylim(0, max(rates * 100.0) * 1.25)
+
+            ax.text(
+                0.5,
+                -0.12,
+                self._meta_line(report),
+                transform=ax.transAxes,
+                fontsize=10,
+                color=CHART_COLORS["neutral"],
+                ha="center",
             )
-        
-        # Styling
-        ax.set_title(
-            'Response Time Distribution',
-            fontsize=16,
-            fontweight='bold',
-            color='#1f2937',
-            pad=20,
-        )
-        ax.set_xlabel('Latency (ms)', fontsize=12, color='#374151')
-        ax.set_ylabel('Frequency', fontsize=12, color='#374151')
-        
-        # Legend
-        ax.legend(
-            loc='upper right',
-            fontsize=10,
-            framealpha=0.95,
-            edgecolor='#d1d5db',
-        )
-        
-        # Grid
-        ax.yaxis.grid(True, linestyle='--', alpha=0.7, color='#d1d5db')
-        ax.set_axisbelow(True)
-        
-        # X-axis formatting
-        ax.set_xlim(0, max_latency * 1.02)
-        
-        # Add performance zones
-        # Fast (0-500ms), Medium (500-2000ms), Slow (2000ms+)
-        if max_latency > 500:
-            ax.axvspan(0, 500, alpha=0.08, color='#059669', label='Fast (<500ms)')
-        if max_latency > 2000:
-            ax.axvspan(500, 2000, alpha=0.08, color='#d97706', label='Medium')
-            ax.axvspan(2000, max_latency, alpha=0.08, color='#dc2626', label='Slow')
-        elif max_latency > 500:
-            ax.axvspan(500, max_latency, alpha=0.08, color='#d97706', label='Medium')
-        
-        # Subtitle
-        ax.text(
-            0.5, -0.10,
-            f'Distribution capped at P99 ({max_latency:.0f}ms) | Total samples: {len(all_latencies)} | Run: {report.run_id}',
-            transform=ax.transAxes,
-            fontsize=10,
-            color='#6b7280',
-            ha='center',
-        )
-        
-        plt.tight_layout()
-        
-        # Save
-        filepath = self._charts_dir / f"{prefix}latency_histogram.png"
-        fig.savefig(str(filepath), dpi=self.dpi, bbox_inches='tight', facecolor='white')
-        plt.close(fig)
-        
-        return filepath
-    
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}error_rate.png")
+
+    # -------------------------
+    # Name formatting
+    # -------------------------
+
     def _format_strategy_name(self, strategy: str) -> str:
-        """Format strategy name for display."""
         name_map = {
             "vector_semantic": "Vector\n(Semantic)",
             "graph_exact": "Graph\n(Exact)",
@@ -555,21 +1067,426 @@ class ChartsReporter(BaseReporter):
             "cascading": "Cascading",
             "mcp_enhanced": "MCP\nEnhanced",
             "adaptive": "Adaptive",
+            # Evaluator names
+            "ohi": "OHI",
+            "gpt4": "GPT-4",
+            "gpt-4": "GPT-4",
+            "vector_rag": "VectorRAG",
+            "vectorrag": "VectorRAG",
         }
-        return name_map.get(strategy, strategy.replace("_", " ").title())
-    
+        return name_map.get(strategy.lower(), strategy.replace("_", " ").title())
+
     def save(
         self,
         report: BenchmarkReport,
         results: list[ResultMetric],
         filename: str | None = None,
     ) -> Path:
-        """
-        Generate and save all charts.
-        
-        Returns:
-            Path to the charts directory.
-        """
-        base_filename = filename or f"ohi_benchmark_{report.run_id}"
+        base_filename = filename or f"ohi_benchmark_{getattr(report, 'run_id', 'run')}"
         self.generate_all_charts(report, results, base_filename)
         return self._charts_dir
+
+    # =========================================================================
+    # COMPARISON CHARTS (Multi-Evaluator)
+    # =========================================================================
+
+    def generate_comparison_charts(
+        self,
+        comparison_report: ComparisonReport,
+        prefix: str = "",
+    ) -> list[Path]:
+        """
+        Generate comparison charts from a ComparisonReport.
+        
+        This is the main method for multi-evaluator comparison visualization.
+        Creates all comparison chart types.
+        
+        Args:
+            comparison_report: ComparisonReport with all evaluator metrics.
+            prefix: Filename prefix.
+            
+        Returns:
+            List of generated chart file paths.
+        """
+        try:
+            import matplotlib.pyplot as plt  # noqa: F401
+        except ImportError:
+            return []
+
+        if not comparison_report.evaluators:
+            return []
+
+        chart_files: list[Path] = []
+
+        # 1. RADAR CHART - Multi-metric comparison (dedicated comparison chart)
+        c1 = self._create_comparison_radar(comparison_report, prefix)
+        if c1:
+            chart_files.append(c1)
+
+        # 2. Grouped Bar Chart - Metric comparison per evaluator
+        c2 = self._create_comparison_grouped_bar(comparison_report, prefix)
+        if c2:
+            chart_files.append(c2)
+
+        # 3. Latency Comparison Boxplot
+        c3 = self._create_comparison_latency_boxplot(comparison_report, prefix)
+        if c3:
+            chart_files.append(c3)
+
+        # 4. Heatmap of normalized scores
+        c4 = self._create_comparison_heatmap(comparison_report, prefix)
+        if c4:
+            chart_files.append(c4)
+
+        # 5. FActScore distribution if available
+        c5 = self._create_comparison_factscore_violin(comparison_report, prefix)
+        if c5:
+            chart_files.append(c5)
+
+        return chart_files
+
+    def _create_comparison_radar(
+        self,
+        comparison_report: ComparisonReport,
+        prefix: str,
+    ) -> Path | None:
+        """
+        Create radar chart comparing all evaluators across metrics.
+        
+        This is the PRIMARY comparison visualization showing all metrics
+        at once for each evaluator.
+        """
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import Patch
+        except ImportError:
+            return None
+
+        evaluators = comparison_report.evaluators
+        if not evaluators:
+            return None
+
+        # Collect summary scores for each evaluator
+        metrics_labels = [
+            "Accuracy", "Precision", "Recall", "F1 Score",
+            "Safety", "TruthfulQA", "FActScore", "Speed"
+        ]
+        
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12, 10), subplot_kw=dict(polar=True))
+
+            num_metrics = len(metrics_labels)
+            angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
+            angles += angles[:1]  # Complete the loop
+
+            # Plot each evaluator
+            for i, (name, metrics) in enumerate(evaluators.items()):
+                scores = metrics.get_summary_scores()
+                values = [
+                    scores.get("Accuracy", 0),
+                    scores.get("Precision", 0),
+                    scores.get("Recall", 0),
+                    scores.get("F1 Score", 0),
+                    scores.get("Safety (1-HPR)", 0),
+                    scores.get("TruthfulQA", 0),
+                    scores.get("FActScore", 0),
+                    scores.get("Speed (1/P95)", 0),
+                ]
+                values += values[:1]  # Complete the loop
+
+                color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+                ax.plot(angles, values, 'o-', linewidth=2.5, label=name, color=color)
+                ax.fill(angles, values, alpha=0.25, color=color)
+
+            ax.set_xticks(angles[:-1])
+            ax.set_xticklabels(metrics_labels, size=11)
+            ax.set_ylim(0, 1.0)
+            ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+            ax.set_yticklabels(["0.2", "0.4", "0.6", "0.8", "1.0"], size=9)
+            ax.grid(True, linestyle='--', alpha=0.7)
+
+            ax.set_title(
+                "Multi-Evaluator Performance Comparison",
+                fontsize=16, fontweight='bold', pad=20
+            )
+
+            # Legend
+            ax.legend(
+                loc='upper right', bbox_to_anchor=(1.3, 1.1),
+                fontsize=11, framealpha=0.95
+            )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}comparison_radar.png")
+
+    def _create_comparison_grouped_bar(
+        self,
+        comparison_report: ComparisonReport,
+        prefix: str,
+    ) -> Path | None:
+        """Create grouped bar chart comparing key metrics across evaluators."""
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        evaluators = comparison_report.evaluators
+        if not evaluators:
+            return None
+
+        metrics = ["Accuracy", "F1 Score", "Safety", "TruthfulQA", "FActScore"]
+        evaluator_names = list(evaluators.keys())
+        
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(14, 8))
+
+            x = np.arange(len(metrics))
+            width = 0.25
+            offset = -(len(evaluator_names) - 1) * width / 2
+
+            for i, name in enumerate(evaluator_names):
+                m = evaluators[name]
+                scores = m.get_summary_scores()
+                values = [
+                    scores.get("Accuracy", 0),
+                    scores.get("F1 Score", 0),
+                    scores.get("Safety (1-HPR)", 0),
+                    scores.get("TruthfulQA", 0),
+                    scores.get("FActScore", 0),
+                ]
+                
+                color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+                bars = ax.bar(
+                    x + offset + i * width, values, width,
+                    label=self._format_strategy_name(name),
+                    color=color, edgecolor="#111827", linewidth=0.8
+                )
+
+                # Add value labels
+                for bar, val in zip(bars, values, strict=True):
+                    ax.annotate(
+                        f'{val:.1%}',
+                        xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                        xytext=(0, 3), textcoords="offset points",
+                        ha='center', va='bottom', fontsize=9, fontweight='bold'
+                    )
+
+            ax.set_xlabel('Metric', fontsize=12)
+            ax.set_ylabel('Score', fontsize=12)
+            ax.set_title('Evaluator Performance Comparison', fontsize=16, pad=18)
+            ax.set_xticks(x)
+            ax.set_xticklabels(metrics, fontsize=11)
+            ax.set_ylim(0, 1.15)
+            ax.legend(fontsize=11, loc='upper right')
+
+            # Winner highlight
+            winner = comparison_report.get_ranking("f1_score")[0]
+            ax.text(
+                0.02, 0.98, f"🏆 Winner: {winner}",
+                transform=ax.transAxes, fontsize=12, fontweight='bold',
+                verticalalignment='top', color=CHART_COLORS["success"]
+            )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}comparison_grouped_bar.png")
+
+    def _create_comparison_latency_boxplot(
+        self,
+        comparison_report: ComparisonReport,
+        prefix: str,
+    ) -> Path | None:
+        """Create latency boxplot comparing all evaluators."""
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        evaluators = comparison_report.evaluators
+        if not evaluators:
+            return None
+
+        # Collect latencies
+        latencies = []
+        labels = []
+        for name, m in evaluators.items():
+            if m.latency.latencies_ms:
+                latencies.append(m.latency.latencies_ms)
+                labels.append(self._format_strategy_name(name))
+
+        if not latencies:
+            return None
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12, 7))
+
+            bp = ax.boxplot(
+                latencies, labels=labels, patch_artist=True,
+                showfliers=True,
+                flierprops=dict(marker='o', markerfacecolor=CHART_COLORS["danger"], markersize=3.5, alpha=0.35),
+                medianprops=dict(color="white", linewidth=2.2),
+                whiskerprops=dict(color="#374151", linewidth=1.3),
+                capprops=dict(color="#374151", linewidth=1.3),
+            )
+
+            for i, patch in enumerate(bp["boxes"]):
+                color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+                patch.set_facecolor(color)
+                patch.set_alpha(0.82)
+                patch.set_edgecolor("#111827")
+                patch.set_linewidth(1.2)
+
+            # Annotate P50/P95
+            y_max = max(np.percentile(lat, 95) for lat in latencies if len(lat) > 0)
+            y_pad = max(50, y_max * 0.08)
+
+            for i, lat in enumerate(latencies):
+                if len(lat) == 0:
+                    continue
+                p50 = float(np.median(lat))
+                p95 = float(np.percentile(lat, 95))
+                ax.annotate(
+                    f"P50: {p50:.0f}ms\nP95: {p95:.0f}ms",
+                    xy=(i + 1, p95),
+                    xytext=(i + 1, p95 + y_pad),
+                    fontsize=10, color="#374151", ha="center", va="bottom",
+                    bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.85, edgecolor="#e5e7eb"),
+                )
+
+            ax.set_title("Latency Distribution Comparison", fontsize=16, pad=18)
+            ax.set_xlabel("Evaluator", fontsize=12)
+            ax.set_ylabel("Latency (ms)", fontsize=12)
+
+            # Find fastest
+            fastest_idx = min(range(len(latencies)), key=lambda i: np.median(latencies[i]))
+            ax.text(
+                0.98, 0.98, f"⚡ Fastest: {labels[fastest_idx]}",
+                transform=ax.transAxes, fontsize=11, fontweight='bold',
+                verticalalignment='top', horizontalalignment='right',
+                color=CHART_COLORS["success"]
+            )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}comparison_latency_boxplot.png")
+
+    def _create_comparison_heatmap(
+        self,
+        comparison_report: ComparisonReport,
+        prefix: str,
+    ) -> Path | None:
+        """Create heatmap of normalized scores per evaluator."""
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        evaluators = comparison_report.evaluators
+        if not evaluators:
+            return None
+
+        metrics = ["Accuracy", "Precision", "Recall", "F1", "Safety", "TruthfulQA", "FActScore", "Speed"]
+        evaluator_names = list(evaluators.keys())
+
+        data = []
+        for name in evaluator_names:
+            m = evaluators[name]
+            scores = m.get_summary_scores()
+            row = [
+                scores.get("Accuracy", 0),
+                scores.get("Precision", 0),
+                scores.get("Recall", 0),
+                scores.get("F1 Score", 0),
+                scores.get("Safety (1-HPR)", 0),
+                scores.get("TruthfulQA", 0),
+                scores.get("FActScore", 0),
+                scores.get("Speed (1/P95)", 0),
+            ]
+            data.append(row)
+
+        mat = np.array(data, dtype=float)
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(14, 5))
+
+            im = ax.imshow(mat, aspect='auto', cmap='RdYlGn', vmin=0, vmax=1)
+
+            ax.set_xticks(np.arange(len(metrics)))
+            ax.set_xticklabels(metrics, fontsize=11)
+            ax.set_yticks(np.arange(len(evaluator_names)))
+            ax.set_yticklabels([self._format_strategy_name(n) for n in evaluator_names], fontsize=11)
+
+            # Annotate cells
+            for i in range(len(evaluator_names)):
+                for j in range(len(metrics)):
+                    val = mat[i, j]
+                    color = "white" if val < 0.5 else "#111827"
+                    ax.text(j, i, f"{val:.1%}", ha="center", va="center", fontsize=10, fontweight="bold", color=color)
+
+            cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02)
+            cbar.set_label("Score (0-1)", fontsize=11)
+
+            ax.set_title("Evaluator Performance Heatmap", fontsize=16, pad=18)
+            ax.grid(False)
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}comparison_heatmap.png")
+
+    def _create_comparison_factscore_violin(
+        self,
+        comparison_report: ComparisonReport,
+        prefix: str,
+    ) -> Path | None:
+        """Create violin plot for FActScore distribution comparison."""
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        evaluators = comparison_report.evaluators
+        if not evaluators:
+            return None
+
+        # Collect FActScore distributions
+        scores = []
+        labels = []
+        for name, m in evaluators.items():
+            if m.factscore.scores:
+                scores.append(m.factscore.scores)
+                labels.append(self._format_strategy_name(name))
+
+        if not scores:
+            return None
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12, 7))
+
+            vp = ax.violinplot(scores, showmeans=True, showmedians=True)
+
+            for i, body in enumerate(vp["bodies"]):
+                color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+                body.set_facecolor(color)
+                body.set_edgecolor("#111827")
+                body.set_alpha(0.75)
+
+            if "cmeans" in vp:
+                vp["cmeans"].set_color("#111827")
+                vp["cmeans"].set_linewidth(2)
+            if "cmedians" in vp:
+                vp["cmedians"].set_color("white")
+                vp["cmedians"].set_linewidth(2)
+
+            ax.set_xticks(np.arange(1, len(labels) + 1))
+            ax.set_xticklabels(labels, fontsize=11)
+            ax.set_ylabel("FActScore", fontsize=12)
+            ax.set_title("FActScore Distribution by Evaluator", fontsize=16, pad=18)
+            ax.set_ylim(0, 1.05)
+
+            # Add mean annotations
+            for i, score_list in enumerate(scores):
+                mean_val = float(np.mean(score_list))
+                ax.text(
+                    i + 1, mean_val + 0.05, f"μ={mean_val:.1%}",
+                    ha="center", va="bottom", fontsize=10, fontweight="bold"
+                )
+
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}comparison_factscore_violin.png")

@@ -319,10 +319,11 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 # Future: use proper hybrid query with sparse vector
                 logger.debug("Hybrid search requested but using dense-only for now")
             
-            # Dense vector search
+            # Dense vector search - use "dense" named vector for wikipedia_hybrid collection
             results = await self._client.query_points(
                 collection_name=self._settings.collection_name,
                 query=embedding,
+                using="dense",  # Named vector for hybrid collections
                 limit=query.top_k,
                 score_threshold=query.min_similarity,
                 query_filter=query_filter,
@@ -594,6 +595,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             results = await self._client.query_points(
                 collection_name=self._settings.collection_name,
                 query=embedding,
+                using="dense",  # Named vector for hybrid collections
                 limit=100,  # Cap for performance
                 score_threshold=min_similarity,
             )
