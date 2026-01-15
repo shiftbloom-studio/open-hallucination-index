@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     }
 
     const tokensToAdd = PACKAGE_TOKENS[packageId];
-    if (!tokensToAdd) {
+    if (tokensToAdd === undefined) {
       console.warn(
         "[STRIPE_WEBHOOK] Unexpected packageId in session metadata:",
         { sessionId: session.id, packageId }
