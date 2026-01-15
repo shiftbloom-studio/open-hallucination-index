@@ -1,15 +1,32 @@
 """
-Wikipedia MCP Adapter
-=====================
+Wikipedia MCP Adapter (Legacy/Deprecated)
+=========================================
 
-Adapter for Wikipedia knowledge retrieval via MCP server.
-Connects to the configured MCP endpoint using SSE transport.
+.. deprecated:: 2.0
+    This adapter is fully replaced by OHIMCPAdapter which provides:
+    - search_wikipedia() - Search Wikipedia articles
+    - get_article_summary() - Get article summaries
+    - search_wikidata() - Search Wikidata entities
+    - query_wikidata_sparql() - Execute SPARQL queries
+    - search_dbpedia() - Search DBpedia structured data
 
-Now supports session pooling for persistent SSE connections to improve performance.
+    Use OHIMCPAdapter instead:
+        from open_hallucination_index.adapters.outbound import OHIMCPAdapter
+
+        adapter = OHIMCPAdapter(settings)
+        await adapter.connect()
+        results = await adapter.search_wikipedia("Python programming")
+        summary = await adapter.get_article_summary("Python (programming language)")
+
+    This adapter uses SSE transport which adds unnecessary complexity
+    for simple request-response patterns. OHIMCPAdapter uses direct HTTP API.
+
+    This file is kept for backward compatibility and fallback scenarios only.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -97,14 +114,27 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
                             session_ttl_seconds=300.0,  # 5 minutes
                             idle_timeout_seconds=60.0,  # 1 minute
                             health_check_interval_seconds=30.0,
+                            session_init_timeout_seconds=60.0,
                         ),
                     )
                     await self._pool.initialize()
 
-                    # Get tools from pooled session
-                    async with self._pool.acquire() as session:
-                        tools = await session.list_tools()
-                        self._tools = [t.name for t in tools.tools]
+                    # Get tools from pooled session (retry on startup timeouts)
+                    for attempt in range(1, 4):
+                        try:
+                            async with self._pool.acquire() as session:
+                                tools = await session.list_tools()
+                                self._tools = [t.name for t in tools.tools]
+                            break
+                        except Exception as e:
+                            if attempt == 3:
+                                raise
+                            logger.warning(
+                                "Wikipedia MCP pool init attempt %s failed: %s. Retrying...",
+                                attempt,
+                                e,
+                            )
+                            await asyncio.sleep(1.5 * attempt)
                 except Exception as e:
                     logger.warning(
                         f"Wikipedia MCP pool initialization failed: {e}. Falling back to per-request sessions."
@@ -179,12 +209,16 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
     @asynccontextmanager
     async def _session_fallback(self):
         """Create a new MCP session (non-pooled, for fallback)."""
-        async with (
-            sse_client(self._mcp_url) as (read, write),
-            ClientSession(read, write) as session,
-        ):
-            await session.initialize()
-            yield session
+        try:
+            async with asyncio.timeout(60.0):  # 60 second timeout for fallback
+                async with (
+                    sse_client(self._mcp_url) as (read, write),
+                    ClientSession(read, write) as session,
+                ):
+                    await session.initialize()
+                    yield session
+        except TimeoutError:
+            raise RuntimeError(f"Timeout connecting to Wikipedia") from None
 
     def get_pool_stats(self) -> dict[str, Any] | None:
         """Get session pool statistics."""

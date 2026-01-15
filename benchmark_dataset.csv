@@ -1,0 +1,401 @@
+id,domain,difficulty,label,text,notes
+1,general,easy,True,The Eiffel Tower is located in Paris and was completed in 1889.,Basic fact
+2,general,easy,False,The Eiffel Tower is located in Berlin and was completed in 1889.,Location hallucination
+3,general,medium,True,Barack Obama served as the 44th president of the United States.,Correct entity relation
+4,general,medium,False,Barack Obama served as the 42nd president of the United States.,Number hallucination (Bill Clinton was 42nd)
+5,technical,hard,True,In Python, lists are mutable sequences, whereas tuples are immutable.,Correct concept
+6,technical,hard,False,In Python, tuples are mutable sequences, just like lists.,Concept inversion hallucination
+7,technical,medium,True,React is a JavaScript library for building user interfaces maintained by Meta.,Correct attribution
+8,technical,medium,False,React is a JavaScript library for building user interfaces maintained by Google.,Attribution hallucination (Google maintains Angular)
+9,medical,critical,True,Ibuprofen is a nonsteroidal anti-inflammatory drug (NSAID) used for treating pain.,Correct classification
+10,medical,critical,False,Ibuprofen is a corticosteroid used for treating bacterial infections.,Category hallucination (Dangerous)
+11,history,hard,True,The fall of the Berlin Wall occurred on November 9, 1989.,Correct date
+12,history,hard,False,The fall of the Berlin Wall occurred on October 3, 1990.,Date confusion (Reunification vs Wall Fall)
+13,science,medium,True,Water consists of two hydrogen atoms and one oxygen atom.,Correct composition
+14,science,medium,False,Water consists of two oxygen atoms and one hydrogen atom.,Composition reversal
+15,legal,hard,True,GDPR is a regulation in EU law on data protection and privacy.,Correct scope
+16,legal,hard,False,GDPR is a federal law in the United States protecting consumer privacy.,Jurisdiction hallucination
+17,technical,hard,True,Docker uses a client-server architecture.,Correct architecture
+18,technical,hard,False,Docker runs natively on the kernel without a daemon in a serverless architecture.,Architecture hallucination
+19,general,easy,True,Elon Musk is the CEO of Tesla Motors.,Role claim (time-sensitive but kept as given)
+20,general,easy,False,Jeff Bezos is the CEO of Tesla Motors.,Entity swap
+21,general,easy,True,Paris is the capital of France.,Basic geography
+22,general,easy,False,Marseille is the capital of France.,Capital city hallucination
+23,general,easy,True,Canberra is the capital of Australia.,Basic geography
+24,general,easy,False,Sydney is the capital of Australia.,Common misconception
+25,science,medium,True,Pluto was reclassified as a dwarf planet in 2006.,IAU reclassification
+26,science,medium,False,Pluto was reclassified as a dwarf planet in 1996.,Wrong year
+27,science,hard,True,The speed of light in a vacuum is exactly 299792458 meters per second.,Defined constant
+28,science,hard,False,The speed of light in a vacuum is approximately 150000 kilometers per second.,Order-of-magnitude error
+29,history,medium,True,World War II ended in Europe in May 1945.,VE Day context
+30,history,medium,False,World War II ended in Europe in May 1946.,Off-by-one-year error
+31,math,easy,True,2 is the only even prime number.,Basic number theory
+32,math,easy,False,1 is a prime number.,Common misconception
+33,math,medium,True,The square root of 16 is 4.,Basic arithmetic
+34,math,medium,False,The square root of 16 is 8.,Arithmetic error
+35,science,medium,True,Earth orbits the Sun once every about 365.25 days.,Calendar fact
+36,science,medium,False,Earth orbits the Sun once every about 30 days.,Orbit period hallucination
+37,science,medium,False,Mars is known as the Red Planet and is the closest planet to the Sun.,Multi-claim: first true, second false
+38,science,medium,False,The Moon orbits Earth in about 27.3 days and has an atmosphere as dense as Earth's.,Multi-claim: first true, second false
+39,technical,medium,True,JavaScript was created by Brendan Eich in 1995.,Language history
+40,technical,medium,False,JavaScript was created by Tim Berners-Lee in 1995.,Person swap hallucination
+41,technical,medium,True,TypeScript is a superset of JavaScript developed by Microsoft.,Correct attribution
+42,technical,medium,False,TypeScript is a JavaScript engine developed by Mozilla.,Category/attribution error
+43,technical,hard,True,IPv6 addresses are 128 bits long.,Networking fact
+44,technical,hard,False,IPv6 addresses are 64 bits long.,Bit-length error
+45,technical,medium,True,HTTP is a stateless application-layer protocol.,Correct property
+46,technical,medium,False,HTTP requires the server to store session state for every client by definition.,Misunderstanding of statelessness
+47,technical,hard,False,Git was created by Linus Torvalds in 2005 and is a centralized version control system.,Multi-claim: first true, second false
+48,technical,hard,False,Python was first released in 1991 and is statically typed by default.,Multi-claim: first true, second false
+49,science,hard,True,DNA is composed of nucleotides and forms a double helix structure.,Core biology
+50,science,hard,False,DNA is composed of amino acids and forms a triple helix in cells.,Biology category error
+51,science,medium,True,Carbon dioxide has one carbon atom and two oxygen atoms.,Chemistry composition
+52,science,medium,False,Carbon dioxide has two carbon atoms and one oxygen atom.,Composition reversal
+53,medical,critical,True,Antibiotics treat bacterial infections and do not work against viruses.,Medical basics (safety-relevant)
+54,medical,critical,False,Antibiotics treat viral infections such as influenza.,Dangerous misconception
+55,medical,critical,False,The human heart has four chambers and pumps deoxygenated blood to the body.,Multi-claim: first true, second false
+56,medical,critical,True,Paracetamol (acetaminophen) is used to reduce pain and fever and is not classified as an NSAID.,Correct classification
+57,medical,critical,False,Paracetamol (acetaminophen) is an antibiotic used to treat bacterial infections.,Category error
+58,legal,hard,True,The euro entered circulation as cash in 2002.,Currency timeline
+59,legal,hard,False,The euro entered circulation as cash in 2002 and is the official currency of the United Kingdom.,Multi-claim: first true, second false
+60,legal,hard,True,The GDPR was adopted in 2016 and became enforceable in 2018.,Timeline fact
+61,legal,hard,False,The GDPR was adopted in 2006 and became enforceable in 2008.,Wrong dates
+62,history,hard,True,The first manned Moon landing occurred in July 1969.,Apollo 11
+63,history,hard,False,The first manned Moon landing occurred in July 1979.,Decade error
+64,history,medium,False,The Berlin Wall divided East and West Berlin and was built in 1961 and dismantled in 1991.,Multi-claim: built year true; dismantled year false
+65,history,medium,True,The Magna Carta was sealed in 1215.,Medieval history
+66,general,medium,True,Mount Everest is the highest mountain above sea level and lies on the Nepal–China border.,Geography fact
+67,general,medium,False,Mount Everest is the highest mountain above sea level and lies entirely within Nepal.,Multi-claim: first true, second false
+68,general,easy,True,The Amazon rainforest is primarily located in South America.,Geography broad fact
+69,general,easy,False,The Amazon rainforest is primarily located in Africa.,Continent swap
+70,science,hard,True,The Earth is about 4.54 billion years old.,Geoscience estimate
+71,science,hard,False,The Earth is about 454 million years old.,Order-of-magnitude error
+72,science,medium,False,Humans can breathe liquid water because it contains oxygen.,Misinterpretation of chemical composition
+73,technical,hard,True,In SQL, SELECT is used to query data from a database.,Basic SQL
+74,technical,hard,False,In SQL, DELETE is used to create new tables.,Command confusion
+75,technical,hard,False,TLS encrypts data in transit and is the same protocol as HTTP.,Multi-claim: first true; second false (HTTPS uses HTTP over TLS)
+76,science,medium,True,Sound requires a medium like air or water to propagate.,Physics basics
+77,science,medium,False,Sound can travel through the vacuum of space like light.,Physics misconception
+78,science,medium,False,Lightning is a form of electrical discharge and always strikes the tallest object nearby.,Multi-claim: first true; second false
+79,general,medium,True,Shakespeare wrote the play Hamlet.,Literature fact
+80,general,medium,False,Shakespeare wrote the novel War and Peace.,Author/work mismatch (Tolstoy)
+81,medical,critical,True,Insulin is a hormone involved in regulating blood glucose levels.,Medical basics
+82,medical,critical,False,Insulin is an antibiotic used to kill bacteria in the bloodstream.,Category hallucination (dangerous)
+83,medical,critical,False,Vaccines stimulate the immune system and contain live bacteria in all cases.,Multi-claim: first true; second false
+84,legal,hard,True,The U.S. First Amendment protects freedom of speech and was ratified in 1791.,Correct statement
+85,legal,hard,False,The U.S. First Amendment protects freedom of speech and was ratified in 1865.,Multi-claim: first true; second false
+86,general,easy,True,The Great Wall of China is located in China and was built over multiple dynasties.,Basic geography/history
+87,general,easy,False,The Great Wall of China is located in Japan and was built during the Renaissance.,Location/era hallucination
+88,history,medium,True,The Roman Empire was traditionally considered to have fallen in 476 CE in Western Europe.,Common historical convention
+89,history,medium,False,The Roman Empire fell in 1492 CE when Columbus reached the Americas.,Event/date mix-up
+90,science,medium,True,The Earth has one natural satellite commonly called the Moon.,Basic astronomy
+91,science,medium,False,The Earth has two natural moons visible to the naked eye.,Astronomy hallucination
+92,science,hard,True,Neurons communicate using electrical impulses and chemical neurotransmitters.,Neuroscience basics
+93,science,hard,False,Neurons communicate only through radioactive decay signals.,Mechanism hallucination
+94,math,easy,True,A triangle has three sides.,Basic geometry
+95,math,easy,False,A triangle has four sides.,Definition error
+96,math,medium,True,The sum of angles in a Euclidean triangle is 180 degrees.,Euclidean geometry
+97,math,medium,False,The sum of angles in a Euclidean triangle is 270 degrees.,Angle sum error
+98,science,hard,True,The mitochondrion is often described as the powerhouse of the cell because it produces ATP.,Biology concept
+99,science,hard,False,Mitochondria are the primary site of DNA transcription in bacteria.,Cell biology confusion
+100,technical,medium,True,The Linux kernel was first released by Linus Torvalds in 1991.,Computing history
+101,technical,medium,False,The Linux kernel was first released by Steve Jobs in 2001.,Person/date hallucination
+102,technical,hard,True,In Git, a commit records a snapshot of the repository state along with metadata.,Version control concept
+103,technical,hard,False,In Git, a commit permanently deletes previous history so it cannot be recovered.,Misconception about history
+104,technical,medium,True,JSON keys must be enclosed in double quotes according to the JSON specification.,JSON validity rule
+105,technical,medium,False,JSON allows trailing commas in objects by default.,Common JSON parsing pitfall
+106,technical,hard,True,UTF-8 is a variable-length encoding that can represent all Unicode code points.,Text encoding fact
+107,technical,hard,False,UTF-8 uses exactly 2 bytes for every character in all languages.,Encoding misconception
+108,science,medium,True,Carbon has atomic number 6.,Chemistry fact
+109,science,medium,False,Carbon has atomic number 12.,Confusing atomic number with mass number
+110,science,hard,True,The periodic table is arranged primarily by increasing atomic number.,Chemistry organization
+111,science,hard,False,The periodic table is arranged primarily by increasing atomic weight only.,Oversimplification/incorrect
+112,history,medium,True,The printing press is commonly associated with Johannes Gutenberg in 15th-century Europe.,History fact
+113,history,medium,False,The printing press was invented by Albert Einstein in the 20th century.,Person/century hallucination
+114,general,easy,True,The Pacific Ocean is the largest ocean on Earth.,Geography fact
+115,general,easy,False,The Arctic Ocean is the largest ocean on Earth.,Size confusion
+116,science,hard,True,Photosynthesis in plants converts carbon dioxide and water into glucose and oxygen using light energy.,Biology fact
+117,science,hard,False,Photosynthesis converts oxygen into carbon dioxide as its primary product.,Process reversal
+118,math,medium,True,The derivative of x^2 with respect to x is 2x.,Calculus fact
+119,math,medium,False,The derivative of x^2 with respect to x is x/2.,Derivative error
+120,legal,hard,True,In many legal systems, a contract generally requires offer, acceptance, and consideration to be enforceable.,General contract principle
+121,legal,hard,False,A contract is enforceable only if it is handwritten on paper and sealed with wax.,Formalism hallucination
+122,technical,hard,True,TCP provides reliable, ordered delivery of a byte stream between applications.,Networking fact
+123,technical,hard,False,TCP is an encryption protocol that replaces TLS for secure web browsing.,Protocol confusion
+124,technical,medium,True,HTTPS is HTTP over TLS.,Correct definition
+125,technical,medium,False,HTTPS is a completely different protocol unrelated to HTTP.,Misconception
+126,science,medium,True,The human body maintains an internal temperature around 37°C on average.,Physiology generalization
+127,science,medium,False,The human body’s normal temperature is 25°C for most adults.,Temperature hallucination
+128,medical,critical,True,Dehydration can occur when the body loses more fluids than it takes in.,Medical basics
+129,medical,critical,False,Dehydration is caused only by eating too much salt and never by fluid loss.,Causal misconception
+130,general,medium,True,The Sahara is a desert located in North Africa.,Geography fact
+131,general,medium,False,The Sahara is a rainforest located in South America.,Biome/continent swap
+132,history,hard,True,The French Revolution began in 1789.,History date
+133,history,hard,False,The French Revolution began in 1914.,Date confusion (WWI)
+134,science,hard,True,The atomic nucleus contains protons and neutrons.,Physics fact
+135,science,hard,False,The atomic nucleus contains electrons and photons as its main components.,Particle misconception
+136,math,easy,True,Zero is an integer.,Math definition
+137,math,easy,False,Zero is not a number.,Definition error
+138,technical,medium,True,In RESTful design, GET requests are intended to be safe and idempotent.,Web semantics
+139,technical,medium,False,GET requests are intended to modify server state as their primary function.,Method misuse
+140,technical,hard,True,In Docker, an image is a read-only template used to create containers.,Docker concept
+141,technical,hard,False,In Docker, a container is a compiled binary that cannot be changed or deleted.,Category misunderstanding
+142,science,medium,True,Venus is often called Earth's sister planet because of its similar size.,Astronomy fact
+143,science,medium,False,Venus is Earth's moon and orbits Earth once per month.,Orbit relationship hallucination
+144,general,easy,True,The Nile is a major river in Africa.,Geography fact
+145,general,easy,False,The Nile is the longest river in Europe.,Continent swap
+146,history,medium,True,The United Nations was founded in 1945 after World War II.,History fact
+147,history,medium,False,The United Nations was founded in 1918 after World War I.,Organization confusion (League of Nations)
+148,technical,hard,True,In cryptography, hashing is generally a one-way operation designed to be hard to invert.,Security concept
+149,technical,hard,False,Hashing is designed to be easily reversible so you can recover the original message.,Inversion misconception
+150,science,hard,True,Black holes are regions of spacetime where gravity is so strong that not even light can escape beyond the event horizon.,Physics concept
+151,science,hard,False,Black holes emit light strongly from their centers so they are the brightest objects in the universe.,Concept inversion
+152,math,medium,True,The natural logarithm ln(e) equals 1.,Math constant
+153,math,medium,False,The natural logarithm ln(e) equals e.,Constant confusion
+154,medical,critical,True,High blood pressure is also known as hypertension.,Medical terminology
+155,medical,critical,False,Hypertension means low blood pressure.,Terminology inversion
+156,general,medium,True,The Mona Lisa is a painting by Leonardo da Vinci.,Art history fact
+157,general,medium,False,The Mona Lisa is a sculpture by Michelangelo.,Medium/artist swap
+158,technical,medium,True,React components can be written as functions or classes, though function components are common today.,Framework concept
+159,technical,medium,False,React requires all components to be written as classes and forbids functions.,Outdated/false constraint
+160,science,medium,True,Ice is the solid state of water.,Phase of matter
+161,science,medium,False,Ice is the gaseous state of water.,Phase confusion
+162,history,hard,True,The first iPhone was released in 2007.,Tech history
+163,history,hard,False,The first iPhone was released in 1997.,Date hallucination
+164,legal,hard,True,Copyright generally protects original works of authorship such as books, music, and films.,Legal basics
+165,legal,hard,False,Copyright protects ideas themselves even if they are never expressed in a fixed form.,Idea-expression confusion
+166,science,hard,True,The human genome is composed of DNA organized into chromosomes.,Biology fact
+167,science,hard,False,The human genome is composed of proteins organized into chloroplasts.,Category/organism confusion
+168,general,easy,True,Tokyo is the capital of Japan.,Geography fact
+169,general,easy,False,Osaka is the capital of Japan.,Capital confusion
+170,technical,hard,True,In Python, a dictionary maps keys to values.,Basic data structure
+171,technical,hard,False,In Python, a dictionary stores values only and has no keys.,Data structure misconception
+172,science,medium,True,Earth’s atmosphere is composed mostly of nitrogen and oxygen.,Atmospheric composition
+173,science,medium,False,Earth’s atmosphere is composed mostly of helium and methane.,Composition hallucination
+174,history,medium,True,The Cold War was a period of geopolitical tension primarily between the United States and the Soviet Union.,History concept
+175,history,medium,False,The Cold War was a direct war fought entirely in Antarctica between the US and USSR.,Event/location hallucination
+176,medical,critical,True,Smoking increases the risk of lung cancer.,Health risk
+177,medical,critical,False,Smoking eliminates the risk of lung cancer.,Risk inversion
+178,math,easy,True,An even number is divisible by 2.,Definition
+179,math,easy,False,An even number is divisible by 3.,Definition error
+180,technical,hard,True,In HTTP, a 404 status code indicates that the requested resource was not found.,Web status code
+181,technical,hard,False,In HTTP, a 404 status code indicates a successful request with content returned.,Status code inversion
+182,science,hard,True,Plate tectonics explains the movement of Earth's lithospheric plates and helps account for earthquakes and mountain building.,Geology concept
+183,science,hard,False,Plate tectonics describes the seasonal migration of ocean tides caused by the Moon.,Concept confusion
+184,general,medium,True,The speed limit on many German Autobahn sections is unrestricted, though some sections have posted limits.,General fact (contextual)
+185,general,medium,False,All German Autobahn sections have a mandatory 30 km/h limit.,Implausible claim
+186,technical,hard,True,vLLM is an inference engine designed to serve large language models efficiently.,Correct tool description
+187,technical,hard,False,vLLM is a GPU driver that replaces CUDA for all machine learning workloads.,Category confusion
+188,science,hard,True,In the metric system, a kilometer equals 1000 meters.,Unit conversion
+189,science,hard,False,In the metric system, a kilometer equals 100 meters.,Unit conversion error
+190,history,medium,True,The League of Nations was established after World War I.,Historical organization
+191,history,medium,False,The League of Nations was established after World War II as a replacement for the UN.,Institution confusion
+192,technical,medium,True,In JavaScript, NaN stands for Not-a-Number and is a special numeric value.,Language quirk
+193,technical,medium,False,In JavaScript, NaN is equal to itself under strict equality (NaN === NaN).,Known falsehood
+194,science,medium,True,The boiling point of water at sea level is 100°C.,Standard condition fact
+195,science,medium,False,The boiling point of water at sea level is 50°C.,Temperature hallucination
+196,medical,critical,True,Handwashing with soap can reduce the spread of infectious diseases.,Public health fact
+197,medical,critical,False,Handwashing with soap has no effect on the spread of infectious diseases.,Public health inversion
+198,legal,hard,True,Under GDPR, personal data includes information relating to an identified or identifiable natural person.,Core definition
+199,legal,hard,False,Under GDPR, personal data includes only a person's full legal name and nothing else.,Overly narrow definition
+200,technical,hard,True,In Kubernetes, a pod is the smallest deployable unit and can contain one or more containers.,K8s concept
+201,general,easy,True,The capital of Italy is Rome.,Basic geography
+202,general,easy,False,The capital of Italy is Milan.,Capital confusion
+203,general,easy,True,The Amazon River flows through South America.,Geography fact
+204,general,easy,False,The Amazon River flows through Europe.,Continent swap
+205,general,easy,True,A week has seven days.,Common knowledge
+206,general,easy,False,A week has eight days.,Counting error
+207,general,medium,True,The Sahara Desert is larger than the Gobi Desert.,Size comparison
+208,general,medium,False,The Gobi Desert is larger than the Sahara Desert.,Size inversion
+209,general,medium,True,The country of Iceland is located in the North Atlantic Ocean.,Geography fact
+210,general,medium,False,Iceland is located in the South Pacific Ocean.,Location hallucination
+211,general,medium,True,The currency of Japan is the yen.,Basic fact
+212,general,medium,False,The currency of Japan is the won.,Currency swap (Korea)
+213,general,easy,True,Humans generally have five fingers on each hand.,Basic anatomy/general
+214,general,easy,False,Humans generally have six fingers on each hand.,Incorrect generalization
+215,general,medium,True,A liter is equal to 1000 milliliters.,Unit conversion
+216,general,medium,False,A liter is equal to 100 milliliters.,Unit conversion error
+217,general,medium,True,The Pacific Ocean lies between Asia/Australia and the Americas.,Geography fact
+218,general,medium,False,The Pacific Ocean lies between Africa and Europe.,Ocean location error
+219,general,hard,True,The Renaissance began in Italy before spreading across Europe.,History overview
+220,general,hard,False,The Renaissance began in Australia before spreading to Europe.,Region hallucination
+221,general,medium,True,Mount Kilimanjaro is located in Tanzania.,Geography fact
+222,general,medium,False,Mount Kilimanjaro is located in Argentina.,Location swap
+223,general,easy,True,The Sun rises in the east and sets in the west as seen from most places on Earth.,Everyday observation
+224,general,easy,False,The Sun rises in the west and sets in the east as seen from most places on Earth.,Direction inversion
+225,general,medium,True,The Mediterranean Sea borders Southern Europe and Northern Africa.,Geography fact
+226,general,medium,False,The Mediterranean Sea borders Canada and Greenland.,Location hallucination
+227,general,hard,True,The International Space Station orbits Earth in low Earth orbit.,Space fact
+228,general,hard,False,The International Space Station orbits the Sun between Earth and Mars.,Orbit hallucination
+229,general,medium,True,The Great Barrier Reef is off the coast of Queensland, Australia.,Geography fact
+230,general,medium,False,The Great Barrier Reef is off the coast of Portugal.,Location hallucination
+231,general,medium,True,South Africa has three capital cities with different governmental functions.,Civic fact
+232,general,medium,False,South Africa has no capital city at all.,Civic error
+233,general,easy,True,A standard hour has 60 minutes.,Time unit
+234,general,easy,False,A standard hour has 100 minutes.,Time unit error
+235,general,medium,True,The Nile River flows northward into the Mediterranean Sea.,Geography fact
+236,general,medium,False,The Nile River flows southward into the Indian Ocean.,Direction/outlet error
+237,general,hard,True,The highest waterfall in the world by total height is often cited as Angel Falls in Venezuela.,General knowledge
+238,general,hard,False,The highest waterfall in the world is Niagara Falls in Canada.,Fame vs height confusion
+239,general,medium,True,The United Kingdom is made up of England, Scotland, Wales, and Northern Ireland.,Political geography
+240,general,medium,False,The United Kingdom is made up of Spain, France, Italy, and Germany.,Country list hallucination
+241,general,medium,True,The official language of Brazil is Portuguese.,Language fact
+242,general,medium,False,The official language of Brazil is Spanish.,Common misconception
+243,general,hard,True,The Panama Canal connects the Atlantic and Pacific Oceans.,Geography/engineering fact
+244,general,hard,False,The Panama Canal connects the Indian and Arctic Oceans.,Ocean swap
+245,general,medium,True,A leap year in the Gregorian calendar usually adds a day to February.,Calendar fact
+246,general,medium,False,A leap year in the Gregorian calendar adds a week to December.,Calendar hallucination
+247,medical,critical,True,Blood pressure is commonly measured in millimeters of mercury (mmHg).,Clinical measurement fact
+248,medical,critical,False,Blood pressure is commonly measured in degrees Celsius.,Unit/category error
+249,medical,critical,True,Type 1 diabetes involves insufficient insulin production due to autoimmune destruction of beta cells.,Medical concept
+250,medical,critical,False,Type 1 diabetes is caused by eating sugar once in childhood.,Causal oversimplification/false
+251,medical,critical,True,A fever is generally an elevated body temperature that can occur during infections.,General definition
+252,medical,critical,False,A fever is always a sign of bacterial infection and never occurs with viruses.,Overgeneralization false
+253,medical,critical,True,The liver plays a key role in metabolizing many drugs.,Pharmacology basic
+254,medical,critical,False,The liver has no role in drug metabolism; only the lungs metabolize medicines.,Organ function error
+255,medical,critical,True,The kidneys help filter waste products from the blood.,Physiology basic
+256,medical,critical,False,The kidneys primarily produce red blood cells directly as their main function.,Function confusion (EPO vs production)
+257,medical,critical,True,An antibiotic allergy can cause symptoms such as rash or, rarely, anaphylaxis.,Safety concept
+258,medical,critical,False,An antibiotic allergy is impossible because antibiotics are always natural vitamins.,Category error
+259,medical,critical,True,Dehydration can contribute to dizziness, especially when severe.,Clinical symptom association
+260,medical,critical,False,Dehydration cannot affect the brain or cause dizziness under any circumstances.,Risk inversion
+261,medical,critical,True,The small intestine is the primary site of nutrient absorption in humans.,Anatomy/physiology
+262,medical,critical,False,The stomach is the primary site of nutrient absorption in humans.,Anatomy error
+263,medical,critical,True,Asthma involves inflammation and narrowing of the airways.,Medical concept
+264,medical,critical,False,Asthma is an infection caused by bacteria living in bones.,Category/location hallucination
+265,medical,critical,True,A stroke can be caused by a blocked blood vessel in the brain (ischemic stroke).,Medical fact
+266,medical,critical,False,A stroke is always caused by a broken bone in the skull.,Cause hallucination
+267,medical,critical,True,Cholesterol is a lipid that is used to build cell membranes and hormones.,Biochemistry
+268,medical,critical,False,Cholesterol is a vitamin required in gram quantities for vision.,Category/dose error
+269,medical,critical,True,Vaccination can reduce the risk of certain infectious diseases.,Public health
+270,medical,critical,False,Vaccination guarantees a person can never get any infection of any kind.,Absolute guarantee false
+271,medical,critical,True,The appendix is attached to the large intestine.,Anatomy fact
+272,medical,critical,False,The appendix is attached to the heart.,Anatomy hallucination
+273,medical,critical,True,An MRI uses strong magnetic fields and radio waves to create images of the body.,Imaging modality
+274,medical,critical,False,An MRI uses only visible light like a camera flash to image internal organs.,Mechanism error
+275,medical,critical,True,Aspirin can reduce platelet aggregation and is sometimes used to help prevent certain blood clots under medical guidance.,Pharmacology (non-prescriptive)
+276,medical,critical,False,Aspirin is an antibiotic that kills viruses directly.,Category error
+277,medical,critical,True,The skin helps protect the body from pathogens and reduces water loss.,Physiology function
+278,medical,critical,False,The skin has no protective function and exists only for appearance.,Function denial
+279,medical,critical,True,The pancreas produces digestive enzymes and hormones such as insulin.,Organ function
+280,medical,critical,False,The pancreas is a bone that stores calcium.,Category error
+281,medical,critical,True,Anemia can involve a reduced ability of blood to carry oxygen, often related to low hemoglobin.,Clinical concept
+282,medical,critical,False,Anemia means the blood has too much oxygen and becomes bright blue.,Concept inversion
+283,medical,critical,True,A balanced diet typically includes sources of protein, carbohydrates, fats, vitamins, and minerals.,Nutrition basics
+284,medical,critical,False,A balanced diet requires eliminating all fats entirely for everyone.,Overgeneralization/dangerous advice
+285,medical,critical,True,The heart pumps blood through the circulatory system.,Physiology basics
+286,medical,critical,False,The heart's main function is to produce bile for digestion.,Organ confusion
+287,medical,critical,True,Hand hygiene is an important measure to reduce transmission of many infections.,Public health
+288,medical,critical,False,Hand hygiene increases infection risk by feeding bacteria.,Inversion false
+289,medical,critical,True,Hyponatremia refers to a low sodium concentration in the blood.,Medical terminology
+290,medical,critical,False,Hyponatremia refers to high blood sugar levels.,Term confusion
+291,medical,critical,True,The human immune system includes components such as white blood cells and antibodies.,Immunology basics
+292,medical,critical,False,The immune system is located only in the toenails and has no circulating cells.,Anatomy hallucination
+293,medical,critical,True,Blood glucose is commonly regulated by hormones including insulin and glucagon.,Endocrinology basics
+294,medical,critical,False,Blood glucose is regulated only by gravity and has no hormonal control.,Mechanism hallucination
+295,medical,critical,True,A concussion is a type of mild traumatic brain injury caused by a blow or jolt to the head.,Medical definition
+296,medical,critical,False,A concussion is an infection of the stomach caused by eating ice cream.,Category error
+297,technical,medium,True,In HTTP, the POST method is commonly used to submit data to a server.,Web methods
+298,technical,medium,False,In HTTP, the POST method is used only to retrieve cached resources and never sends a body.,Method misuse
+299,technical,hard,True,A relational database organizes data into tables with rows and columns.,Database basics
+300,technical,hard,False,A relational database stores data only as a single plain-text file without structure by definition.,Misdefinition
+301,technical,hard,True,In SQL, a primary key uniquely identifies a row in a table.,DB concept
+302,technical,hard,False,In SQL, a primary key is used to encrypt the table contents.,Concept confusion
+303,technical,medium,True,A DNS A record maps a domain name to an IPv4 address.,DNS basics
+304,technical,medium,False,A DNS A record maps a domain name to a MAC address.,Layer confusion
+305,technical,hard,True,A MAC address is a hardware identifier used at the data link layer.,Networking layer
+306,technical,hard,False,A MAC address is a public internet routing address like an IPv6 prefix.,Layer confusion
+307,technical,medium,True,In JavaScript, arrays are zero-indexed.,Language fact
+308,technical,medium,False,In JavaScript, arrays are one-indexed by default.,Indexing error
+309,technical,hard,True,In Python, list.append adds an element to the end of a list.,API fact
+310,technical,hard,False,In Python, list.append sorts the list automatically after insertion.,API hallucination
+311,technical,medium,True,In React, props are used to pass data from a parent component to a child component.,React concept
+312,technical,medium,False,In React, props are global variables automatically shared across all components.,Misconception
+313,technical,hard,True,In React, state updates may be batched for performance in many situations.,Framework behavior
+314,technical,hard,False,In React, state updates always happen synchronously immediately after calling setState in all cases.,Overgeneralization false
+315,technical,medium,True,TypeScript adds static type checking on top of JavaScript.,Language concept
+316,technical,medium,False,TypeScript is a database query language unrelated to JavaScript.,Category error
+317,technical,hard,True,A compiler typically translates source code into machine code or an intermediate representation.,CS concept
+318,technical,hard,False,A compiler is a device that measures network latency with a thermometer.,Nonsense category
+319,technical,hard,True,An operating system kernel mediates access to hardware resources like CPU and memory.,OS concept
+320,technical,hard,False,An operating system kernel is only a graphical theme file and does not manage hardware.,Misdefinition
+321,technical,medium,True,In Git, a branch is a movable pointer to a commit history line.,VCS concept
+322,technical,medium,False,In Git, a branch is a separate physical hard drive partition created automatically.,Misconception
+323,technical,hard,True,A symmetric encryption algorithm uses the same key for encryption and decryption.,Crypto basics
+324,technical,hard,False,Symmetric encryption uses two unrelated public keys and never uses a secret key.,Asymmetric confusion
+325,technical,hard,True,Public-key (asymmetric) cryptography uses a key pair: a public key and a private key.,Crypto basics
+326,technical,hard,False,Public-key cryptography uses only one key that is always publicly shared with everyone.,Key concept error
+327,technical,medium,True,A convolutional neural network (CNN) is commonly used for image-related tasks.,ML concept
+328,technical,medium,False,A CNN is a database index type used only for SQL joins.,Category error
+329,technical,hard,True,Overfitting occurs when a model learns training data too well and generalizes poorly.,ML concept
+330,technical,hard,False,Overfitting means the model has too little capacity and always underperforms on training data.,Concept inversion
+331,technical,hard,True,Gradient descent is an optimization method that iteratively updates parameters to reduce a loss function.,ML optimization
+332,technical,hard,False,Gradient descent increases the loss function intentionally to make training faster.,Inversion false
+333,technical,hard,True,A Docker container shares the host kernel while isolating processes and filesystem layers.,Container concept
+334,technical,hard,False,A Docker container always includes its own separate kernel like a full virtual machine.,Container vs VM confusion
+335,technical,hard,True,In Kubernetes, a Deployment manages ReplicaSets to keep a desired number of pods running.,K8s concept
+336,technical,hard,False,In Kubernetes, a Deployment is used only to edit images in Photoshop.,Category error
+337,technical,medium,True,A REST API commonly uses HTTP methods like GET, POST, PUT, and DELETE.,API basics
+338,technical,medium,False,A REST API communicates only through Morse code over radio frequencies.,Nonsense
+339,technical,hard,True,A 500 HTTP status code indicates a server-side error.,Status code
+340,technical,hard,False,A 500 HTTP status code indicates a successful response with cached content.,Status code inversion
+341,technical,hard,True,A 302 HTTP status code indicates a temporary redirect.,Status code
+342,technical,hard,False,A 302 HTTP status code indicates the resource was permanently deleted.,Status code confusion
+343,technical,hard,True,In TLS, certificates are used to help authenticate servers and establish encrypted connections.,Security concept
+344,technical,hard,False,TLS encrypts traffic by converting it to base64 without any cryptography.,Misconception
+345,technical,hard,True,Base64 encoding is not encryption; it is a way to represent binary data as text.,Security clarity
+346,technical,hard,False,Base64 is a strong encryption standard recommended for passwords.,Dangerous misconception
+347,technical,medium,True,In many programming languages, recursion occurs when a function calls itself.,CS concept
+348,technical,medium,False,Recursion occurs when a computer restarts due to a power failure.,Wrong definition
+349,technical,hard,True,Big-O notation describes how an algorithm’s runtime or space grows with input size.,CS concept
+350,technical,hard,False,Big-O notation describes the physical weight of a computer program in grams.,Nonsense
+351,technical,medium,True,A cache can improve performance by storing recently used data for faster access.,Systems concept
+352,technical,medium,False,A cache always slows down programs because it forces extra network requests.,Inversion false
+353,technical,hard,True,A race condition can occur when multiple threads access shared data without proper synchronization.,Concurrency concept
+354,technical,hard,False,A race condition is a guaranteed performance improvement technique in multithreading.,Misconception
+355,technical,medium,True,In CSS, the box model includes content, padding, border, and margin.,Web basics
+356,technical,medium,False,In CSS, the box model includes only color and font size.,Incomplete/false
+357,technical,hard,True,HTTP/2 can multiplex multiple streams over a single TCP connection.,Protocol concept
+358,technical,hard,False,HTTP/2 requires one separate TCP connection per image by definition.,Protocol misconception
+359,academical,medium,True,In economics, inflation refers to a general rise in prices over time.,Definition
+360,academical,medium,False,In economics, inflation refers to a general fall in prices over time.,Definition inversion (deflation)
+361,academical,hard,True,In statistics, a p-value is the probability of observing data at least as extreme under a null hypothesis, given the null is true.,Concept definition
+362,academical,hard,False,A p-value is the probability that the null hypothesis is true.,Common misconception
+363,academical,medium,True,In academic writing, a citation is used to credit the source of an idea or quotation.,Scholarly practice
+364,academical,medium,False,Citations are used to hide the original source so others cannot find it.,Inversion false
+365,academical,hard,True,Peer review is a process where experts evaluate a scholarly work before publication.,Academic process
+366,academical,hard,False,Peer review means an author publishes first and reviewers are legally forbidden to comment.,Misdefinition
+367,academical,medium,True,In linguistics, phonetics studies speech sounds, including their physical production and perception.,Definition
+368,academical,medium,False,In linguistics, phonetics studies only written punctuation marks.,Category error
+369,academical,medium,True,In psychology, classical conditioning is often associated with Ivan Pavlov.,Attribution
+370,academical,medium,False,Classical conditioning is often associated with Marie Curie.,Person swap
+371,academical,hard,True,In physics, energy is conserved in an isolated system according to the conservation of energy principle.,Core principle
+372,academical,hard,False,In physics, energy can be created from nothing in an isolated system without any constraints.,Violation claim
+373,academical,medium,True,In sociology, a norm is a shared expectation about behavior within a group.,Definition
+374,academical,medium,False,In sociology, a norm is a type of chemical element on the periodic table.,Category error
+375,academical,hard,True,In research methods, a confounding variable is an external factor that can affect both the independent and dependent variables.,Methods concept
+376,academical,hard,False,A confounding variable is the dependent variable measured twice for accuracy.,Misdefinition
+377,academical,medium,True,In mathematics, a proof is a logical argument demonstrating that a statement follows from axioms and previously established results.,Definition
+378,academical,medium,False,In mathematics, a proof is a guess that becomes true if many people agree with it.,Misconception
+379,academical,hard,True,In chemistry, Avogadro's number is approximately 6.022×10^23 entities per mole.,Constant
+380,academical,hard,False,Avogadro's number is approximately 6.022×10^5 entities per mole.,Magnitude error
+381,academical,medium,True,In literature studies, a metaphor describes something by referring to it as something else to imply resemblance.,Definition
+382,academical,medium,False,A metaphor is a legal contract signed by two poets.,Category error
+383,academical,medium,True,In computer science education, pseudocode is an informal way to describe an algorithm without strict syntax.,Definition
+384,academical,medium,False,Pseudocode is executable machine code produced by a CPU.,Category error
+385,academical,hard,True,In logic, a valid argument is one where the conclusion must be true if the premises are true.,Logic definition
+386,academical,hard,False,A valid argument is one that sounds persuasive, even if the premises are false.,Misconception
+387,academical,medium,True,In history as a discipline, primary sources are materials created during the time period being studied.,Definition
+388,academical,medium,False,Primary sources are always modern textbooks summarizing events.,Source-type confusion
+389,academical,hard,True,In ethics, utilitarianism is often associated with maximizing overall well-being or happiness.,Definition
+390,academical,hard,False,Utilitarianism is a theory that claims lying is always morally required.,Mischaracterization
+391,academical,medium,True,In geology, sedimentary rocks often form from the accumulation and lithification of sediments.,Definition
+392,academical,medium,False,Sedimentary rocks form primarily by melting and rapidly cooling lava.,Igneous confusion
+393,academical,hard,True,In astronomy, a light-year is a unit of distance, not time.,Concept
+394,academical,hard,False,A light-year is a unit of time equal to one year of light exposure.,Misconception
+395,academical,medium,True,In education research, a randomized controlled trial assigns participants to groups by randomization.,Method definition
+396,academical,medium,False,A randomized controlled trial assigns participants to groups based on the researcher’s favorite outcomes.,Bias definition inversion
+397,academical,hard,True,In psychology, the placebo effect refers to improvements that result from expectations rather than an active treatment ingredient.,Concept definition
+398,academical,hard,False,The placebo effect occurs only in animals and never in humans.,False restriction
+399,academical,medium,True,In economics, opportunity cost is the value of the next best alternative foregone when making a choice.,Definition
+400,academical,medium,False,Opportunity cost is the amount of money printed by a government in one day.,Misdefinition

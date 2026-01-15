@@ -271,6 +271,8 @@ class HybridVerificationOracle(VerificationOracle):
                 if self._persist_mcp_evidence and result:
                     await self._persist_evidence_to_graph(result)
 
+        return all_evidence
+
     async def _persist_evidence_to_graph(self, evidence_list: list[Evidence]) -> None:
         """Persist MCP evidence to graph store for future lookups."""
         if self._graph_store is None:
@@ -335,6 +337,8 @@ class HybridVerificationOracle(VerificationOracle):
                 "No evidence found from any source for claim: %s",
                 claim.text[:100],
             )
+
+        return all_evidence
 
     async def _adaptive_evidence(
         self,

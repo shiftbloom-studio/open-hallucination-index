@@ -1,12 +1,24 @@
 """
-Context7 MCP Adapter
-====================
+Context7 MCP Adapter (Legacy/Deprecated)
+========================================
 
-Adapter for Context7 documentation retrieval via MCP server.
-Connects to the configured MCP endpoint (streamable HTTP or SSE).
-Provides up-to-date library/API documentation for technical claims.
+.. deprecated:: 2.0
+    This adapter is fully replaced by OHIMCPAdapter which provides:
+    - resolve_library_id() - Resolve library names to Context7 IDs
+    - query_library_docs() - Query documentation by library ID
+    - get_library_documentation() - High-level combined method
 
-Now supports session pooling for persistent HTTP connections to improve performance.
+    Use OHIMCPAdapter instead:
+        from open_hallucination_index.adapters.outbound import OHIMCPAdapter
+
+        adapter = OHIMCPAdapter(settings)
+        await adapter.connect()
+        docs = await adapter.get_library_documentation("react", "hooks usage")
+
+    This adapter uses SSE/Streamable HTTP which adds unnecessary complexity
+    for simple request-response patterns. OHIMCPAdapter uses direct HTTP API.
+
+    This file is kept for backward compatibility and fallback scenarios only.
 """
 
 from __future__ import annotations

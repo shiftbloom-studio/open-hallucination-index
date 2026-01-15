@@ -31,24 +31,22 @@ def _get_model(model_name: str):
 
     logger.info(f"Loading embedding model: {model_name}")
 
-    # Explicitly determine device
-    model_kwargs = {"low_cpu_mem_usage": False}
-    if torch.cuda.is_available():
-        device = "cuda"
-        model_kwargs.update({"torch_dtype": torch.float16})
-    elif torch.backends.mps.is_available():
-        device = "mps"
-    else:
-        device = "cpu"
-
-    # Load model with forced device to avoid meta-tensor issues
-    # We disable trust_remote_code for security unless needed
+    # Explicitly determine device - CPU for API containers (GPU is for vLLM)
+    device = "cpu"
+    
+    # Load model without problematic kwargs that can cause meta tensor issues
+    # Force CPU to avoid GPU memory conflicts with vLLM
     model = SentenceTransformer(
         model_name,
         device=device,
         trust_remote_code=False,
-        model_kwargs=model_kwargs,
     )
+    
+    # Ensure all parameters are on the correct device (not meta)
+    model = model.to(device)
+    
+    # Verify model is ready
+    model.eval()
 
     dim = model.get_sentence_embedding_dimension()
     logger.info(f"Loaded embedding model on {device}, dim={dim}")
