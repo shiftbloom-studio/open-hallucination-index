@@ -57,6 +57,7 @@ from benchmark.analysis.statistical import (
     mcnemar_from_results,
 )
 from benchmark.reporters import (
+    ChartsReporter,
     ConsoleReporter,
     CSVReporter,
     JSONReporter,
@@ -784,6 +785,8 @@ class OHIBenchmarkRunner:
                 reporter = MarkdownReporter(self.config.output_dir)
             elif fmt == "html":
                 reporter = ConsoleReporter(self.config.output_dir, self.console)
+            elif fmt == "charts":
+                reporter = ChartsReporter(self.config.output_dir)
             else:
                 continue
 
@@ -792,5 +795,24 @@ class OHIBenchmarkRunner:
                 logger.info("Saved %s report: %s", fmt, filepath)
             except Exception as e:
                 logger.warning("Failed to save %s report: %s", fmt, e)
+
+        # Always generate performance charts (if matplotlib available)
+        try:
+            charts_reporter = ChartsReporter(self.config.output_dir)
+            chart_files = charts_reporter.generate_all_charts(
+                report, self.results, base_filename
+            )
+            if chart_files:
+                self.console.print(
+                    f"\n[green]📊 Generated {len(chart_files)} performance charts:[/green]"
+                )
+                for chart_path in chart_files:
+                    self.console.print(f"  [dim]→ {chart_path.name}[/dim]")
+        except ImportError:
+            self.console.print(
+                "\n[dim]⚠ Charts not generated (matplotlib not installed)[/dim]"
+            )
+        except Exception as e:
+            logger.warning("Failed to generate charts: %s", e)
 
         self.console.print(f"\n[dim]Reports saved to: {self.config.output_dir}/[/dim]")
