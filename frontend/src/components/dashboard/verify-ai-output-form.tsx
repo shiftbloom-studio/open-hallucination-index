@@ -227,9 +227,9 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
             <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
               <AlertTriangle className="h-4 w-4 inline mr-2" />
               You need {tokensNeeded - userTokens} more token{tokensNeeded - userTokens !== 1 ? "s" : ""} to verify this text.
-              <a href="/pricing" className="ml-2 underline hover:no-underline">
-                Purchase more tokens →
-              </a>
+              <span className="ml-2">
+                Come back tomorrow for 5 free tokens!
+              </span>
             </div>
           )}
         </CardContent>

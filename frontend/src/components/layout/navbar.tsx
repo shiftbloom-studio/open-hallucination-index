@@ -103,16 +103,6 @@ export function Navbar() {
           >
             About
           </Link>
-          <Link 
-            href="/pricing" 
-            className={cn(
-              "text-neutral-300 hover:text-white font-medium transition-colors px-3 py-2",
-              pathname === "/pricing" && "text-white"
-            )}
-          >
-            Pricing
-          </Link>
-          
           {!loading && user ? (
             <>
               {/* Token Balance */}
@@ -122,14 +112,6 @@ export function Navbar() {
                   {tokens !== null ? tokens : "..."} tokens
                 </span>
               </div>
-              
-              {/* Buy Tokens */}
-              <Link href="/pricing">
-                <Button variant="ghost" size="sm" className="text-amber-300 hover:text-amber-200 hover:bg-amber-500/10">
-                  <Sparkles className="h-4 w-4 mr-1" />
-                  Buy
-                </Button>
-              </Link>
               
               {/* Dashboard Link */}
               <Link href="/dashboard">

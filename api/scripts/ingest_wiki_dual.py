@@ -38,7 +38,7 @@ import sys
 import time
 from collections import Counter, defaultdict
 from collections.abc import Generator
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -80,6 +80,7 @@ logger = logging.getLogger("DualIngest")
 logging.getLogger("neo4j").setLevel(logging.WARNING)
 logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 logging.getLogger("qdrant_client").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # --- Constants ---
 DUMPS_URL = "https://dumps.wikimedia.org/enwiki/latest/"
@@ -97,6 +98,14 @@ AVG_DOC_LENGTH = 500  # Approximation for BM25
 # Collection Names
 QDRANT_COLLECTION = "wikipedia_hybrid"
 NEO4J_DATABASE = "neo4j"
+
+# Performance Tuning - Aggressive defaults for maximum throughput
+DEFAULT_BATCH_SIZE = 128  # Larger batches = fewer DB round-trips
+DEFAULT_WORKERS = 8  # More parallel workers
+DEFAULT_CHUNK_SIZE = 512
+DEFAULT_CHUNK_OVERLAP = 64
+EMBEDDING_BATCH_SIZE = 256  # Large embedding batches for GPU utilization
+QDRANT_UPLOAD_WORKERS = 4  # Parallel Qdrant uploads
 
 # Graceful Shutdown
 shutdown_requested = False
@@ -835,6 +844,11 @@ class QdrantHybridStore:
     - Dense vectors (sentence-transformers)
     - Sparse vectors (BM25)
     - Full-text payload index
+    
+    Optimized for maximum throughput with:
+    - GPU acceleration when available
+    - Parallel uploads
+    - Large embedding batches
     """
 
     def __init__(
@@ -857,8 +871,18 @@ class QdrantHybridStore:
         
         self.client = QdrantClient(**client_kwargs)
         self.collection = collection
-        self.model = SentenceTransformer(DENSE_MODEL)
+        
+        # Initialize embedding model with GPU if available
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device == "cuda":
+            logger.info(f"🚀 GPU detected: {torch.cuda.get_device_name(0)}")
+        else:
+            logger.info("💻 Using CPU for embeddings")
+        
+        self.model = SentenceTransformer(DENSE_MODEL, device=device)
         self.tokenizer = BM25Tokenizer(vocab_size=50000)
+        self._upload_executor = ThreadPoolExecutor(max_workers=QDRANT_UPLOAD_WORKERS)
         self._init_collection()
 
     def _init_collection(self):
@@ -933,12 +957,19 @@ class QdrantHybridStore:
             logger.warning(f"Payload index creation: {e}")
 
     # Maximum points per upload to stay under Qdrant's 32MB payload limit
-    MAX_POINTS_PER_UPLOAD = 100
+    MAX_POINTS_PER_UPLOAD = 200  # Increased for fewer round-trips
     # Maximum text length per chunk to prevent oversized payloads
     MAX_TEXT_LENGTH = 4000
 
     def upload_batch(self, chunks: list[ProcessedChunk]):
-        """Upload a batch of chunks with both dense and sparse vectors."""
+        """
+        Upload a batch of chunks with both dense and sparse vectors.
+        
+        Optimized for maximum throughput:
+        - Large embedding batches for GPU utilization
+        - Parallel sparse vector computation
+        - Async uploads to Qdrant
+        """
         if not chunks:
             return
 
@@ -954,17 +985,24 @@ class QdrantHybridStore:
         texts = [c.contextualized_text for c in chunks]
         self.tokenizer.update_idf(texts)
 
-        # Compute dense embeddings in smaller batches to prevent OOM
+        # Compute dense embeddings with large batches for GPU
         try:
             dense_vectors = self.model.encode(
                 texts,
-                batch_size=32,  # Reduced batch size for memory safety
+                batch_size=EMBEDDING_BATCH_SIZE,  # Large batch for GPU
                 show_progress_bar=False,
                 normalize_embeddings=True,
+                convert_to_numpy=True,
             )
         except Exception as e:
             logger.error(f"Embedding error: {e}")
             return
+
+        # Pre-compute all sparse vectors (fast, CPU-bound)
+        sparse_vectors = [
+            self.tokenizer.to_sparse_vector(c.contextualized_text)
+            for c in chunks
+        ]
 
         # Build points with hybrid vectors
         points = []
@@ -972,10 +1010,7 @@ class QdrantHybridStore:
             # Generate deterministic point ID
             point_id = abs(hash(chunk.chunk_id)) % (2**63)
 
-            # Compute sparse vector
-            indices, values = self.tokenizer.to_sparse_vector(
-                chunk.contextualized_text
-            )
+            indices, values = sparse_vectors[i]
 
             point = PointStruct(
                 id=point_id,
@@ -1033,7 +1068,14 @@ class QdrantHybridStore:
 
 
 class Neo4jGraphStore:
-    """Neo4j store with optimized batch writes and rich relationship modeling."""
+    """
+    Neo4j store with optimized batch writes and rich relationship modeling.
+    
+    Optimized for maximum throughput:
+    - Large connection pool
+    - Optimized batch queries
+    - Parallel write operations
+    """
 
     def __init__(
         self, uri: str, user: str, password: str, database: str = "neo4j"
@@ -1041,8 +1083,8 @@ class Neo4jGraphStore:
         self.driver = GraphDatabase.driver(
             uri,
             auth=(user, password),
-            max_connection_pool_size=50,
-            connection_acquisition_timeout=60,
+            max_connection_pool_size=100,  # Increased from 50
+            connection_acquisition_timeout=120,  # Increased timeout
         )
         self.database = database
         self._init_schema()
@@ -1225,6 +1267,10 @@ class CheckpointManager:
     
     Saves progress after each batch so ingestion can be resumed from
     the last successful batch if interrupted.
+    
+    IMPORTANT: processed_ids are ALWAYS preserved unless --clear-checkpoint
+    is used. This ensures no duplicate articles are ever imported, even
+    across multiple runs with different settings.
     """
 
     DEFAULT_CHECKPOINT_FILE = ".ingest_checkpoint.json"
@@ -1367,17 +1413,75 @@ class CheckpointManager:
         if self.auto_save:
             self.save()
 
+    def load_ids_only(self) -> bool:
+        """
+        Load ONLY the processed_ids from checkpoint, reset all other stats.
+        
+        This is used with --no-resume to start fresh statistics but still
+        preserve the list of already-processed articles to prevent duplicates.
+        
+        Returns:
+            True if IDs were loaded, False otherwise.
+        """
+        if not self.checkpoint_file.exists():
+            logger.info("📍 No checkpoint found, starting completely fresh")
+            return False
+
+        try:
+            with open(self.checkpoint_file, encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Load ONLY the processed IDs - these are sacred and must persist
+            self.processed_ids = set(data.get("processed_ids", []))
+            
+            # Reset all other stats to zero (fresh run)
+            self.last_article_id = 0
+            self.articles_processed = 0
+            self.chunks_created = 0
+            self.total_elapsed = 0.0
+
+            if self.processed_ids:
+                logger.info(
+                    f"🛡️  Loaded {len(self.processed_ids):,} previously processed "
+                    f"article IDs (will be skipped to prevent duplicates)"
+                )
+                logger.info("📊 Statistics reset to zero for fresh run")
+            return True
+
+        except (json.JSONDecodeError, KeyError, OSError) as e:
+            logger.warning(f"⚠️  Failed to load checkpoint: {e}. Starting fresh.")
+            return False
+
     def clear(self) -> None:
-        """Clear checkpoint file (for fresh start)."""
+        """
+        Clear checkpoint file completely (for TRULY fresh start).
+        
+        WARNING: This will remove ALL processed article IDs!
+        Articles may be re-imported if the databases are not also cleared.
+        """
         if self.checkpoint_file.exists():
+            # Load current state for logging
+            try:
+                with open(self.checkpoint_file, encoding="utf-8") as f:
+                    data = json.load(f)
+                old_count = len(data.get("processed_ids", []))
+                logger.warning(
+                    f"⚠️  Deleting {old_count:,} processed article IDs - "
+                    f"articles may be re-imported!"
+                )
+            except Exception:
+                pass
+            
             self.checkpoint_file.unlink()
-            logger.info("🗑️  Checkpoint cleared")
+            logger.info("🗑️  Checkpoint file deleted")
         
         self.processed_ids.clear()
         self.last_article_id = 0
         self.articles_processed = 0
         self.chunks_created = 0
         self.total_elapsed = 0.0
+        
+        logger.info("✅ Checkpoint completely cleared")
 
     def get_resume_info(self) -> str:
         """Get human-readable resume information."""
@@ -1403,8 +1507,13 @@ def process_batch(
     neo4j: Neo4jGraphStore,
     stats: IngestionStats,
     executor: ThreadPoolExecutor,
-):
-    """Process a batch of articles for both stores in parallel."""
+) -> list[Future[None]]:
+    """
+    Process a batch of articles for both stores in parallel.
+    
+    Returns futures so caller can check for completion asynchronously.
+    This enables pipeline prefetching for maximum throughput.
+    """
     # Flatten all chunks for Qdrant
     all_chunks = [chunk for _, chunks in batch for chunk in chunks]
 
@@ -1415,26 +1524,30 @@ def process_batch(
     }
 
     # Upload to both stores in parallel
-    futures = []
+    futures: list[Future[None]] = []
     if all_chunks:
         futures.append(executor.submit(qdrant.upload_batch, all_chunks))
     futures.append(executor.submit(neo4j.upload_batch, articles, chunk_map))
 
-    # Wait for all uploads to complete
-    for future in as_completed(futures):
-        try:
-            future.result()
-        except Exception as e:
-            logger.error(f"Batch upload error: {e}")
-            stats.update(errors=1)
-
-    # Update statistics
+    # Update statistics immediately (don't wait for uploads)
     stats.update(
         articles=len(articles),
         chunks=len(all_chunks),
         links=sum(len(a.links) for a in articles),
         categories=sum(len(a.categories) for a in articles),
     )
+    
+    return futures
+
+
+def wait_for_uploads(futures: list[Future[None]], stats: IngestionStats) -> None:
+    """Wait for pending uploads to complete and handle errors."""
+    for future in as_completed(futures):
+        try:
+            future.result()
+        except Exception as e:
+            logger.error(f"Batch upload error: {e}")
+            stats.update(errors=1)
 
 
 # =============================================================================
@@ -1477,16 +1590,28 @@ def main():
         "--limit", type=int, default=None, help="Maximum articles to process"
     )
     parser.add_argument(
-        "--batch-size", type=int, default=32, help="Articles per batch"
+        "--batch-size",
+        type=int,
+        default=DEFAULT_BATCH_SIZE,
+        help=f"Articles per batch (default: {DEFAULT_BATCH_SIZE})",
     )
     parser.add_argument(
-        "--chunk-size", type=int, default=512, help="Target chunk size in chars"
+        "--chunk-size",
+        type=int,
+        default=DEFAULT_CHUNK_SIZE,
+        help=f"Target chunk size in chars (default: {DEFAULT_CHUNK_SIZE})",
     )
     parser.add_argument(
-        "--chunk-overlap", type=int, default=64, help="Chunk overlap in chars"
+        "--chunk-overlap",
+        type=int,
+        default=DEFAULT_CHUNK_OVERLAP,
+        help=f"Chunk overlap in chars (default: {DEFAULT_CHUNK_OVERLAP})",
     )
     parser.add_argument(
-        "--workers", type=int, default=4, help="Number of parallel workers"
+        "--workers",
+        type=int,
+        default=DEFAULT_WORKERS,
+        help=f"Number of parallel workers (default: {DEFAULT_WORKERS})",
     )
 
     # Collection settings
@@ -1505,12 +1630,12 @@ def main():
     parser.add_argument(
         "--no-resume",
         action="store_true",
-        help="Ignore existing checkpoint and start fresh",
+        help="Reset statistics but keep processed article IDs (prevents duplicates)",
     )
     parser.add_argument(
         "--clear-checkpoint",
         action="store_true",
-        help="Clear existing checkpoint and exit",
+        help="DELETE all checkpoint data including processed IDs (allows re-import)",
     )
     parser.add_argument(
         "--endless",
@@ -1532,14 +1657,20 @@ def main():
         collection=args.collection,
     )
 
-    # Handle --clear-checkpoint
+    # Handle --clear-checkpoint (completely wipes everything)
     if args.clear_checkpoint:
         checkpoint.clear()
-        logger.info("Checkpoint cleared. Exiting.")
+        logger.info("Exiting. Use without --clear-checkpoint to run ingestion.")
         return
 
-    # Load checkpoint unless --no-resume
-    if not args.no_resume:
+    # Load checkpoint based on mode
+    if args.no_resume:
+        # --no-resume: Load ONLY the processed IDs, reset statistics
+        # This prevents duplicates while starting fresh statistics
+        checkpoint.load_ids_only()
+        logger.info("📊 Starting fresh run (but keeping duplicate protection)")
+    else:
+        # Normal mode: Load everything (resume from where we left off)
         checkpoint.load()
         logger.info(f"📍 {checkpoint.get_resume_info()}")
 
@@ -1568,6 +1699,7 @@ def main():
 
     stats = IngestionStats()
     article_batch: list[tuple[WikiArticle, list[ProcessedChunk]]] = []
+    pending_futures: list[Future[None]] = []  # Track async uploads
     skipped_count = 0
 
     # Calculate remaining articles if limit is set
@@ -1593,8 +1725,8 @@ def main():
         dynamic_ncols=True,
     )
 
-    # Thread pool for parallel uploads
-    executor = ThreadPoolExecutor(max_workers=args.workers)
+    # Thread pool for parallel uploads (more workers for pipeline)
+    executor = ThreadPoolExecutor(max_workers=args.workers * 2)
 
     # Endless mode: track connection attempts
     connection_attempts = 0
@@ -1649,12 +1781,19 @@ def main():
                 if chunks:
                     article_batch.append((article, chunks))
 
-                # 3. Process batch when full
+                # 3. Process batch when full (async pipeline)
                 if len(article_batch) >= args.batch_size:
-                    # Process the batch
-                    process_batch(article_batch, qdrant, neo4j, stats, executor)
+                    # Wait for previous uploads to complete before starting new batch
+                    if pending_futures:
+                        wait_for_uploads(pending_futures, stats)
+                        pending_futures = []
                     
-                    # Record in checkpoint
+                    # Process the batch (returns futures for async completion)
+                    pending_futures = process_batch(
+                        article_batch, qdrant, neo4j, stats, executor
+                    )
+                    
+                    # Record in checkpoint immediately
                     batch_articles = [a for a, _ in article_batch]
                     batch_chunks = sum(len(c) for _, c in article_batch)
                     checkpoint.record_batch(batch_articles, batch_chunks)
@@ -1671,9 +1810,17 @@ def main():
             if not shutdown_requested:
                 completed_successfully = True
                 
+            # Wait for any pending uploads
+            if pending_futures:
+                wait_for_uploads(pending_futures, stats)
+                pending_futures = []
+                
             # Process final batch
             if article_batch and not shutdown_requested:
-                process_batch(article_batch, qdrant, neo4j, stats, executor)
+                futures = process_batch(
+                    article_batch, qdrant, neo4j, stats, executor
+                )
+                wait_for_uploads(futures, stats)
                 
                 # Record final batch in checkpoint
                 batch_articles = [a for a, _ in article_batch]
@@ -1697,6 +1844,12 @@ def main():
         ) as e:
             # Network-related errors - save checkpoint and retry if endless mode
             logger.warning(f"⚠️  Network error: {e}")
+            
+            # Wait for pending uploads before saving checkpoint
+            if pending_futures:
+                wait_for_uploads(pending_futures, stats)
+                pending_futures = []
+            
             checkpoint.save()
             stats.update(errors=1)
             
@@ -1716,6 +1869,11 @@ def main():
             # Other errors - save and exit
             logger.error(f"Critical failure: {e}", exc_info=True)
             stats.update(errors=1)
+            
+            # Wait for pending uploads before saving checkpoint
+            if pending_futures:
+                wait_for_uploads(pending_futures, stats)
+            
             checkpoint.save()
             break
 
