@@ -69,6 +69,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - LD_LIBRARY_PATH=/usr/lib/wsl/lib:${LD_LIBRARY_PATH}
+      - VLLM_LOGGING_LEVEL=WARNING
     runtime: nvidia
     gpus: all
     # NVIDIA GPU configuration
@@ -96,6 +97,7 @@ services:
       --enable-prefix-caching
       --enable-chunked-prefill
       --disable-log-requests
+      --log-level warning
     networks:
       - ohi-net
 

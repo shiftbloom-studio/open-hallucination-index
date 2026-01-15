@@ -22,10 +22,36 @@ fi
 
 cd "$INGESTION_DIR"
 
-if [ -d ".venv" ]; then
-  # shellcheck disable=SC1091
-  source .venv/bin/activate
+# Check if .venv exists, if not create it
+if [ ! -d ".venv" ]; then
+    echo "⚠️  No virtual environment found. Creating one..."
+    # Check for python3 or python
+    if command -v python3 &> /dev/null; then
+        PYTHON_CMD=python3
+    else
+        PYTHON_CMD=python
+    fi
+    $PYTHON_CMD -m venv .venv
+    echo "✅ Virtual environment created."
 fi
 
+if [ -d ".venv" ]; then
+  if [ -f ".venv/Scripts/activate" ]; then
+    source .venv/Scripts/activate
+  elif [ -f ".venv/bin/activate" ]; then
+    source .venv/bin/activate
+  fi
+fi
+
+# Install dependencies if pyproject.toml exists
+if [ -f "pyproject.toml" ]; then
+    # Silence output unless error, but better to show it for first run
+    echo "📦 Ensuring dependencies are installed..."
+    pip install .
+fi
+
+# Go up to 'src' directory so python can find the 'ingestion' package
+cd ..
+
 echo "🚀 Starting ingestion..."
-python -m ingestion "$@"
+python -m src\\ingestion "$@"
