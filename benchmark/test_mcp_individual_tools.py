@@ -19,7 +19,7 @@ TOOL_TESTS = [
     },
     {
         "tool_match": "search_wikidata",
-        "name": "Wikidata",
+        "name": "Wikidata", 
         "query": "The capital of France is Paris.",
     },
     {
@@ -116,6 +116,11 @@ def run_individual_tests():
             "target_sources": 10,
             "use_cache": False
         }
+
+        payload["skip_decomposition"] = True
+
+        if tool_match == "get_world_bank_indicator":
+            payload["skip_decomposition"] = True
         
         headers = {"X-API-Key": API_KEY} if API_KEY else {}
         

@@ -285,6 +285,7 @@ class OHIBenchmarkRunner:
                         "text": text,
                         "strategy": self.config.strategies[0],
                         "use_cache": False,
+                        "skip_decomposition": True,
                     },
                     timeout=30.0,
                 )
@@ -321,6 +322,7 @@ class OHIBenchmarkRunner:
                         "strategy": strategy,
                         "use_cache": self.config.use_cache,
                         "target_sources": self.config.target_sources,
+                        "skip_decomposition": True,
                     },
                     timeout=self.config.timeout_seconds,
                 )
