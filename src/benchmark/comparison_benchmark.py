@@ -322,7 +322,8 @@ def build_config(args: argparse.Namespace) -> ComparisonBenchmarkConfig:
 
 async def run_benchmark(args: argparse.Namespace) -> int:
     """Run the comparison benchmark."""
-    console = Console()
+    # Force terminal on Windows/GitBash often helps avoid frozen output
+    console = Console(force_terminal=True, color_system="auto")
 
     try:
         config = build_config(args)
