@@ -3,6 +3,7 @@ Neo4j Graph Knowledge Store Adapter
 ===================================
 
 Adapter for Neo4j graph database as a knowledge store.
+Supports 25 relationship types for rich knowledge graph queries.
 """
 
 from __future__ import annotations
@@ -28,6 +29,80 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# RELATIONSHIP TYPE CONSTANTS (25 types from ingestion pipeline)
+# =============================================================================
+
+# Core Article Relationships
+REL_LINKS_TO = "LINKS_TO"
+REL_IN_CATEGORY = "IN_CATEGORY"
+REL_MENTIONS = "MENTIONS"
+REL_SEE_ALSO = "SEE_ALSO"
+REL_DISAMBIGUATES = "DISAMBIGUATES"
+REL_RELATED_TO = "RELATED_TO"
+
+# Person Relationships
+REL_LOCATED_IN = "LOCATED_IN"
+REL_HAS_OCCUPATION = "HAS_OCCUPATION"
+REL_HAS_NATIONALITY = "HAS_NATIONALITY"
+REL_MARRIED_TO = "MARRIED_TO"
+REL_PARENT_OF = "PARENT_OF"
+REL_CHILD_OF = "CHILD_OF"
+REL_EDUCATED_AT = "EDUCATED_AT"
+REL_EMPLOYED_BY = "EMPLOYED_BY"
+REL_WON_AWARD = "WON_AWARD"
+
+# Creative/Influence Relationships
+REL_AUTHORED = "AUTHORED"
+REL_HAS_GENRE = "HAS_GENRE"
+REL_INFLUENCED_BY = "INFLUENCED_BY"
+REL_INFLUENCED = "INFLUENCED"
+
+# Organization Relationships
+REL_FOUNDED_BY = "FOUNDED_BY"
+REL_HEADQUARTERED_IN = "HEADQUARTERED_IN"
+REL_IN_INDUSTRY = "IN_INDUSTRY"
+
+# Geographic Relationships
+REL_IN_COUNTRY = "IN_COUNTRY"
+REL_PART_OF = "PART_OF"
+
+# Temporal Relationships
+REL_PRECEDED_BY = "PRECEDED_BY"
+REL_SUCCEEDED_BY = "SUCCEEDED_BY"
+
+# Classification
+REL_INSTANCE_OF = "INSTANCE_OF"
+
+# All relationship types for queries
+ALL_RELATIONSHIP_TYPES = [
+    REL_LINKS_TO, REL_IN_CATEGORY, REL_MENTIONS, REL_SEE_ALSO, REL_DISAMBIGUATES,
+    REL_RELATED_TO, REL_LOCATED_IN, REL_HAS_OCCUPATION, REL_HAS_NATIONALITY,
+    REL_MARRIED_TO, REL_PARENT_OF, REL_CHILD_OF, REL_EDUCATED_AT, REL_EMPLOYED_BY,
+    REL_WON_AWARD, REL_AUTHORED, REL_HAS_GENRE, REL_INFLUENCED_BY, REL_INFLUENCED,
+    REL_FOUNDED_BY, REL_HEADQUARTERED_IN, REL_IN_INDUSTRY, REL_IN_COUNTRY,
+    REL_PART_OF, REL_PRECEDED_BY, REL_SUCCEEDED_BY, REL_INSTANCE_OF,
+]
+
+# Relationship categories for semantic queries
+PERSON_RELATIONSHIPS = [
+    REL_MARRIED_TO, REL_PARENT_OF, REL_CHILD_OF, REL_EDUCATED_AT,
+    REL_EMPLOYED_BY, REL_WON_AWARD, REL_HAS_OCCUPATION, REL_HAS_NATIONALITY,
+]
+
+CREATIVE_RELATIONSHIPS = [
+    REL_AUTHORED, REL_HAS_GENRE, REL_INFLUENCED_BY, REL_INFLUENCED,
+]
+
+ORGANIZATION_RELATIONSHIPS = [
+    REL_FOUNDED_BY, REL_HEADQUARTERED_IN, REL_IN_INDUSTRY, REL_EMPLOYED_BY,
+]
+
+GEOGRAPHIC_RELATIONSHIPS = [
+    REL_LOCATED_IN, REL_IN_COUNTRY, REL_PART_OF, REL_HEADQUARTERED_IN,
+]
+
+
 class Neo4jError(Exception):
     """Exception raised when Neo4j operations fail."""
 
@@ -39,6 +114,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
     Adapter for Neo4j as a graph-based knowledge store.
 
     Provides exact and inferred fact lookup via Cypher queries.
+    Supports 25 relationship types for comprehensive knowledge graph queries.
     """
 
     def __init__(self, settings: Neo4jSettings) -> None:
@@ -627,3 +703,162 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
             stats["error"] = str(e)
 
         return stats
+
+    # =========================================================================
+    # NEW: Advanced relationship-aware query methods
+    # =========================================================================
+
+    async def query_by_relationship_type(
+        self,
+        entity: str,
+        relationship_types: list[str] | None = None,
+        direction: str = "both",
+        limit: int = 20,
+    ) -> list[Evidence]:
+        """
+        Query for relationships of specific types involving an entity.
+
+        Args:
+            entity: The entity name to search for.
+            relationship_types: List of relationship types to filter (e.g., ['MARRIED_TO', 'CHILD_OF']).
+                              If None, searches all relationship types.
+            direction: 'outgoing', 'incoming', or 'both'.
+            limit: Maximum results to return.
+
+        Returns:
+            List of Evidence objects with relationship information.
+        """
+        if self._driver is None:
+            raise Neo4jError("Not connected to Neo4j")
+
+        # Build relationship type filter
+        if relationship_types:
+            rel_filter = ":" + "|".join(relationship_types)
+        else:
+            rel_filter = ""
+
+        # Build direction pattern
+        if direction == "outgoing":
+            pattern = f"(s)-[r{rel_filter}]->(o)"
+        elif direction == "incoming":
+            pattern = f"(s)<-[r{rel_filter}]-(o)"
+        else:
+            pattern = f"(s)-[r{rel_filter}]-(o)"
+
+        query = f"""
+            MATCH {pattern}
+            WHERE toLower(s.name) CONTAINS toLower($entity)
+               OR toLower(s.title) CONTAINS toLower($entity)
+            RETURN s.name AS subject, s.title AS subject_title,
+                   type(r) AS relationship,
+                   o.name AS object, o.title AS object_title,
+                   labels(s) AS subject_labels, labels(o) AS object_labels
+            LIMIT $limit
+        """
+
+        evidence: list[Evidence] = []
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                result = await session.run(query, {"entity": entity, "limit": limit})
+                records = await result.data()
+
+                for r in records:
+                    subj = r.get("subject") or r.get("subject_title") or "Unknown"
+                    obj = r.get("object") or r.get("object_title") or "Unknown"
+                    rel = r.get("relationship", "RELATED")
+
+                    evidence.append(
+                        Evidence(
+                            id=uuid4(),
+                            source=EvidenceSource.GRAPH_EXACT,
+                            content=f"{subj} {rel} {obj}",
+                            structured_data={
+                                "subject": subj,
+                                "relationship": rel,
+                                "object": obj,
+                                "subject_labels": r.get("subject_labels", []),
+                                "object_labels": r.get("object_labels", []),
+                            },
+                            match_type="relationship_query",
+                            retrieved_at=datetime.now(UTC),
+                        )
+                    )
+        except Exception as e:
+            logger.error(f"Relationship query failed: {e}")
+            raise Neo4jError(f"Query failed: {e}") from e
+
+        return evidence
+
+    async def query_person_facts(self, person_name: str, limit: int = 20) -> list[Evidence]:
+        """
+        Query all person-related facts (family, education, career, awards).
+
+        Uses PERSON_RELATIONSHIPS to find biographical information.
+        """
+        return await self.query_by_relationship_type(
+            entity=person_name,
+            relationship_types=PERSON_RELATIONSHIPS,
+            limit=limit,
+        )
+
+    async def query_organization_facts(self, org_name: str, limit: int = 20) -> list[Evidence]:
+        """
+        Query organization-related facts (founders, HQ, industry, employees).
+
+        Uses ORGANIZATION_RELATIONSHIPS to find company/org information.
+        """
+        return await self.query_by_relationship_type(
+            entity=org_name,
+            relationship_types=ORGANIZATION_RELATIONSHIPS,
+            limit=limit,
+        )
+
+    async def query_geographic_facts(self, place_name: str, limit: int = 20) -> list[Evidence]:
+        """
+        Query geographic relationships (location hierarchy, country, etc.).
+
+        Uses GEOGRAPHIC_RELATIONSHIPS to find place information.
+        """
+        return await self.query_by_relationship_type(
+            entity=place_name,
+            relationship_types=GEOGRAPHIC_RELATIONSHIPS,
+            limit=limit,
+        )
+
+    async def query_creative_facts(self, entity_name: str, limit: int = 20) -> list[Evidence]:
+        """
+        Query creative/influence relationships (works, genres, influences).
+
+        Uses CREATIVE_RELATIONSHIPS to find artistic/creative information.
+        """
+        return await self.query_by_relationship_type(
+            entity=entity_name,
+            relationship_types=CREATIVE_RELATIONSHIPS,
+            limit=limit,
+        )
+
+    async def get_relationship_summary(self) -> dict[str, int]:
+        """
+        Get counts for each relationship type in the graph.
+
+        Useful for understanding graph composition and debugging.
+        """
+        if self._driver is None:
+            return {}
+
+        summary: dict[str, int] = {}
+
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                # Count each relationship type
+                for rel_type in ALL_RELATIONSHIP_TYPES:
+                    query = f"MATCH ()-[r:{rel_type}]->() RETURN count(r) AS count"
+                    result = await session.run(query)
+                    record = await result.single()
+                    if record:
+                        summary[rel_type] = record["count"]
+
+        except Exception as e:
+            logger.warning(f"Relationship summary failed: {e}")
+
+        return summary
