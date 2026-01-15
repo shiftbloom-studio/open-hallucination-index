@@ -33,7 +33,7 @@ class DBpediaAdapter(SPARQLKnowledgeSource):
 
     def __init__(
         self,
-        base_url: str = "http://dbpedia.org",
+        base_url: str = "https://dbpedia.org",
         timeout: float = 30.0,
     ) -> None:
         super().__init__(
@@ -60,13 +60,14 @@ class DBpediaAdapter(SPARQLKnowledgeSource):
                 HTTPKnowledgeSourceError,
             )
             raise HTTPKnowledgeSourceError("Client not connected")
-        
+
         response = await self._client.get(
             endpoint,
             params={
                 "query": query,
-                "format": "application/sparql-results+json",
+                "format": "json",
             },
+            headers={"Accept": "application/sparql-results+json"},
         )
         response.raise_for_status()
         return response.json()

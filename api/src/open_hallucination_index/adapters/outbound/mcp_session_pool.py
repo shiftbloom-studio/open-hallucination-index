@@ -18,10 +18,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from mcp import ClientSession
@@ -224,10 +225,8 @@ class MCPSessionPool:
         # Cancel health check
         if self._health_check_task:
             self._health_check_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._health_check_task
-            except asyncio.CancelledError:
-                pass
         
         # Close all sessions
         async with self._lock:
@@ -285,7 +284,7 @@ class MCPSessionPool:
             logger.info(f"Created MCP session for {self._source_name}")
             return pooled
             
-        except asyncio.TimeoutError:
+        except TimeoutError:
             error_msg = f"Timeout waiting for session initialization ({timeout}s)"
             logger.error(f"Failed to create session worker for {self._source_name}: {error_msg}")
             pooled._stop_event.set()
@@ -322,28 +321,35 @@ class MCPSessionPool:
         logger.debug(f"Starting session worker for {self._source_name}, URL: {self._mcp_url}")
         try:
             if self._transport_type == MCPTransportType.SSE:
-                async with sse_client(
-                    self._mcp_url,
-                    headers=self._headers,
-                    timeout=self._config.sse_connect_timeout_seconds,
-                    sse_read_timeout=self._config.sse_read_timeout_seconds,
-                ) as (read, write):
-                    async with ClientSession(read, write) as session:
-                        await session.initialize()
-                        pooled.session = session
-                        pooled._init_event.set()
-                        logger.debug(f"Session ready for {self._source_name}")
-                        # Keep alive until signaled to stop
-                        await pooled._stop_event.wait()
+                async with (
+                    sse_client(
+                        self._mcp_url,
+                        headers=self._headers,
+                        timeout=self._config.sse_connect_timeout_seconds,
+                        sse_read_timeout=self._config.sse_read_timeout_seconds,
+                    ) as (read, write),
+                    ClientSession(read, write) as session,
+                ):
+                    await session.initialize()
+                    pooled.session = session
+                    pooled._init_event.set()
+                    logger.debug(f"Session ready for {self._source_name}")
+                    # Keep alive until signaled to stop
+                    await pooled._stop_event.wait()
             else:
-                async with streamablehttp_client(self._mcp_url, headers=self._headers) as (read, write, _):
-                    async with ClientSession(read, write) as session:
-                        await session.initialize()
-                        pooled.session = session
-                        pooled._init_event.set()
-                        logger.debug(f"Session ready for {self._source_name}")
-                        # Keep alive until signaled to stop
-                        await pooled._stop_event.wait()
+                async with (
+                    streamablehttp_client(
+                        self._mcp_url,
+                        headers=self._headers,
+                    ) as (read, write, _),
+                    ClientSession(read, write) as session,
+                ):
+                    await session.initialize()
+                    pooled.session = session
+                    pooled._init_event.set()
+                    logger.debug(f"Session ready for {self._source_name}")
+                    # Keep alive until signaled to stop
+                    await pooled._stop_event.wait()
                         
         except asyncio.CancelledError:
             logger.debug(f"Session worker for {self._source_name} was cancelled")
@@ -371,7 +377,7 @@ class MCPSessionPool:
                 try:
                     async with asyncio.timeout(2.0):
                         await pooled._worker_task
-                except (asyncio.TimeoutError, asyncio.CancelledError):
+                except (TimeoutError, asyncio.CancelledError):
                     pooled._worker_task.cancel()
             
             logger.debug(f"Signaled closure for {self._source_name} session")
@@ -396,12 +402,12 @@ class MCPSessionPool:
             
             return True
             
-        except (asyncio.TimeoutError, Exception) as e:
+        except (TimeoutError, Exception) as e:
             logger.debug(f"Session validation failed for {self._source_name}: {e}")
             return False
 
     @asynccontextmanager
-    async def acquire(self) -> AsyncGenerator[ClientSession, None]:
+    async def acquire(self) -> AsyncGenerator[ClientSession]:
         """
         Acquire a session from the pool.
         
@@ -444,7 +450,7 @@ class MCPSessionPool:
                     async with asyncio.timeout(10.0):
                         pooled = await self._available.get()
                         self._total_reuses += 1
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     raise RuntimeError(f"Timeout acquiring session for {self._source_name}")
             
             # Validate the session
@@ -481,10 +487,8 @@ class MCPSessionPool:
         finally:
             # Return session to pool if still healthy
             if pooled and pooled.is_healthy and not self._shutting_down:
-                try:
+                with suppress(Exception):
                     await self._available.put(pooled)
-                except Exception:
-                    pass
             elif pooled:
                 # Close unhealthy session
                 await self._close_session(pooled)
@@ -729,7 +733,7 @@ class MCPPoolManager:
     async def acquire_session(
         self,
         source_name: str,
-    ) -> AsyncGenerator[ClientSession, None]:
+    ) -> AsyncGenerator[ClientSession]:
         """
         Acquire a session for a specific MCP source.
         
