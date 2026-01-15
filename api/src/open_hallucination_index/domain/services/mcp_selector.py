@@ -103,7 +103,7 @@ class SmartMCPSelector:
         """
         # Get routing decision from ClaimRouter
         decision = await self._router.route(claim)
-        logger.error(f"Routing decision: {decision.domain}, confidence={decision.confidence}")
+        logger.debug(f"Routing decision: {decision.domain}, confidence={decision.confidence}")
         
         # Filter to MCP sources only (exclude local)
         mcp_recommendations = [
@@ -112,7 +112,7 @@ class SmartMCPSelector:
             if r.tier in (SourceTier.MCP_MEDIUM, SourceTier.MCP_SLOW)
         ]
 
-        logger.error(f"MCP recommendations: {[r.source_name for r in mcp_recommendations]}")
+        logger.debug(f"MCP recommendations: {[r.source_name for r in mcp_recommendations]}")
 
         selected_sources: list[str] = []
         selected_tools: list[str] = []
@@ -123,18 +123,18 @@ class SmartMCPSelector:
             # Check if source meets relevance threshold
             if rec.relevance_score < self._min_relevance:
                 skipped_sources.append(rec.source_name)
-                logger.error(f"Skipping {rec.source_name}: low relevance {rec.relevance_score}")
+                logger.debug(f"Skipping {rec.source_name}: low relevance {rec.relevance_score}")
                 continue
 
             # Check if we've reached max sources
             if len(selected_sources) >= max_sources:
                 skipped_sources.append(rec.source_name)
-                logger.error(f"Skipping {rec.source_name}: max sources reached")
+                logger.debug(f"Skipping {rec.source_name}: max sources reached")
                 continue
 
             # Check if source is available
             is_avail = self._is_source_available(rec.source_name)
-            logger.error(f"Source {rec.source_name} available? {is_avail}")
+            logger.debug(f"Source {rec.source_name} available? {is_avail}")
             if not is_avail:
                 skipped_sources.append(rec.source_name)
                 continue
@@ -143,7 +143,7 @@ class SmartMCPSelector:
             if rec.mcp_tool:
                 selected_tools.append(rec.mcp_tool)
 
-        logger.error(
+        logger.debug(
             f"Claim '{claim.text[:50]}...' [{decision.domain.value}]: "
             f"selected {len(selected_sources)} sources, skipped {len(skipped_sources)}"
         )
