@@ -3,14 +3,14 @@ Tests for MCP Session Pool
 ===========================
 """
 
-import time
 import threading
+import time
 from unittest.mock import MagicMock
 
 from open_hallucination_index.adapters.outbound.mcp_session_pool import (
     MCPPoolManager,
-    PooledSession,
     MCPTransportType,
+    PooledSession,
     SESSION_VALIDATION_TIMEOUT_SECONDS,
 )
 
