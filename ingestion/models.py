@@ -78,7 +78,7 @@ class IngestionConfig:
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dim: int = 384
     # Embedding device selection: "auto" | "cuda" | "cpu"
-    embedding_device: str = "auto"
+    embedding_device: str = "cuda"
 
 
 # =============================================================================

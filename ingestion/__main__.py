@@ -117,7 +117,7 @@ def parse_args() -> argparse.Namespace:
     parallel_group.add_argument(
         "--embedding-device",
         choices=["auto", "cuda", "cpu"],
-        default="auto",
+        default="cuda",
         help="Embedding device selection (auto = use CUDA if available)",
     )
 
