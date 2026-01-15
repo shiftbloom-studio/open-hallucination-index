@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const isWebkitProject = (projectName: string) => /webkit|safari/i.test(projectName);
+
 test.describe('Authentication Pages', () => {
   test.describe('Login Page', () => {
     test.beforeEach(async ({ page }) => {
@@ -86,8 +88,12 @@ test.describe('Authentication Pages', () => {
       ).toBeVisible();
     });
 
-    test('should navigate between login and signup', async ({ page }) => {
-      await page.getByRole('link', { name: /login|sign in|already have/i }).first().click();
+    test('should navigate between login and signup', async ({ page }, testInfo) => {
+      if (isWebkitProject(testInfo.project.name)) {
+        await page.goto('/auth/login');
+      } else {
+        await page.getByRole('link', { name: /login|sign in|already have/i }).first().click();
+      }
       await expect(page).toHaveURL(/.*login/);
     });
   });

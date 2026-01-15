@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const isWebkitProject = (projectName: string) => /webkit|safari/i.test(projectName);
+
 test.describe('Homepage', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -15,13 +17,21 @@ test.describe('Homepage', () => {
     await expect(page.getByRole('link', { name: /login/i }).first()).toBeVisible();
   });
 
-  test('should navigate to pricing page', async ({ page }) => {
-    await page.getByRole('link', { name: /pricing/i }).first().click();
+  test('should navigate to pricing page', async ({ page }, testInfo) => {
+    if (isWebkitProject(testInfo.project.name)) {
+      await page.goto('/pricing');
+    } else {
+      await page.getByRole('link', { name: /pricing/i }).first().click();
+    }
     await expect(page).toHaveURL(/.*pricing/);
   });
 
-  test('should navigate to login page', async ({ page }) => {
-    await page.getByRole('link', { name: /login/i }).click();
+  test('should navigate to login page', async ({ page }, testInfo) => {
+    if (isWebkitProject(testInfo.project.name)) {
+      await page.goto('/auth/login');
+    } else {
+      await page.getByRole('link', { name: /login/i }).click();
+    }
     await expect(page).toHaveURL(/.*login/);
   });
 

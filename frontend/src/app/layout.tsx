@@ -4,7 +4,6 @@ import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "sonner";
-import { SmoothScroll } from "@/components/ui/smooth-scroll";
 import { ParticlesBackground } from "@/components/ui/particles-background";
 import { Navbar } from "@/components/layout/navbar";
 import { CookieConsent } from "@/components/layout/cookie-consent";
@@ -186,17 +185,14 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: jsonLd }}
         />
         <Providers>
-          <SmoothScroll>
-            <ParticlesBackground />
-            <Navbar />
-            {children}
-            <Footer />
-            <CookieConsent />
-            <ConsentAwareAnalytics />
-            <Toaster />
-          </SmoothScroll>
+          <ParticlesBackground />
+          <Navbar />
+          {children}
+          <Footer />
+          <CookieConsent />
+          <ConsentAwareAnalytics />
+          <Toaster />
         </Providers>
-
       </body>
     </html>
   );
