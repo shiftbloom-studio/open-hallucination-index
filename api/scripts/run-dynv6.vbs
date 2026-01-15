@@ -1,2 +1,0 @@
-Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run "powershell.exe -ExecutionPolicy Bypass -File ""C:\Users\Fabia\Documents\shiftbloom\git\open-hallucination-index\scripts\update-dynv6.ps1""", 0
