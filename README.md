@@ -61,29 +61,35 @@ Detailed documentation is stored in the docs folder:
 
 ```
 open-hallucination-index/
-├── api/                    # Python FastAPI Backend
-│   ├── src/                # Main source code
-│   │   └── open_hallucination_index/
-│   │       ├── domain/     # Core entities (Claim, Evidence, TrustScore)
-│   │       ├── ports/      # Abstract interfaces
-│   │       ├── application/# Use-case orchestration
-│   │       ├── adapters/   # External service implementations
-│   │       ├── infrastructure/ # Config, DI, lifecycle
-│   │       └── api/        # FastAPI routes
-│   ├── tests/              # Unit & integration tests
-│   ├── scripts/            # Utility scripts
-│   └── pyproject.toml      # Python dependencies
-├── frontend/               # Next.js Frontend Application
-│   ├── src/                # React/Next.js source code
-│   ├── e2e/                # Playwright E2E tests
-│   └── package.json        # Node.js dependencies
+├── src/
+│   ├── api/                # Python FastAPI Backend
+│   │   ├── src/            # Main source code
+│   │   │   └── open_hallucination_index/
+│   │   │       ├── domain/ # Core entities (Claim, Evidence, TrustScore)
+│   │   │       ├── ports/  # Abstract interfaces
+│   │   │       ├── application/ # Use-case orchestration
+│   │   │       ├── adapters/    # External service implementations
+│   │   │       ├── infrastructure/ # Config, DI, lifecycle
+│   │   │       └── api/    # FastAPI routes
+│   │   ├── tests/          # Unit & integration tests
+│   │   ├── scripts/        # Utility scripts
+│   │   └── pyproject.toml  # Python dependencies
+│   ├── frontend/           # Next.js Frontend Application
+│   │   ├── src/            # React/Next.js source code
+│   │   ├── e2e/            # Playwright E2E tests
+│   │   └── package.json    # Node.js dependencies
+│   ├── ingestion/          # Wikipedia ingestion pipeline
+│   ├── benchmark/          # Research-grade benchmark suite
+│   └── ohi-mcp-server/     # MCP Server (Node)
 ├── docs/                   # Documentation
 │   ├── CONTRIBUTING.md     # Contribution guidelines
 │   ├── CODE_OF_CONDUCT.md  # Community standards
 │   └── PUBLIC_ACCESS.md    # Public access documentation
-├── benchmark/              # Research-grade benchmark suite
-├── docker/                 # Docker assets (nginx, MCP server)
-├── data/                   # Local storage for Neo4j/Qdrant/Redis
+├── docker/                 # Docker assets (compose, nginx, data)
+│   ├── api/                # API Dockerfile
+│   ├── mcp-server/          # MCP Server Dockerfile
+│   ├── compose/             # docker-compose.yml
+│   └── data/                # Local storage for Neo4j/Qdrant/Redis
 ├── .github/                # GitHub configuration
 │   ├── workflows/          # CI/CD pipelines
 │   └── ISSUE_TEMPLATE/     # Issue templates
@@ -103,11 +109,11 @@ open-hallucination-index/
 ### API Setup
 
 ```bash
-cd api
+cd src/api
 
 # Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install with development dependencies
 pip install -e ".[dev]"
@@ -122,7 +128,7 @@ ohi-server
 ### Frontend Setup
 
 ```bash
-cd frontend
+cd src/frontend
 
 # Install dependencies
 npm install
@@ -136,7 +142,11 @@ npm run test
 
 ## 🏗️ Infrastructure
 
-Docker Compose definitions for the full stack live in the repository root. For local/dev you can copy [.env.example](.env.example) to `.env` and run the compose stack.
+Docker Compose definitions for the full stack live in docker/compose/docker-compose.yml. For local/dev you can copy [.env.example](.env.example) to `.env` and run the compose stack:
+
+```bash
+docker compose -f docker/compose/docker-compose.yml up -d
+```
 
 ### Required Services
 
@@ -202,7 +212,7 @@ Full API documentation including request/response schemas, example calls, error 
 
 **API:**
 ```bash
-cd api
+cd src/api
 pytest tests/ -v
 mypy src
 ruff check src tests
@@ -210,7 +220,7 @@ ruff check src tests
 
 **Frontend:**
 ```bash
-cd frontend
+cd src/frontend
 npm run test
 npm run lint
 npm run test:e2e

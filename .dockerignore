@@ -1,0 +1,19 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.vscode
+.DS_Store
+node_modules
+
+# Local env/config
+.env
+
+# Tests/docs not needed for runtime image context
+tests

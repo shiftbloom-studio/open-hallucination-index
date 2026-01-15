@@ -13,8 +13,8 @@ downloads/
 eggs/
 .eggs/
 /lib/
-!frontend/src/lib/
-!frontend/src/lib/**
+!src/frontend/src/lib/
+!src/frontend/src/lib/**
 lib64/
 parts/
 sdist/
@@ -127,13 +127,10 @@ cache/
 # ==============================================================================
 uv.lock
 
+# ============================================================================== 
+# Docker (local data only)
 # ==============================================================================
-# Docker (excluded from repository - users manage their own hosting)
-# ==============================================================================
-docker/
-docker-compose*.yml
-Dockerfile
-.dockerignore
+docker/data/
 docker-data/
 neo4j-data/
 qdrant-data/

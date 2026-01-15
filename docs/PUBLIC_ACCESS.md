@@ -58,7 +58,7 @@ chmod +x scripts/init-letsencrypt.sh
 ### Step 5: Start All Services
 
 ```bash
-docker-compose up -d
+docker compose -f docker/compose/docker-compose.yml up -d
 ```
 
 Your API is now available. By default, public access goes through the Next.js proxy route:

@@ -1,8 +1,0 @@
-{
-  "extends": "./frontend/tsconfig.json",
-  "include": [
-    "frontend/src/**/*.ts",
-    "frontend/src/**/*.tsx",
-    "frontend/next-env.d.ts"
-  ]
-}

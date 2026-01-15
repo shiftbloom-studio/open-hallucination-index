@@ -41,11 +41,11 @@ This project and everyone participating in it is governed by our commitment to c
 ### API Setup
 
 ```bash
-cd api
+cd src/api
 
 # Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install with development dependencies
 pip install -e ".[dev]"
@@ -58,7 +58,7 @@ pre-commit install
 ### Frontend Setup
 
 ```bash
-cd frontend
+cd src/frontend
 
 # Install dependencies
 npm install
@@ -68,7 +68,7 @@ npm install
 
 **API:**
 ```bash
-cd api
+cd src/api
 
 # Run all tests
 pytest
@@ -83,12 +83,12 @@ pytest tests/integration/test_api.py -v
 **Core/Repo Tests (root):**
 ```bash
 # From repository root
-pytest tests/ -v
+pytest src/api/tests/ -v
 ```
 
 **Frontend:**
 ```bash
-cd frontend
+cd src/frontend
 
 # Run unit tests
 npm run test
@@ -101,7 +101,7 @@ npm run test:e2e
 
 **API (Python):**
 ```bash
-cd api
+cd src/api
 
 # Linting
 ruff check src tests
@@ -118,7 +118,7 @@ mypy src
 
 **Frontend (TypeScript):**
 ```bash
-cd frontend
+cd src/frontend
 
 # Linting
 npm run lint

@@ -31,7 +31,7 @@ echo -e "${BLUE}╚════════════════════�
 # Check if container is running
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo -e "${YELLOW}⚠ Benchmark container not running. Starting services...${NC}"
-    docker compose up -d benchmark-runner
+    docker compose -f docker/compose/docker-compose.yml up -d benchmark-runner
     sleep 3
 fi
 
