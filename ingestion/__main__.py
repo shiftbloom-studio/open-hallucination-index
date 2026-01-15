@@ -90,7 +90,7 @@ def parse_args() -> argparse.Namespace:
     proc_group.add_argument(
         "--chunk-overlap",
         type=int,
-        default=64,
+        default=128,
         help="Chunk overlap in characters",
     )
 
@@ -105,13 +105,13 @@ def parse_args() -> argparse.Namespace:
     parallel_group.add_argument(
         "--dump-workers",
         type=int,
-        default=2,
+        default=4,
         help="Number of dump file worker threads",
     )
     parallel_group.add_argument(
         "--upload-workers",
         type=int,
-        default=4,
+        default=2,
         help="Number of upload worker threads per store",
     )
     parallel_group.add_argument(
@@ -129,7 +129,7 @@ def parse_args() -> argparse.Namespace:
     parallel_group.add_argument(
         "--embedding-device",
         choices=["auto", "cuda", "cpu"],
-        default="cuda",
+        default="auto",
         help="Embedding device selection (auto = use CUDA if available)",
     )
 

@@ -25,9 +25,9 @@ from ingestion.models import ProcessedArticle
 logger = logging.getLogger("ingestion.neo4j")
 
 # Retry settings for deadlock handling
-MAX_RETRIES = 5
-BASE_RETRY_DELAY = 0.1  # seconds
-MAX_RETRY_DELAY = 2.0  # seconds
+MAX_RETRIES = 8
+BASE_RETRY_DELAY = 0.2  # seconds
+MAX_RETRY_DELAY = 4.0  # seconds
 
 
 class Neo4jGraphStore:
