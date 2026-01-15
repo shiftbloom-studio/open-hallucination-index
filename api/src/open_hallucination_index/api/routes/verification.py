@@ -13,7 +13,7 @@ from itertools import count
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from open_hallucination_index.application.verify_text import VerifyTextUseCase

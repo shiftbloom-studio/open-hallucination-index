@@ -13,6 +13,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 import httpx
+
 from open_hallucination_index.adapters.outbound.knowledge_sources.base import (
     SPARQLKnowledgeSource,
 )
@@ -43,7 +44,8 @@ class WikidataAdapter(SPARQLKnowledgeSource):
     ) -> None:
         user_agent = (
             "OpenHallucinationIndex/1.0 "
-            "(https://github.com/open-hallucination-index; mailto:contact@open-hallucination-index.org)"
+            "(https://github.com/open-hallucination-index; "
+            "mailto:contact@open-hallucination-index.org)"
         )
         super().__init__(
             base_url=base_url,

@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from open_hallucination_index.domain.entities import Evidence
 from open_hallucination_index.domain.results import (
@@ -268,7 +267,7 @@ class HybridVerificationOracle(VerificationOracle):
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for i, result in enumerate(results):
+        for result in results:
             if isinstance(result, BaseException):
                 logger.warning(f"MCP source query failed: {result}")
             else:
@@ -277,7 +276,6 @@ class HybridVerificationOracle(VerificationOracle):
                 if self._persist_mcp_evidence and result:
                     await self._persist_evidence_to_graph(result)
 
-        return all_evidence
 
     async def _persist_evidence_to_graph(self, evidence_list: list[Evidence]) -> None:
         """Persist MCP evidence to graph store for future lookups."""
@@ -336,12 +334,16 @@ class HybridVerificationOracle(VerificationOracle):
 
         # Persist MCP evidence asynchronously (don't wait)
         if self._persist_mcp_evidence and mcp_evidence_to_persist:
-            asyncio.create_task(self._persist_evidence_to_graph(mcp_evidence_to_persist))
+            asyncio.create_task(
+                self._persist_evidence_to_graph(mcp_evidence_to_persist)
+            )
 
         if not all_evidence:
-            logger.debug(f"No evidence found from any source for claim: {claim.text[:100]}")
+            logger.debug(
+                "No evidence found from any source for claim: %s",
+                claim.text[:100],
+            )
 
-        return all_evidence
 
     async def _adaptive_evidence(
         self,
@@ -410,8 +412,10 @@ class HybridVerificationOracle(VerificationOracle):
 
             # Persist MCP evidence to both graph and vector stores
             mcp_evidence = [
-                ev for ev in result.evidence
-                if ev.source.value not in ("graph_exact", "graph_inferred", "vector_semantic")
+                ev
+                for ev in result.evidence
+                if ev.source.value
+                not in ("graph_exact", "graph_inferred", "vector_semantic")
             ]
 
             if mcp_evidence:
@@ -423,7 +427,10 @@ class HybridVerificationOracle(VerificationOracle):
             return result.evidence
 
         except Exception as e:
-            logger.warning(f"Adaptive evidence collection failed: {e}, falling back to MCP_ENHANCED")
+            logger.warning(
+                "Adaptive evidence collection failed: %s, falling back to MCP_ENHANCED",
+                e,
+            )
             return await self._mcp_enhanced_evidence(claim)
 
     async def _persist_evidence_to_vector(self, evidence_list: list[Evidence]) -> None:
@@ -481,7 +488,18 @@ class HybridVerificationOracle(VerificationOracle):
 
     def _has_contradiction_signals(self, claim: str, evidence: str) -> bool:
         """Check for contradiction signals between claim and evidence."""
-        negation_words = ["not", "never", "no", "false", "incorrect", "wrong", "isn't", "wasn't", "aren't", "weren't"]
+        negation_words = [
+            "not",
+            "never",
+            "no",
+            "false",
+            "incorrect",
+            "wrong",
+            "isn't",
+            "wasn't",
+            "aren't",
+            "weren't",
+        ]
 
         # Simple heuristic: if one has negation and other doesn't
         claim_has_negation = any(word in claim.split() for word in negation_words)
@@ -501,8 +519,13 @@ class HybridVerificationOracle(VerificationOracle):
             ev_subject = str(data.get("subject", "")).lower()
             ev_object = str(data.get("object", "")).lower()
 
-            subject_match = claim.subject.lower() in ev_subject or ev_subject in claim.subject.lower()
-            object_match = claim.object.lower() in ev_object or ev_object in claim.object.lower()
+            subject_match = (
+                claim.subject.lower() in ev_subject
+                or ev_subject in claim.subject.lower()
+            )
+            object_match = (
+                claim.object.lower() in ev_object or ev_object in claim.object.lower()
+            )
 
             if subject_match and object_match:
                 return True
@@ -564,8 +587,12 @@ class HybridVerificationOracle(VerificationOracle):
             )
 
         # Mixed evidence - calculate support ratio
-        support_ratio = support_count / refute_count if refute_count > 0 else float('inf')
-        refute_ratio = refute_count / support_count if support_count > 0 else float('inf')
+        support_ratio = (
+            support_count / refute_count if refute_count > 0 else float("inf")
+        )
+        refute_ratio = (
+            refute_count / support_count if support_count > 0 else float("inf")
+        )
 
         # Overwhelming support (e.g., 12:1 or better)
         if support_ratio >= 5.0:
@@ -577,7 +604,11 @@ class HybridVerificationOracle(VerificationOracle):
             return (
                 VerificationStatus.SUPPORTED,
                 confidence,
-                f"Strongly supported: {support_count} supporting vs {refute_count} contradicting (ratio {support_ratio:.1f}:1).",
+                (
+                    "Strongly supported: "
+                    f"{support_count} supporting vs {refute_count} contradicting "
+                    f"(ratio {support_ratio:.1f}:1)."
+                ),
             )
 
         # Strong support (3:1 to 5:1)
@@ -587,7 +618,11 @@ class HybridVerificationOracle(VerificationOracle):
             return (
                 VerificationStatus.PARTIALLY_SUPPORTED,
                 confidence,
-                f"Well supported: {support_count} supporting vs {refute_count} contradicting (ratio {support_ratio:.1f}:1).",
+                (
+                    "Well supported: "
+                    f"{support_count} supporting vs {refute_count} contradicting "
+                    f"(ratio {support_ratio:.1f}:1)."
+                ),
             )
 
         # Moderate support (2:1 to 3:1)
@@ -605,7 +640,10 @@ class HybridVerificationOracle(VerificationOracle):
             return (
                 VerificationStatus.UNCERTAIN,
                 confidence,
-                f"Mixed evidence with slight support: {support_count} supporting vs {refute_count} contradicting.",
+                (
+                    "Mixed evidence with slight support: "
+                    f"{support_count} supporting vs {refute_count} contradicting."
+                ),
             )
 
         # More refuting than supporting

@@ -337,11 +337,24 @@ class ClaimRouter:
         entities = []
         current_entity = []
 
+        sentence_starters = {
+            "the",
+            "a",
+            "an",
+            "this",
+            "that",
+            "it",
+            "is",
+            "was",
+            "are",
+            "were",
+        }
+
         for word in words:
             # Check if word starts with uppercase (potential entity)
             if word and word[0].isupper() and len(word) > 1:
                 # Skip common sentence starters
-                if word.lower() not in {"the", "a", "an", "this", "that", "it", "is", "was", "are", "were"}:
+                if word.lower() not in sentence_starters:
                     current_entity.append(word.rstrip(".,;:!?"))
             else:
                 if current_entity:

@@ -18,9 +18,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Callable, Coroutine, Any
+from typing import TYPE_CHECKING, Any
 
 from open_hallucination_index.domain.entities import Evidence, EvidenceSource
 
@@ -31,10 +32,7 @@ if TYPE_CHECKING:
         VectorKnowledgeStore,
     )
     from open_hallucination_index.ports.mcp_source import MCPKnowledgeSource
-    from open_hallucination_index.domain.services.mcp_selector import (
-        SmartMCPSelector,
-        MCPSelection,
-    )
+    from open_hallucination_index.domain.services.mcp_selector import SmartMCPSelector
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +107,7 @@ class EvidenceQuality:
     weighted_value: float  # Combined quality score
 
     @classmethod
-    def assess(cls, evidence: Evidence) -> "EvidenceQuality":
+    def assess(cls, evidence: Evidence) -> EvidenceQuality:
         """Assess evidence quality."""
         # Base quality from similarity score
         base_quality = evidence.similarity_score or 0.5
@@ -208,10 +206,7 @@ class AccumulatorState:
             return True
 
         # Check weighted value threshold
-        if self.total_weighted_value >= min_weighted_value:
-            return True
-
-        return False
+        return self.total_weighted_value >= min_weighted_value
 
 
 @dataclass
@@ -528,7 +523,7 @@ class AdaptiveEvidenceCollector:
             latency = (time.perf_counter() - start) * 1000
             self._record_latency(source_name, latency, success=True)
             return result
-        except Exception as e:
+        except Exception:
             latency = (time.perf_counter() - start) * 1000
             self._record_latency(source_name, latency, success=False)
             raise

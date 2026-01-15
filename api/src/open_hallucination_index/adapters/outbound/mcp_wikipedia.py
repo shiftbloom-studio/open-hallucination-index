@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -21,17 +21,14 @@ from mcp.client.sse import sse_client
 from mcp.types import TextContent
 
 from open_hallucination_index.adapters.outbound.mcp_session_pool import (
-    MCPPoolManager,
     MCPSessionPool,
     MCPTransportType,
     PoolConfig,
-    get_mcp_pool_manager,
 )
 from open_hallucination_index.domain.entities import Evidence, EvidenceSource
 from open_hallucination_index.ports.mcp_source import (
     MCPConnectionError,
     MCPKnowledgeSource,
-    MCPQueryError,
 )
 
 if TYPE_CHECKING:
@@ -172,10 +169,11 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
     @asynccontextmanager
     async def _session_fallback(self):
         """Create a new MCP session (non-pooled, for fallback)."""
-        async with sse_client(self._mcp_url) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                yield session
+        async with sse_client(self._mcp_url) as (read, write), ClientSession(
+            read, write
+        ) as session:
+            await session.initialize()
+            yield session
 
     def get_pool_stats(self) -> dict[str, Any] | None:
         """Get session pool statistics."""
@@ -183,7 +181,12 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
             return self._pool.get_stats()
         return None
 
-    async def _call_tool(self, session: ClientSession, tool_name: str, arguments: dict[str, Any]) -> str:
+    async def _call_tool(
+        self,
+        session: ClientSession,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> str:
         """
         Call an MCP tool within an existing session.
 
@@ -260,8 +263,11 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
                                 },
                                 similarity_score=0.85,  # Base confidence
                                 match_type="mcp_search",
-                                retrieved_at=datetime.now(timezone.utc),
-                                source_uri=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                                retrieved_at=datetime.now(UTC),
+                                source_uri=(
+                                    "https://en.wikipedia.org/wiki/"
+                                    f"{title.replace(' ', '_')}"
+                                ),
                             )
                     except Exception as e:
                         logger.debug(f"Failed to get summary for {title}: {e}")

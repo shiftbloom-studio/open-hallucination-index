@@ -8,7 +8,7 @@ These are immutable value objects with no infrastructure dependencies.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum, auto
 from typing import Any
 from uuid import UUID, uuid4
@@ -112,7 +112,7 @@ class Evidence(BaseModel):
     )
 
     # Provenance
-    retrieved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    retrieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     source_uri: str | None = Field(
         default=None, description="URI/IRI of source document or entity"
     )

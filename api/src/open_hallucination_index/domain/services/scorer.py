@@ -29,7 +29,8 @@ STATUS_WEIGHTS = {
     VerificationStatus.SUPPORTED: 1.0,
     VerificationStatus.PARTIALLY_SUPPORTED: 0.85,  # Mostly trustworthy
     VerificationStatus.UNCERTAIN: 0.50,  # True uncertainty
-    VerificationStatus.UNVERIFIABLE: 0.60,  # Neutral - no evidence either way, slight benefit of doubt
+    # Neutral - no evidence either way, slight benefit of doubt
+    VerificationStatus.UNVERIFIABLE: 0.60,
     VerificationStatus.REFUTED: 0.0,
 }
 
@@ -119,10 +120,7 @@ class WeightedScorer(Scorer):
             weight_sum += weight
 
         # Calculate overall score
-        if weight_sum > 0:
-            overall = weighted_sum / weight_sum
-        else:
-            overall = 0.5  # No confidence = uncertain
+        overall = weighted_sum / weight_sum if weight_sum > 0 else 0.5
 
         # Clamp to [0, 1]
         overall = max(0.0, min(1.0, overall))
@@ -237,10 +235,7 @@ class StrictScorer(Scorer):
         else:
             # Score based on supported ratio
             verified = total - unverifiable
-            if verified > 0:
-                overall = supported / verified
-            else:
-                overall = 0.5
+            overall = supported / verified if verified > 0 else 0.5
 
         avg_confidence = sum(v.trace.confidence for v in verifications) / total
 

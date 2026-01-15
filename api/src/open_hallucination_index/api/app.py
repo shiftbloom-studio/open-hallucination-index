@@ -8,12 +8,12 @@ Creates and configures the FastAPI application with routers and middleware.
 from __future__ import annotations
 
 import secrets
+
 import yaml
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import ORJSONResponse, Response
 from fastapi.security import APIKeyHeader
-from fastapi.responses import ORJSONResponse
 
 from open_hallucination_index.api.routes import health, verification
 from open_hallucination_index.infrastructure.config import get_settings

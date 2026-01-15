@@ -119,7 +119,10 @@ class VerifyTextUseCase:
 
         # Step 2b: Claim-level cache lookup (by claim hash)
         claim_hashes = [self._compute_claim_hash(claim.text) for claim in claims]
-        claim_hash_by_id = {claim.id: claim_hash for claim, claim_hash in zip(claims, claim_hashes, strict=True)}
+        claim_hash_by_id = {
+            claim.id: claim_hash
+            for claim, claim_hash in zip(claims, claim_hashes, strict=True)
+        }
         cached_claims: dict[str, ClaimVerification] = {}
 
         if use_cache and self._cache is not None and claim_hashes:

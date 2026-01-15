@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 
 from open_hallucination_index.domain.services.claim_router import (
     ClaimDomain,
-    ClaimRouter,
     RoutingDecision,
     SourceTier,
     get_claim_router,

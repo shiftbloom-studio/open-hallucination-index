@@ -18,10 +18,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from enum import Enum
-from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -428,7 +428,6 @@ class MCPSessionPool:
         
         self._total_requests += 1
         pooled: PooledSession | None = None
-        created_new = False
         
         try:
             # Try to get an available session
@@ -442,7 +441,6 @@ class MCPSessionPool:
                         pooled = await self._create_session()
                         if pooled:
                             self._sessions.append(pooled)
-                            created_new = True
             
             # If still no session, wait for one to become available
             if pooled is None:
@@ -451,7 +449,9 @@ class MCPSessionPool:
                         pooled = await self._available.get()
                         self._total_reuses += 1
                 except TimeoutError:
-                    raise RuntimeError(f"Timeout acquiring session for {self._source_name}")
+                    raise RuntimeError(
+                        f"Timeout acquiring session for {self._source_name}"
+                    ) from None
             
             # Validate the session
             if not await self._validate_session(pooled):
@@ -465,7 +465,6 @@ class MCPSessionPool:
                 if pooled:
                     async with self._lock:
                         self._sessions.append(pooled)
-                    created_new = True
                 else:
                     raise RuntimeError(f"Failed to create session for {self._source_name}")
             
@@ -557,7 +556,6 @@ class MCPSessionPool:
                 return
             
             # Find idle sessions
-            now = time.time()
             sessions_to_remove = []
             
             for pooled in self._sessions:
