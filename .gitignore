@@ -188,3 +188,5 @@ temp/
 *.tex
 
 /benchmark_results/
+
+/src/.wiki_dumps/
