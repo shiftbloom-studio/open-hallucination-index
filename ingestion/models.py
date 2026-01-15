@@ -76,7 +76,7 @@ class IngestionConfig:
     bm25_vocab_size: int = 50000
 
     # Embedding model
-    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = "all-MiniLM-L12-v2"
     embedding_dim: int = 384
     # Embedding device selection: "auto" | "cuda" | "cpu"
     embedding_device: str = "auto"

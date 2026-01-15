@@ -62,7 +62,7 @@ class LocalEmbeddingAdapter:
     """
     Adapter for local embedding generation using sentence-transformers.
 
-    Uses all-MiniLM-L6-v2 by default (384 dimensions, fast, good quality).
+    Uses all-MiniLM-L12-v2 by default (384 dimensions, fast, good quality).
     For higher quality, use all-mpnet-base-v2 (768 dimensions).
     """
 

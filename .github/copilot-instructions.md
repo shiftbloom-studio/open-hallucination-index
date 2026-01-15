@@ -173,7 +173,7 @@ api/src/open_hallucination_index/
 | Source | Adapter | Data |
 |--------|---------|------|
 | **Neo4j** | `Neo4jGraphAdapter` | Wikipedia entities + relationships (10+ edge types) |
-| **Qdrant** | `QdrantVectorAdapter` | Dense + sparse (BM25) vectors, 384-dim (all-MiniLM-L6-v2) |
+| **Qdrant** | `QdrantVectorAdapter` | Dense + sparse (BM25) vectors, 384-dim (all-MiniLM-L12-v2) |
 
 ### MCP Sources (Tier 2 - External)
 All accessed via unified `OHIMCPAdapter` → `ohi-mcp-server` (port 8083):
@@ -263,6 +263,6 @@ docker exec ohi-benchmark python -m benchmark   # Run inside container
 
 - **LLM is LOCAL**: vLLM runs on GPU (Baichuan2-13B-Chat-4bits). Do not assume OpenAI API.
 - **MCP Protocol**: The `ohi-mcp-server` aggregates 12+ external sources. Use `MCPKnowledgeSource` port.
-- **Embeddings are LOCAL**: `all-MiniLM-L6-v2` via `sentence-transformers` (384 dimensions).
+- **Embeddings are LOCAL**: `all-MiniLM-L12-v2` via `sentence-transformers` (384 dimensions).
 - **Dual Storage**: MCP evidence can be persisted to both Neo4j (graph) and Qdrant (vector) for future local retrieval.
 - **Dependencies**: `pyproject.toml` (API/Benchmark), `package.json` (Frontend/MCP Server).
