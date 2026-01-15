@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 
 # Thresholds for verification decisions
 SUPPORT_THRESHOLD = 0.75  # Similarity score to consider as supporting
-REFUTE_THRESHOLD = 0.6   # Similarity + contradiction detection
-MIN_EVIDENCE_COUNT = 1   # Minimum evidence pieces needed
+REFUTE_THRESHOLD = 0.6  # Similarity + contradiction detection
+MIN_EVIDENCE_COUNT = 1  # Minimum evidence pieces needed
 
 
 class HybridVerificationOracle(VerificationOracle):
@@ -165,9 +165,7 @@ class HybridVerificationOracle(VerificationOracle):
             return self._unverifiable_result(claim, str(e), active_strategy)
 
         # Classify evidence as supporting or refuting
-        supporting_evidence, refuting_evidence = self._classify_evidence(
-            claim, all_evidence
-        )
+        supporting_evidence, refuting_evidence = self._classify_evidence(claim, all_evidence)
 
         # Determine verification status
         status, confidence, reasoning = self._determine_status(
@@ -208,8 +206,7 @@ class HybridVerificationOracle(VerificationOracle):
 
         # Verify all claims in parallel
         tasks = [
-            self.verify_claim(claim, strategy, target_sources=target_sources)
-            for claim in claims
+            self.verify_claim(claim, strategy, target_sources=target_sources) for claim in claims
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -219,9 +216,7 @@ class HybridVerificationOracle(VerificationOracle):
             if isinstance(result, BaseException):
                 logger.error(f"Claim {i} verification failed: {result}")
                 final_results.append(
-                    self._unverifiable_result(
-                        claims[i], str(result), strategy or self._strategy
-                    )
+                    self._unverifiable_result(claims[i], str(result), strategy or self._strategy)
                 )
             else:
                 final_results.append(result)
@@ -275,7 +270,6 @@ class HybridVerificationOracle(VerificationOracle):
                 # Persist MCP evidence to graph store if enabled
                 if self._persist_mcp_evidence and result:
                     await self._persist_evidence_to_graph(result)
-
 
     async def _persist_evidence_to_graph(self, evidence_list: list[Evidence]) -> None:
         """Persist MCP evidence to graph store for future lookups."""
@@ -334,16 +328,13 @@ class HybridVerificationOracle(VerificationOracle):
 
         # Persist MCP evidence asynchronously (don't wait)
         if self._persist_mcp_evidence and mcp_evidence_to_persist:
-            asyncio.create_task(
-                self._persist_evidence_to_graph(mcp_evidence_to_persist)
-            )
+            asyncio.create_task(self._persist_evidence_to_graph(mcp_evidence_to_persist))
 
         if not all_evidence:
             logger.debug(
                 "No evidence found from any source for claim: %s",
                 claim.text[:100],
             )
-
 
     async def _adaptive_evidence(
         self,
@@ -414,8 +405,7 @@ class HybridVerificationOracle(VerificationOracle):
             mcp_evidence = [
                 ev
                 for ev in result.evidence
-                if ev.source.value
-                not in ("graph_exact", "graph_inferred", "vector_semantic")
+                if ev.source.value not in ("graph_exact", "graph_inferred", "vector_semantic")
             ]
 
             if mcp_evidence:
@@ -518,12 +508,9 @@ class HybridVerificationOracle(VerificationOracle):
             ev_object = str(data.get("object", "")).lower()
 
             subject_match = (
-                claim.subject.lower() in ev_subject
-                or ev_subject in claim.subject.lower()
+                claim.subject.lower() in ev_subject or ev_subject in claim.subject.lower()
             )
-            object_match = (
-                claim.object.lower() in ev_object or ev_object in claim.object.lower()
-            )
+            object_match = claim.object.lower() in ev_object or ev_object in claim.object.lower()
 
             if subject_match and object_match:
                 return True
@@ -585,12 +572,8 @@ class HybridVerificationOracle(VerificationOracle):
             )
 
         # Mixed evidence - calculate support ratio
-        support_ratio = (
-            support_count / refute_count if refute_count > 0 else float("inf")
-        )
-        refute_ratio = (
-            refute_count / support_count if support_count > 0 else float("inf")
-        )
+        support_ratio = support_count / refute_count if refute_count > 0 else float("inf")
+        refute_ratio = refute_count / support_count if support_count > 0 else float("inf")
 
         # Overwhelming support (e.g., 12:1 or better)
         if support_ratio >= 5.0:
@@ -700,9 +683,7 @@ class HybridVerificationOracle(VerificationOracle):
 
         results = await asyncio.gather(*checks, return_exceptions=True)
         # At least one local store must be healthy
-        local_healthy = any(
-            r is True for r in results[:2] if not isinstance(r, BaseException)
-        )
+        local_healthy = any(r is True for r in results[:2] if not isinstance(r, BaseException))
         return local_healthy
 
     def get_latency_stats(self) -> dict[str, object]:

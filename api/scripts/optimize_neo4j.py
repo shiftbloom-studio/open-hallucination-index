@@ -27,9 +27,10 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password123")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler()]
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
+
 
 class GraphOptimizer:
     def __init__(self, uri, user, pwd):
@@ -45,7 +46,7 @@ class GraphOptimizer:
             result = session.run(query, params or {})
             summary = result.consume()
             counters = summary.counters
-            
+
             duration = time.time() - start
             logger.info(f"✅ {desc} fertig in {duration:.2f}s")
             return counters
@@ -58,7 +59,7 @@ class GraphOptimizer:
         Lösche danach B.
         """
         logger.info("🚀 Starte Redirect-Auflösung (Das kann dauern)...")
-        
+
         # 1. Links umbiegen (Redirects umgehen)
         # Wir nehmen alle Knoten, die auf einen Redirect zeigen, und verbinden sie direkt mit dem Ziel.
         query = """
@@ -66,10 +67,10 @@ class GraphOptimizer:
             MERGE (source)-[r_new:LINKS_TO]->(target)
             DELETE r1
         """
-        # Da das sehr viele Daten sein können, machen wir das in Batches (apoc.periodic.iterate wäre besser, 
+        # Da das sehr viele Daten sein können, machen wir das in Batches (apoc.periodic.iterate wäre besser,
         # aber wir bleiben hier bei reinem Cypher/Python für Kompatibilität).
         # Hier eine einfache iterative Schleife:
-        
+
         while True:
             batch_query = f"""
                 MATCH (source)-[r1:LINKS_TO]->(redirect:Article {{is_redirect: true}})-[r2:REDIRECTS_TO]->(target:Article)
@@ -88,15 +89,18 @@ class GraphOptimizer:
 
         # 2. Alte Redirect-Knoten löschen, die nun isoliert sind oder nur noch als Sprungbrett dienten
         logger.info("🧹 Lösche verarbeitete Redirect-Knoten...")
-        self.run_query("""
+        self.run_query(
+            """
             MATCH (r:Article {is_redirect: true})
             WHERE NOT (r)--() OR (r)-[:REDIRECTS_TO]->() 
             DETACH DELETE r
-        """, desc="Redirect-Knoten Bereinigung")
+        """,
+            desc="Redirect-Knoten Bereinigung",
+        )
 
     def prune_stubs(self):
         """
-        Löscht Knoten, die nur als Platzhalter (Stubs) erstellt wurden, 
+        Löscht Knoten, die nur als Platzhalter (Stubs) erstellt wurden,
         aber nie mit Inhalt gefüllt wurden und weniger als 2 Verbindungen haben.
         """
         logger.info("✂️ Entferne irrelevante Stubs...")
@@ -129,7 +133,9 @@ class GraphOptimizer:
                 s.run("CALL gds.version()")
             return True
         except Exception:
-            logger.warning("⚠️  Neo4j GDS Plugin nicht gefunden. PageRank & Community Detection werden übersprungen.")
+            logger.warning(
+                "⚠️  Neo4j GDS Plugin nicht gefunden. PageRank & Community Detection werden übersprungen."
+            )
             logger.warning("   (Installiere GDS Plugin in Neo4j Desktop/Docker für diese Features)")
             return False
 
@@ -138,27 +144,32 @@ class GraphOptimizer:
         Berechnet PageRank.
         Voraussetzung: Graph Data Science (GDS) Library ist installiert.
         """
-        if not self.check_gds_availability(): return
+        if not self.check_gds_availability():
+            return
 
         logger.info("🧠 Berechne PageRank (Wichtigkeit)...")
-        
+
         # 1. Graph im Arbeitsspeicher projizieren
         graph_name = "wiki_graph"
-        
+
         # Falls Graph schon existiert, droppen
         self.run_query(f"CALL gds.graph.drop('{graph_name}', false)", desc="GDS Graph Cleanup")
 
         # Projizieren (Wir betrachten Artikel und deren Links)
-        self.run_query(f"""
+        self.run_query(
+            f"""
             CALL gds.graph.project(
                 '{graph_name}',
                 'Article',
                 'LINKS_TO'
             )
-        """, desc="Graph Projektion")
+        """,
+            desc="Graph Projektion",
+        )
 
         # 2. PageRank berechnen und in Datenbank schreiben
-        self.run_query(f"""
+        self.run_query(
+            f"""
             CALL gds.pageRank.write(
                 '{graph_name}', 
                 {{ 
@@ -167,8 +178,10 @@ class GraphOptimizer:
                     writeProperty: 'pagerank' 
                 }}
             )
-        """, desc="PageRank Berechnung")
-        
+        """,
+            desc="PageRank Berechnung",
+        )
+
         # 3. Graph aus Speicher entfernen
         self.run_query(f"CALL gds.graph.drop('{graph_name}', false)", desc="Graph Release")
 
@@ -176,15 +189,17 @@ class GraphOptimizer:
         """
         Findet Themen-Cluster mittels Louvain Algorithmus.
         """
-        if not self.check_gds_availability(): return
+        if not self.check_gds_availability():
+            return
 
         logger.info("🏘️ Erkenne Communities (Themen-Cluster)...")
-        
+
         graph_name = "wiki_community"
         self.run_query(f"CALL gds.graph.drop('{graph_name}', false)", desc="GDS Graph Cleanup")
 
         # Projizieren (als ungerichteten Graphen für bessere Cluster)
-        self.run_query(f"""
+        self.run_query(
+            f"""
             CALL gds.graph.project(
                 '{graph_name}',
                 'Article',
@@ -192,51 +207,70 @@ class GraphOptimizer:
                     LINKS_TO: {{ orientation: 'UNDIRECTED' }}
                 }}
             )
-        """, desc="Graph Projektion für Communities")
+        """,
+            desc="Graph Projektion für Communities",
+        )
 
         # Louvain ausführen
-        self.run_query(f"""
+        self.run_query(
+            f"""
             CALL gds.louvain.write(
                 '{graph_name}',
                 {{ writeProperty: 'communityId' }}
             )
-        """, desc="Louvain Community Detection")
-        
+        """,
+            desc="Louvain Community Detection",
+        )
+
         self.run_query(f"CALL gds.graph.drop('{graph_name}', false)", desc="Graph Release")
+
 
 def main():
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Neo4j Wikipedia Graph Optimizer")
-    parser.add_argument("--neo4j-uri", default=None, help="Neo4j URI (Standard: bolt://localhost:7687 oder NEO4J_URI env)")
-    parser.add_argument("--neo4j-user", default=None, help="Neo4j Username (Standard: neo4j oder NEO4J_USER env)")
-    parser.add_argument("--neo4j-password", default=None, help="Neo4j Password (Standard: password oder NEO4J_PASSWORD env)")
+    parser.add_argument(
+        "--neo4j-uri",
+        default=None,
+        help="Neo4j URI (Standard: bolt://localhost:7687 oder NEO4J_URI env)",
+    )
+    parser.add_argument(
+        "--neo4j-user", default=None, help="Neo4j Username (Standard: neo4j oder NEO4J_USER env)"
+    )
+    parser.add_argument(
+        "--neo4j-password",
+        default=None,
+        help="Neo4j Password (Standard: password oder NEO4J_PASSWORD env)",
+    )
     args = parser.parse_args()
-    
+
     logger.info("Start Neo4j Optimization...")
     opt = GraphOptimizer(
         args.neo4j_uri or NEO4J_URI,
         args.neo4j_user or NEO4J_USER,
-        args.neo4j_password or NEO4J_PASSWORD
+        args.neo4j_password or NEO4J_PASSWORD,
     )
-    
+
     try:
         # 1. Struktur bereinigen
         opt.resolve_redirects()
         opt.prune_stubs()
-        
+
         # 2. Graph Analyse (Benötigt GDS Plugin)
         opt.calculate_importance()
         opt.detect_communities()
-        
+
         logger.info("\n🎉 Optimierung abgeschlossen!")
         logger.info("Tipp: Führe jetzt in Neo4j Browser aus:")
-        logger.info("MATCH (a:Article) RETURN a.title, a.pagerank ORDER BY a.pagerank DESC LIMIT 10")
-        
+        logger.info(
+            "MATCH (a:Article) RETURN a.title, a.pagerank ORDER BY a.pagerank DESC LIMIT 10"
+        )
+
     except Exception as e:
         logger.error(f"Fehler bei der Optimierung: {e}")
     finally:
         opt.close()
+
 
 if __name__ == "__main__":
     main()

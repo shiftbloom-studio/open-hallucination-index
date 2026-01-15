@@ -34,18 +34,14 @@ class TestLLMClaimDecomposer:
         )
 
     @pytest.mark.asyncio
-    async def test_decompose_empty_text(
-        self, decomposer: LLMClaimDecomposer
-    ) -> None:
+    async def test_decompose_empty_text(self, decomposer: LLMClaimDecomposer) -> None:
         """Test decomposing empty text returns empty list."""
         claims = await decomposer.decompose("")
 
         assert claims == []
 
     @pytest.mark.asyncio
-    async def test_decompose_whitespace_only(
-        self, decomposer: LLMClaimDecomposer
-    ) -> None:
+    async def test_decompose_whitespace_only(self, decomposer: LLMClaimDecomposer) -> None:
         """Test decomposing whitespace-only text returns empty list."""
         claims = await decomposer.decompose("   \n\t  ")
 
@@ -173,6 +169,7 @@ class TestLLMClaimDecomposer:
         ]
 
         import json
+
         mock_llm_provider.complete.return_value = LLMResponse(
             content=json.dumps(claims_json),
             model="test-model",

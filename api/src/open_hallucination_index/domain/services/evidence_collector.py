@@ -276,9 +276,7 @@ class AdaptiveEvidenceCollector:
         self._latency_stats: dict[str, SourceLatencyStats] = {}
 
         # Callbacks for persisting evidence
-        self._persist_callbacks: list[
-            Callable[[list[Evidence]], Coroutine[Any, Any, None]]
-        ] = []
+        self._persist_callbacks: list[Callable[[list[Evidence]], Coroutine[Any, Any, None]]] = []
 
     def add_persist_callback(
         self,
@@ -334,9 +332,7 @@ class AdaptiveEvidenceCollector:
 
         # === TIER 2: MCP sources (selected based on claim) ===
         tier2_start = time.perf_counter()
-        tier2_evidence, pending_count = await self._collect_mcp(
-            claim, mcp_sources, accumulator
-        )
+        tier2_evidence, pending_count = await self._collect_mcp(claim, mcp_sources, accumulator)
         tier2_latency = (time.perf_counter() - tier2_start) * 1000
         tier_latencies["mcp"] = tier2_latency
 
@@ -496,9 +492,7 @@ class AdaptiveEvidenceCollector:
                 if self._enable_background:
                     # Let them complete in background for caching
                     for task in remaining_tasks:
-                        bg_task = asyncio.create_task(
-                            self._background_complete(task, tasks[task])
-                        )
+                        bg_task = asyncio.create_task(self._background_complete(task, tasks[task]))
                         self._background_tasks.add(bg_task)
                         bg_task.add_done_callback(self._background_tasks.discard)
                     pending_count = len(remaining_tasks)
@@ -537,9 +531,7 @@ class AdaptiveEvidenceCollector:
         try:
             result = await task
             if result:
-                logger.debug(
-                    f"Background task {source_name} completed with {len(result)} evidence"
-                )
+                logger.debug(f"Background task {source_name} completed with {len(result)} evidence")
                 # Trigger persist callbacks
                 for callback in self._persist_callbacks:
                     try:

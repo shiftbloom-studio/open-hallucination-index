@@ -26,11 +26,11 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 async def verify_api_key(api_key: str | None = Depends(api_key_header)):
     """Verify API key if authentication is enabled."""
     settings = get_settings()
-    
+
     # If no API key configured, skip auth
     if not settings.api.api_key:
         return True
-    
+
     # Check API key
     if not api_key or not secrets.compare_digest(api_key, settings.api.api_key):
         raise HTTPException(
@@ -78,8 +78,8 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
     # Include routers
     app.include_router(health.router, prefix="/health", tags=["Health"])
     app.include_router(
-        verification.router, 
-        prefix="/api/v1", 
+        verification.router,
+        prefix="/api/v1",
         tags=["Verification"],
         dependencies=[Depends(verify_api_key)],  # Require API key for verification
     )

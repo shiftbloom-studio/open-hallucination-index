@@ -102,7 +102,7 @@ async def _initialize_adapters() -> None:
     global _mcp_sources
 
     settings = get_settings()
-    
+
     # Add a small random delay to stagger worker startups and avoid
     # overwhelming MCP servers with simultaneous connection attempts
     worker_pid = os.getpid()
@@ -270,12 +270,12 @@ async def _initialize_adapters() -> None:
 async def _cleanup_adapters() -> None:
     """
     Cleanup all adapter connections on shutdown.
-    
+
     Uses asyncio.shield() to protect cleanup operations from task cancellation.
     Each disconnect is wrapped in try/except to ensure all adapters get cleaned up.
     """
     import asyncio
-    
+
     global _llm_provider, _graph_store, _vector_store, _cache_provider, _mcp_sources
 
     logger.info("Starting adapter cleanup...")
@@ -284,9 +284,7 @@ async def _cleanup_adapters() -> None:
     for source in _mcp_sources:
         try:
             # Shield the disconnect from cancellation
-            await asyncio.shield(
-                asyncio.wait_for(source.disconnect(), timeout=5.0)
-            )
+            await asyncio.shield(asyncio.wait_for(source.disconnect(), timeout=5.0))
             logger.debug(f"Disconnected MCP source: {source.source_name}")
         except TimeoutError:
             logger.warning(f"MCP source disconnect timed out: {source.source_name}")
@@ -299,9 +297,7 @@ async def _cleanup_adapters() -> None:
     # Disconnect cache provider
     if _cache_provider is not None:
         try:
-            await asyncio.shield(
-                asyncio.wait_for(_cache_provider.disconnect(), timeout=5.0)
-            )
+            await asyncio.shield(asyncio.wait_for(_cache_provider.disconnect(), timeout=5.0))
             logger.debug("Disconnected cache provider")
         except TimeoutError:
             logger.warning("Cache provider disconnect timed out")
@@ -314,9 +310,7 @@ async def _cleanup_adapters() -> None:
     # Disconnect vector store
     if _vector_store is not None:
         try:
-            await asyncio.shield(
-                asyncio.wait_for(_vector_store.disconnect(), timeout=5.0)
-            )
+            await asyncio.shield(asyncio.wait_for(_vector_store.disconnect(), timeout=5.0))
             logger.debug("Disconnected vector store")
         except TimeoutError:
             logger.warning("Vector store disconnect timed out")
@@ -330,9 +324,7 @@ async def _cleanup_adapters() -> None:
     if _graph_store is not None:
         try:
             # Use shield to protect from cancellation during shutdown
-            await asyncio.shield(
-                asyncio.wait_for(_graph_store.disconnect(), timeout=10.0)
-            )
+            await asyncio.shield(asyncio.wait_for(_graph_store.disconnect(), timeout=10.0))
             logger.debug("Disconnected graph store")
         except TimeoutError:
             logger.warning("Graph store disconnect timed out")

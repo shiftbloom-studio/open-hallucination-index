@@ -48,6 +48,7 @@ class LLMSettings(BaseSettings):
 
     def __init__(self, **kwargs: object) -> None:
         import os
+
         # Allow OPENAI_API_KEY to be read directly
         if "openai_api_key" not in kwargs and os.environ.get("OPENAI_API_KEY"):
             kwargs["openai_api_key"] = SecretStr(os.environ["OPENAI_API_KEY"])
@@ -242,6 +243,7 @@ class MCPSettings(BaseSettings):
 
     def __init__(self, **kwargs: object) -> None:
         import os
+
         # Read CONTEXT7_API_KEY from environment
         if "context7_api_key" not in kwargs and os.environ.get("CONTEXT7_API_KEY"):
             kwargs["context7_api_key"] = os.environ["CONTEXT7_API_KEY"]
@@ -292,9 +294,7 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
 
     # Environment
-    environment: Literal["development", "staging", "production"] = Field(
-        default="development"
-    )
+    environment: Literal["development", "staging", "production"] = Field(default="development")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
 
 

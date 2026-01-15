@@ -62,7 +62,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
             self._mcp_url = self._base_url
         self._available = False
         self._tools: list[str] = []
-        
+
         # Session pool for persistent connections
         self._pool: MCPSessionPool | None = None
         self._use_pool = True  # Enable session pooling by default
@@ -80,7 +80,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
     async def connect(self) -> None:
         """
         Test connection and list available tools.
-        
+
         Initializes the session pool for persistent SSE connections.
         """
         try:
@@ -99,7 +99,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
                     ),
                 )
                 await self._pool.initialize()
-                
+
                 # Get tools from pooled session
                 async with self._pool.acquire() as session:
                     tools = await session.list_tools()
@@ -109,12 +109,12 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
                 async with self._session_fallback() as session:
                     tools = await session.list_tools()
                     self._tools = [t.name for t in tools.tools]
-            
+
             self._available = True
             logger.info(f"Connected to Wikipedia MCP at {self._mcp_url}")
             logger.info(f"Available tools: {self._tools}")
             logger.info(f"Session pooling: {'enabled' if self._pool else 'disabled'}")
-            
+
         except Exception as e:
             self._available = False
             logger.error(f"Wikipedia MCP connection failed: {e}")
@@ -127,7 +127,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
         if self._pool:
             await self._pool.shutdown()
             self._pool = None
-        
+
         self._available = False
         self._tools = []
         logger.info("Disconnected from Wikipedia MCP")
@@ -135,7 +135,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
     async def health_check(self) -> bool:
         """
         Check if Wikipedia MCP is responding.
-        
+
         Uses pooled session if available for efficiency.
         """
         try:
@@ -154,7 +154,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
     async def _session(self):
         """
         Get an MCP session (from pool or create new).
-        
+
         Uses the session pool for persistent connections when available.
         Falls back to per-request sessions if pool is not initialized.
         """
@@ -169,9 +169,10 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
     @asynccontextmanager
     async def _session_fallback(self):
         """Create a new MCP session (non-pooled, for fallback)."""
-        async with sse_client(self._mcp_url) as (read, write), ClientSession(
-            read, write
-        ) as session:
+        async with (
+            sse_client(self._mcp_url) as (read, write),
+            ClientSession(read, write) as session,
+        ):
             await session.initialize()
             yield session
 
@@ -199,13 +200,13 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
             Tool result as text.
         """
         result = await session.call_tool(tool_name, arguments)
-        
+
         # Extract text content from result
         texts = []
         for content in result.content:
             if isinstance(content, TextContent):
                 texts.append(content.text)
-        
+
         return "\n".join(texts)
 
     async def find_evidence(self, claim: Claim) -> list[Evidence]:
@@ -232,10 +233,14 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
         try:
             async with self._session() as session:
                 # Search Wikipedia for relevant articles
-                search_text = await self._call_tool(session, "search_wikipedia", {
-                    "query": query,
-                    "limit": 3,
-                })
+                search_text = await self._call_tool(
+                    session,
+                    "search_wikipedia",
+                    {
+                        "query": query,
+                        "limit": 3,
+                    },
+                )
 
                 if not search_text:
                     logger.debug(f"No Wikipedia results for: {query}")
@@ -247,10 +252,14 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
                 # Get summaries for top results IN PARALLEL
                 async def get_summary_safe(title: str) -> Evidence | None:
                     try:
-                        summary_text = await self._call_tool(session, "get_summary", {
-                            "title": title,
-                        })
-                        
+                        summary_text = await self._call_tool(
+                            session,
+                            "get_summary",
+                            {
+                                "title": title,
+                            },
+                        )
+
                         if summary_text and len(summary_text) > 50:
                             return Evidence(
                                 id=uuid4(),
@@ -265,8 +274,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
                                 match_type="mcp_search",
                                 retrieved_at=datetime.now(UTC),
                                 source_uri=(
-                                    "https://en.wikipedia.org/wiki/"
-                                    f"{title.replace(' ', '_')}"
+                                    f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
                                 ),
                             )
                     except Exception as e:
@@ -275,6 +283,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
 
                 # Fetch all summaries in parallel
                 import asyncio
+
                 results = await asyncio.gather(*[get_summary_safe(t) for t in titles[:3]])
                 evidences = [e for e in results if e is not None]
 
@@ -301,10 +310,14 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
 
         try:
             async with self._session() as session:
-                result = await self._call_tool(session, "search_wikipedia", {
-                    "query": query,
-                    "limit": limit,
-                })
+                result = await self._call_tool(
+                    session,
+                    "search_wikipedia",
+                    {
+                        "query": query,
+                        "limit": limit,
+                    },
+                )
                 # Return as list of dicts with text
                 return [{"text": result}] if result else []
         except Exception:
@@ -312,7 +325,7 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
 
     def _parse_search_results(self, text: str, fallback_query: str) -> list[str]:
         """Parse search result text to extract article titles.
-        
+
         The Wikipedia MCP returns JSON with structure:
         {
             "query": "...",
@@ -322,12 +335,12 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
         }
         """
         import json
-        
+
         titles = []
-        
+
         if not text:
             return [fallback_query]
-        
+
         # Try parsing as JSON first (the expected format)
         try:
             data = json.loads(text)
@@ -338,29 +351,29 @@ class WikipediaMCPAdapter(MCPKnowledgeSource):
             return titles if titles else [fallback_query]
         except json.JSONDecodeError:
             pass
-        
+
         # Fallback: parse as plain text lines
         lines = text.strip().split("\n")
         for line in lines:
             line = line.strip()
             if not line:
                 continue
-            
+
             # Common formats: "1. Title", "- Title", "Title: description"
             # Remove numbering
             if line[0].isdigit() and "." in line[:4]:
                 line = line.split(".", 1)[1].strip()
-            
+
             # Remove bullet points
             if line.startswith("- ") or line.startswith("* "):
                 line = line[2:].strip()
-            
+
             # Take first part before colon if present
             if ":" in line:
                 line = line.split(":")[0].strip()
-            
+
             # Clean up and add if looks like a title
             if line and len(line) > 2 and len(line) < 200:
                 titles.append(line)
-        
+
         return titles if titles else [fallback_query]

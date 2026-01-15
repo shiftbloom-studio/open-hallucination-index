@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class WikidataAdapter(SPARQLKnowledgeSource):
     """
     Adapter for Wikidata SPARQL queries.
-    
+
     Provides structured knowledge from Wikidata's vast
     linked data knowledge graph.
     """
@@ -99,8 +99,9 @@ class WikidataAdapter(SPARQLKnowledgeSource):
             from open_hallucination_index.adapters.outbound.knowledge_sources.base import (
                 HTTPKnowledgeSourceError,
             )
+
             raise HTTPKnowledgeSourceError("Client not connected")
-        
+
         response = await self._client.get(
             endpoint,
             params={"query": query, "format": "json"},
@@ -112,54 +113,56 @@ class WikidataAdapter(SPARQLKnowledgeSource):
     async def find_evidence(self, claim: Claim) -> list[Evidence]:
         """
         Find Wikidata evidence for a claim.
-        
+
         Uses text search and entity lookup to find relevant facts.
         """
         if not self._available:
             return []
-        
+
         evidences: list[Evidence] = []
-        
+
         # Extract search terms
         search_term = claim.subject or claim.text[:100]
         search_term = self._sanitize_query(search_term)
-        
+
         try:
             # Search for entities matching the claim subject
             results = await self._search_entities(search_term, limit=3)
-            
+
             total_results = len(results)
             for rank, result in enumerate(results):
                 entity_id = result.get("id", "")
                 label = result.get("label", "")
                 description = result.get("description", "")
-                
+
                 if not entity_id:
                     continue
-                
+
                 # Get detailed properties for the entity
                 props = await self._get_entity_properties(entity_id)
-                
+
                 content = f"{label}: {description}"
                 if props:
                     content += f"\n\nProperties:\n{self._format_properties(props)}"
-                
-                evidences.append(self._create_evidence(
-                    content=content,
-                    source_id=f"wikidata:{entity_id}",
-                    source_uri=f"https://www.wikidata.org/wiki/{entity_id}",
-                    similarity_score=self._compute_similarity_score(rank, total_results),
-                    structured_data={
-                        "entity_id": entity_id,
-                        "label": label,
-                        "description": description,
-                        "properties": props[:10] if props else [],
-                    },
-                ))
-            
+
+                evidences.append(
+                    self._create_evidence(
+                        content=content,
+                        source_id=f"wikidata:{entity_id}",
+                        source_uri=f"https://www.wikidata.org/wiki/{entity_id}",
+                        similarity_score=self._compute_similarity_score(rank, total_results),
+                        structured_data={
+                            "entity_id": entity_id,
+                            "label": label,
+                            "description": description,
+                            "properties": props[:10] if props else [],
+                        },
+                    )
+                )
+
             logger.debug(f"Found {len(evidences)} Wikidata evidences for claim")
             return evidences
-            
+
         except Exception as e:
             logger.warning(f"Wikidata search failed: {e}")
             return []
@@ -168,25 +171,21 @@ class WikidataAdapter(SPARQLKnowledgeSource):
         """Search Wikidata entities."""
         if not self._available:
             return []
-        
+
         try:
             return await self._search_entities(query, limit)
         except Exception as e:
             logger.warning(f"Wikidata search failed: {e}")
             return []
 
-    async def _search_entities(
-        self, query: str, limit: int = 5
-    ) -> list[dict[str, Any]]:
+    async def _search_entities(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for Wikidata entities by text."""
         # Use Wikidata's search API via MediaWiki Action API
         # This is more efficient than SPARQL for text search
         search_url = self._wikidata_api_url
-        
+
         # Use a separate request to wikidata.org API
-        async with httpx.AsyncClient(
-            timeout=self.timeout
-        ) as client:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.get(
                 search_url,
                 params={
@@ -199,21 +198,21 @@ class WikidataAdapter(SPARQLKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-        
+
         results = []
         for item in data.get("search", []):
-            results.append({
-                "id": item.get("id", ""),
-                "label": item.get("label", ""),
-                "description": item.get("description", ""),
-                "url": item.get("concepturi", ""),
-            })
-        
+            results.append(
+                {
+                    "id": item.get("id", ""),
+                    "label": item.get("label", ""),
+                    "description": item.get("description", ""),
+                    "url": item.get("concepturi", ""),
+                }
+            )
+
         return results
 
-    async def _get_entity_properties(
-        self, entity_id: str, limit: int = 10
-    ) -> list[dict[str, str]]:
+    async def _get_entity_properties(self, entity_id: str, limit: int = 10) -> list[dict[str, str]]:
         """Get properties for a Wikidata entity via SPARQL."""
         query = f"""
         SELECT ?propLabel ?valueLabel WHERE {{
@@ -223,7 +222,7 @@ class WikidataAdapter(SPARQLKnowledgeSource):
         }}
         LIMIT {limit}
         """
-        
+
         try:
             result = await self._execute_sparql(query, "/sparql")
             props = []
@@ -246,4 +245,4 @@ class WikidataAdapter(SPARQLKnowledgeSource):
     def _sanitize_query(self, query: str) -> str:
         """Sanitize query string for SPARQL/API."""
         # Remove special characters that could break queries
-        return re.sub(r'[^\w\s\-\.]', ' ', query).strip()
+        return re.sub(r"[^\w\s\-\.]", " ", query).strip()

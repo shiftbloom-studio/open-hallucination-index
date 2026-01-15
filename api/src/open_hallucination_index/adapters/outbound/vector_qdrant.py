@@ -117,11 +117,11 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             try:
                 config = await self._client.get_collection(collection_name)
                 exists = True
-                
+
                 # Check for dimension mismatch
                 existing_size = 0
                 vectors_params = config.config.params.vectors
-                
+
                 if hasattr(vectors_params, "size"):
                     existing_size = vectors_params.size
                 elif isinstance(vectors_params, dict) and "size" in vectors_params:
@@ -236,9 +236,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                         similarity_score=hit.score,
                         match_type="semantic",
                         retrieved_at=datetime.now(UTC),
-                        source_uri=(
-                            hit.payload.get("source_uri") if hit.payload else None
-                        ),
+                        source_uri=(hit.payload.get("source_uri") if hit.payload else None),
                     )
                 )
 
@@ -330,9 +328,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 return await self._embedding_func(text)  # type: ignore[misc]
 
         # Run all embeddings in parallel with concurrency limit
-        embeddings = await asyncio.gather(
-            *[embed_with_semaphore(text) for text in texts]
-        )
+        embeddings = await asyncio.gather(*[embed_with_semaphore(text) for text in texts])
         return list(embeddings)
 
     async def add_facts(
