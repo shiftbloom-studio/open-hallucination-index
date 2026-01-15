@@ -309,9 +309,7 @@ class AdvancedTextPreprocessor:
 
     # Regex patterns compiled once for performance
     SECTION_PATTERN = re.compile(r"^(={2,6})\s*(.+?)\s*\1\s*$", re.MULTILINE)
-    INFOBOX_PATTERN = re.compile(
-        r"\{\{Infobox\s+([^|}\n]+)((?:\|[^}]+)+)\}\}", re.IGNORECASE | re.DOTALL
-    )
+    INFOBOX_START_PATTERN = re.compile(r"\{\{\s*Infobox\b", re.IGNORECASE)
     TEMPLATE_PATTERN = re.compile(r"\{\{[^{}]*\}\}", re.DOTALL)
     NESTED_TEMPLATE_PATTERN = re.compile(r"\{\{(?:[^{}]|\{[^{]|\}[^}])*\}\}", re.DOTALL)
     LINK_PATTERN = re.compile(r"\[\[([^|\]#]+)(?:\|[^\]]*)?\]\]")
@@ -385,15 +383,19 @@ class AdvancedTextPreprocessor:
 
     def parse_infobox(self, text: str) -> WikiInfobox | None:
         """Extract and parse infobox data."""
-        match = self.INFOBOX_PATTERN.search(text)
-        if not match:
+        infobox_block = self._extract_infobox_block(text)
+        if not infobox_block:
             return None
 
-        infobox_type = match.group(1).strip()
-        properties_text = match.group(2)
+        inner = infobox_block[2:-2]
+        inner = re.sub(r"^\s*Infobox\s*", "", inner, flags=re.IGNORECASE)
+        fields = self._split_infobox_fields(inner)
+        if not fields:
+            return None
 
+        infobox_type = fields[0].strip()
         properties = {}
-        for line in properties_text.split("|"):
+        for line in fields[1:]:
             if "=" in line:
                 key, _, value = line.partition("=")
                 key = key.strip().lower()
@@ -405,6 +407,74 @@ class AdvancedTextPreprocessor:
                     properties[key] = value
 
         return WikiInfobox(type=infobox_type, properties=properties)
+
+    def _extract_infobox_block(self, text: str) -> str | None:
+        """Extract the full infobox template block using linear scanning."""
+        match = self.INFOBOX_START_PATTERN.search(text)
+        if not match:
+            return None
+
+        start = match.start()
+        i = start
+        depth = 0
+
+        while i < len(text) - 1:
+            two = text[i : i + 2]
+            if two == "{{":
+                depth += 1
+                i += 2
+                continue
+            if two == "}}":
+                depth -= 1
+                i += 2
+                if depth == 0:
+                    return text[start:i]
+                continue
+            i += 1
+
+        return None
+
+    def _split_infobox_fields(self, inner: str) -> list[str]:
+        """Split infobox fields on top-level pipes, avoiding nested templates/links."""
+        fields: list[str] = []
+        current: list[str] = []
+        template_depth = 0
+        link_depth = 0
+        i = 0
+
+        while i < len(inner):
+            two = inner[i : i + 2]
+            if two == "{{":
+                template_depth += 1
+                current.append(two)
+                i += 2
+                continue
+            if two == "}}":
+                template_depth = max(0, template_depth - 1)
+                current.append(two)
+                i += 2
+                continue
+            if two == "[[":
+                link_depth += 1
+                current.append(two)
+                i += 2
+                continue
+            if two == "]]":
+                link_depth = max(0, link_depth - 1)
+                current.append(two)
+                i += 2
+                continue
+            if inner[i] == "|" and template_depth == 0 and link_depth == 0:
+                fields.append("".join(current))
+                current = []
+                i += 1
+                continue
+
+            current.append(inner[i])
+            i += 1
+
+        fields.append("".join(current))
+        return fields
 
     def extract_first_paragraph(self, text: str) -> str:
         """Extract the first meaningful paragraph (often the definition)."""
