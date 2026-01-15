@@ -105,19 +105,19 @@ def parse_args() -> argparse.Namespace:
     parallel_group.add_argument(
         "--dump-workers",
         type=int,
-        default=2,
+        default=8,
         help="Number of dump file worker threads",
     )
     parallel_group.add_argument(
         "--upload-workers",
         type=int,
-        default=4,
+        default=24,
         help="Number of upload worker threads per store",
     )
     parallel_group.add_argument(
         "--embedding-workers",
         type=int,
-        default=3,
+        default=12,
         help="Number of embedding worker threads",
     )
     parallel_group.add_argument(

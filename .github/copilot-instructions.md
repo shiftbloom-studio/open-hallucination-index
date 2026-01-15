@@ -296,3 +296,4 @@ docker exec ohi-benchmark python -m benchmark   # Run inside container
 - **Embeddings are LOCAL**: `all-MiniLM-L12-v2` via `sentence-transformers` (384 dimensions).
 - **Dual Storage**: MCP evidence can be persisted to both Neo4j (graph) and Qdrant (vector) for future local retrieval.
 - **Dependencies**: `pyproject.toml` (API/Benchmark), `package.json` (Frontend/MCP Server).
+- **Accessing API Ports**: The API Ports (MCP, LLM, API) are only accessible within the Docker network. Use docker exec to run commands inside containers for testing.
