@@ -115,6 +115,7 @@ class IngestionPipeline:
             embedding_model=config.embedding_model,
             embedding_batch_size=config.embedding_batch_size,
             upload_workers=config.upload_workers,
+            embedding_device=config.embedding_device,
         )
 
         self.neo4j = Neo4jGraphStore(

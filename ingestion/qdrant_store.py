@@ -78,6 +78,7 @@ class QdrantHybridStore:
         embedding_batch_size: int = 512,
         upload_workers: int = 4,
         prefer_grpc: bool = True,
+        embedding_device: str = "auto",
     ):
         self.collection = collection
         self.embedding_batch_size = embedding_batch_size
@@ -115,8 +116,17 @@ class QdrantHybridStore:
         
         self.client: QdrantClient = client
 
-        # Initialize embedding model with GPU if available
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Initialize embedding model with explicit device selection
+        cuda_available = torch.cuda.is_available()
+        if embedding_device == "cuda" and not cuda_available:
+            logger.warning("⚠️ CUDA requested but not available. Falling back to CPU.")
+        if embedding_device == "cpu":
+            self.device = "cpu"
+        elif embedding_device == "cuda" and cuda_available:
+            self.device = "cuda"
+        else:
+            self.device = "cuda" if cuda_available else "cpu"
+
         if self.device == "cuda":
             gpu_name = torch.cuda.get_device_name(0)
             gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1e9

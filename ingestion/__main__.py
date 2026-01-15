@@ -114,6 +114,12 @@ def parse_args() -> argparse.Namespace:
         default=512,
         help="Batch size for GPU embedding (larger = faster)",
     )
+    parallel_group.add_argument(
+        "--embedding-device",
+        choices=["auto", "cuda", "cpu"],
+        default="auto",
+        help="Embedding device selection (auto = use CUDA if available)",
+    )
 
     # Download settings
     dl_group = parser.add_argument_group("Download Settings")
@@ -203,6 +209,7 @@ def main():
         preprocess_workers=args.preprocess_workers,
         upload_workers=args.upload_workers,
         embedding_batch_size=args.embedding_batch_size,
+        embedding_device=args.embedding_device,
         # Download
         download_dir=args.download_dir,
         keep_downloads=args.keep_downloads,
