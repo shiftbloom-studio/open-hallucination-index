@@ -91,12 +91,15 @@ services:
       - /usr/lib/wsl:/usr/lib/wsl:ro
     # Qwen/Qwen2.5-14B-Instruct-AWQ
     # Optimized for RTX 4090 (24GB VRAM)
+    # --enforce-eager disables CUDA graph capturing to avoid first-request latency
+    # Use --cuda-graph-max-batch-size if you want graphs but with warmup
     command: >
       --model Qwen/Qwen2.5-14B-Instruct-AWQ
       --gpu-memory-utilization 0.74
       --enable-prefix-caching
       --enable-chunked-prefill
       --disable-log-requests
+      --enforce-eager
     networks:
       - ohi-net
     # vLLM takes 30-60s to load models - health check ensures API waits
