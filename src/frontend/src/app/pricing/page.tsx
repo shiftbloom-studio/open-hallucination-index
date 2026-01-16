@@ -124,7 +124,7 @@ export default function PricingPage() {
   const [loadingPackage, setLoadingPackage] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState<Record<string, boolean>>({});
 
-  const handlePurchase = async (packageId: string): Promise<void> => {
+  const handlePurchase = async (packageId: string) => {
     if (!termsAccepted[packageId]) {
       toast.error("Please accept the Terms of Service and AGB before purchasing");
       return;
