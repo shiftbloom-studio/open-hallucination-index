@@ -36,6 +36,22 @@ export class CrossrefSource extends BaseSource {
     this.email = email;
   }
 
+  /**
+   * Remove HTML-like tags from an abstract string in a robust way by
+   * repeatedly stripping `<...>` patterns until the string stabilizes.
+   */
+  private sanitizeAbstract(raw: string): string {
+    let previous: string;
+    let current = raw;
+    do {
+      previous = current;
+      // Recreate the global regex each iteration to avoid stateful `lastIndex`.
+      const tagRegex = /<[^>]+>/g;
+      current = current.replace(tagRegex, "");
+    } while (current !== previous);
+    return current;
+  }
+
   async healthCheck(): Promise<boolean> {
     try {
       const response = await httpClient.get(`${this.baseUrl}/works`, {
@@ -79,7 +95,7 @@ export class CrossrefSource extends BaseSource {
         .join(", ");
 
       const abstract = work.abstract
-        ? work.abstract.replace(/<[^>]+>/g, "").slice(0, 800)
+        ? this.sanitizeAbstract(work.abstract).slice(0, 800)
         : "";
 
       const pubDate = this.formatDate(work.published?.["date-parts"]?.[0]);
