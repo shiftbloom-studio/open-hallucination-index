@@ -76,10 +76,13 @@ export default function TermsOfServicePage() {
           <section className="space-y-3">
             <h2 className="text-2xl font-semibold text-neutral-100">6. Prices, Taxes, Payment</h2>
             <p>
-              The prices displayed in the checkout at the time of the order apply. If VAT is applicable and must be shown, it will be displayed accordingly in the checkout. (Note: Please verify tax details/status and adjust if necessary.)
+              The prices displayed in the checkout at the time of the order are final and include any applicable Value Added Tax (VAT) as required by law. Prices are stated in Euro (€).
             </p>
             <p>
-              Payment is due immediately. Accepted payment methods are shown in the checkout.
+              For customers within the European Union, VAT is calculated based on the applicable rate in your country of residence. For non-EU customers, VAT may not apply.
+            </p>
+            <p>
+              Payment is due immediately upon order completion. Accepted payment methods are displayed in the checkout and are processed through our secure payment provider, Stripe.
             </p>
           </section>
 
@@ -96,13 +99,19 @@ export default function TermsOfServicePage() {
           <section className="space-y-3">
             <h2 className="text-2xl font-semibold text-neutral-100">8. Right of Withdrawal (Consumers)</h2>
             <p>
-              Consumers are generally entitled to a statutory right of withdrawal. This right may expire for digital content under certain conditions.
+              <strong>Important Notice:</strong> Consumers in the European Union are generally entitled to a statutory right of withdrawal for distance contracts. However, this right expires for digital content under specific conditions as outlined below.
             </p>
             <p>
-              Expiration of the Right of Withdrawal: The right of withdrawal may expire if (1) we have begun performance of the contract after you (2) have expressly consented to us beginning performance before the expiration of the withdrawal period, and (3) you have confirmed your knowledge that by giving your consent with the beginning of performance you lose your right of withdrawal.
+              <strong>Expiration of the Right of Withdrawal:</strong> The right of withdrawal expires if you have expressly consented to us beginning performance of the contract before the expiration of the withdrawal period and have acknowledged that you lose your right of withdrawal once performance has begun.
             </p>
             <p>
-              Note: Whether and how this consent is technically obtained in the checkout should be reviewed and supplemented if necessary for legal compliance.
+              By purchasing OHI Tokens, you expressly consent to immediate delivery of the digital content (token crediting to your account) and acknowledge that you thereby lose your right of withdrawal once the tokens are credited to your account.
+            </p>
+            <p>
+              <strong>No Money-Back Guarantee:</strong> We do not offer refunds or money-back guarantees for purchased tokens after they have been credited to your account. All sales are final once the digital content has been delivered. Please ensure you understand the Service and are satisfied with your purchase before completing checkout.
+            </p>
+            <p>
+              If you experience technical issues with token delivery or service functionality, please contact us at hi@shiftbloom.studio, and we will work to resolve the issue in accordance with our warranty obligations.
             </p>
           </section>
 
@@ -146,10 +155,13 @@ export default function TermsOfServicePage() {
           <section className="space-y-3">
             <h2 className="text-2xl font-semibold text-neutral-100">13. Term, Termination</h2>
             <p>
-              User accounts can be terminated by users at any time (e.g., via email). Already purchased tokens may expire depending on the technical implementation; please establish specific rules accordingly. (Placeholder: please adapt to your token logic.)
+              User accounts can be terminated by users at any time by contacting us via email at hi@shiftbloom.studio or through the account settings interface.
             </p>
             <p>
-              The right to extraordinary termination for good cause remains unaffected.
+              <strong>Token Expiration Policy:</strong> Purchased OHI Tokens do not expire and remain available in your account indefinitely, even after account termination, unless the account is permanently deleted at your request. If you request permanent account deletion, all unused tokens will be forfeited without refund.
+            </p>
+            <p>
+              The right to extraordinary termination for good cause remains unaffected. We reserve the right to terminate accounts that violate these Terms, engage in fraudulent activity, or pose security risks.
             </p>
           </section>
 
@@ -175,7 +187,7 @@ export default function TermsOfServicePage() {
 
           <hr className="border-white/10 my-8" />
           <p className="text-xs text-neutral-500">
-            Note: These Terms of Service were created as a template/draft and do not replace individual legal advice. Please adjust withdrawal/taxes/token expiration to your actual processes.
+            These Terms of Service were last updated on January 6, 2026. We reserve the right to modify these terms at any time. Material changes will be communicated to registered users via email or through prominent notice on the Service.
           </p>
         </div>
       </div>

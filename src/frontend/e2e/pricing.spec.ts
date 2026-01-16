@@ -46,7 +46,7 @@ test.describe('Pricing Page', () => {
   });
 
   test('should display trust badges', async ({ page }) => {
-    await expect(page.getByText(/SSL|GDPR|Money Back/i).first()).toBeVisible();
+    await expect(page.getByText(/SSL|GDPR|Fair Terms/i).first()).toBeVisible();
   });
 
   test('should be accessible', async ({ page }) => {

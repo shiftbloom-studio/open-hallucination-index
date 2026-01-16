@@ -5,6 +5,7 @@ import { Check, Sparkles, Zap, Crown, Shield, Lock, RefreshCw, ChevronDown } fro
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -83,11 +84,6 @@ const faqData = [
       "We accept all major credit cards (Visa, Mastercard, American Express) through our secure Stripe payment gateway.",
   },
   {
-    question: "Can I get a refund?",
-    answer:
-      "Yes, we offer a 14-day money-back guarantee. If you're not satisfied with our service, contact us at hi@shiftbloom.studio for a full refund.",
-  },
-  {
     question: "How do I track my token usage?",
     answer:
       "Your current token balance is always visible in your dashboard. You can also view detailed usage history and analytics in your account settings.",
@@ -126,8 +122,14 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
 
 export default function PricingPage() {
   const [loadingPackage, setLoadingPackage] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState<Record<string, boolean>>({});
 
-  const handlePurchase = async (packageId: string) => {
+  const handlePurchase = async (packageId: string): Promise<void> => {
+    if (!termsAccepted[packageId]) {
+      toast.error("Please accept the Terms of Service and AGB before purchasing");
+      return;
+    }
+
     setLoadingPackage(packageId);
     try {
       const supabase = createClient();
@@ -244,15 +246,38 @@ export default function PricingPage() {
                     </ul>
                   </CardContent>
 
-                  <CardFooter className="pt-4">
+                  <CardFooter className="pt-4 flex-col gap-4">
+                    <div className="flex items-start gap-2 w-full">
+                      <Checkbox
+                        id={`terms-${pkg.id}`}
+                        checked={termsAccepted[pkg.id] || false}
+                        onCheckedChange={(checked: boolean) => 
+                          setTermsAccepted((prev) => ({ ...prev, [pkg.id]: checked === true }))
+                        }
+                        className="mt-1"
+                      />
+                      <label
+                        htmlFor={`terms-${pkg.id}`}
+                        className="text-sm text-neutral-400 leading-tight cursor-pointer"
+                      >
+                        I accept the{" "}
+                        <Link href="/agb" className="text-blue-400 hover:underline" target="_blank">
+                          Terms of Service (AGB)
+                        </Link>
+                        {" "}and{" "}
+                        <Link href="/datenschutz" className="text-blue-400 hover:underline" target="_blank">
+                          Privacy Policy
+                        </Link>
+                      </label>
+                    </div>
                     <Button
                       onClick={() => handlePurchase(pkg.id)}
-                      disabled={loadingPackage === pkg.id}
+                      disabled={loadingPackage === pkg.id || !termsAccepted[pkg.id]}
                       className={`w-full font-semibold ${
                         pkg.popular
                           ? "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
                           : "bg-slate-800 hover:bg-slate-700"
-                      } text-white`}
+                      } text-white disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       {loadingPackage === pkg.id ? "Processing..." : "Buy Now"}
                     </Button>
@@ -284,9 +309,9 @@ export default function PricingPage() {
             </div>
             <div className="flex flex-col items-center text-center p-6 rounded-xl bg-slate-900/50 border border-slate-800">
               <RefreshCw className="h-12 w-12 text-purple-400 mb-4" />
-              <h3 className="text-lg font-semibold text-white mb-2">Money Back</h3>
+              <h3 className="text-lg font-semibold text-white mb-2">Fair Terms</h3>
               <p className="text-sm text-neutral-400">
-                14-day money-back guarantee
+                Transparent terms of service
               </p>
             </div>
           </div>
