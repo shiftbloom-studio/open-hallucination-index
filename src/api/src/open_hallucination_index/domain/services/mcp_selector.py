@@ -91,7 +91,13 @@ class SmartMCPSelector:
         self._mcp_sources = sources
         self._source_map = {s.source_name: s for s in sources}
 
-    async def select(self, claim: Claim, *, max_sources_override: int | None = None) -> MCPSelection:
+    async def select(
+        self,
+        claim: Claim,
+        *,
+        max_sources_override: int | None = None,
+        allow_all_relevant: bool = False,
+    ) -> MCPSelection:
         """
         Select relevant MCP sources for a claim.
 
@@ -120,24 +126,25 @@ class SmartMCPSelector:
         max_sources = max_sources_override or self._max_sources
 
         for rec in mcp_recommendations:
-            # Check if source meets relevance threshold
-            if rec.relevance_score < self._min_relevance:
-                skipped_sources.append(rec.source_name)
-                logger.debug(f"Skipping {rec.source_name}: low relevance {rec.relevance_score}")
-                continue
-
-            # Check if we've reached max sources
-            if len(selected_sources) >= max_sources:
-                skipped_sources.append(rec.source_name)
-                logger.debug(f"Skipping {rec.source_name}: max sources reached")
-                continue
-
             # Check if source is available
             is_avail = self._is_source_available(rec.source_name)
             logger.debug(f"Source {rec.source_name} available? {is_avail}")
             if not is_avail:
                 skipped_sources.append(rec.source_name)
                 continue
+
+            if not allow_all_relevant:
+                # Check if source meets relevance threshold
+                if rec.relevance_score < self._min_relevance:
+                    skipped_sources.append(rec.source_name)
+                    logger.debug(f"Skipping {rec.source_name}: low relevance {rec.relevance_score}")
+                    continue
+
+                # Check if we've reached max sources
+                if len(selected_sources) >= max_sources:
+                    skipped_sources.append(rec.source_name)
+                    logger.debug(f"Skipping {rec.source_name}: max sources reached")
+                    continue
 
             selected_sources.append(rec.source_name)
             if rec.mcp_tool:

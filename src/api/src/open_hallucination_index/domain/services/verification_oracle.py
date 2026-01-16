@@ -450,9 +450,17 @@ class HybridVerificationOracle(VerificationOracle):
                         claim,
                         max_sources_override=target_sources,
                     )
+                    if len(selection.selected_sources) < target_sources:
+                        selection = await self._mcp_selector.select(
+                            claim,
+                            allow_all_relevant=True,
+                        )
                 else:
-                    selection = await self._mcp_selector.select(claim)
-                
+                    selection = await self._mcp_selector.select(
+                        claim,
+                        allow_all_relevant=True,
+                    )
+
                 mcp_sources = self._mcp_selector.get_sources_for_selection(selection)
                 if max_mcp_allowed and len(mcp_sources) > max_mcp_allowed:
                     mcp_sources = mcp_sources[:max_mcp_allowed]
@@ -592,22 +600,22 @@ class HybridVerificationOracle(VerificationOracle):
         if not self._llm_provider or not evidence:
             return supporting, refuting
 
-        # Process evidence in batches to avoid token limits
-        batch_size = 5
+        # Process evidence in smaller batches to avoid token limits
+        batch_size = 3
         for i in range(0, len(evidence), batch_size):
             batch = evidence[i : i + batch_size]
 
             # Build evidence descriptions for the prompt
             evidence_descriptions = []
             for idx, ev in enumerate(batch):
-                content_preview = ev.content[:500] if len(ev.content) > 500 else ev.content
+                content_preview = ev.content[:250] if len(ev.content) > 250 else ev.content
                 evidence_descriptions.append(
                     f"Evidence {idx + 1} (source: {ev.source.value}):\n{content_preview}"
                 )
 
             evidence_text = "\n\n".join(evidence_descriptions)
 
-            prompt = f"""You are a fact-checking assistant. Your task is to classify whether each piece of evidence SUPPORTS, REFUTES, or is NEUTRAL regarding the given claim.
+            prompt = f"""You are a fact-checking assistant. Classify whether each evidence item SUPPORTS, REFUTES, or is NEUTRAL for the claim.
 
 CLAIM: "{claim.text}"
 
@@ -622,15 +630,13 @@ For each piece of evidence, determine:
 IMPORTANT: Pay careful attention to factual details like locations, dates, names, and numbers.
 For example, if the claim says something is in "Berlin" but the evidence says it's in "Paris", that is REFUTING evidence.
 
-Respond in JSON format:
+Respond with valid JSON only in this exact shape:
 {{
-  "classifications": [
-    {{"evidence_index": 1, "classification": "SUPPORTS|REFUTES|NEUTRAL", "reason": "brief explanation"}},
-    ...
-  ]
+    "classifications": [
+        {{"evidence_index": 1, "classification": "SUPPORTS|REFUTES|NEUTRAL"}}
+    ]
 }}
-
-Only output valid JSON, no other text."""
+"""
 
             try:
                 from open_hallucination_index.ports.llm_provider import LLMMessage
@@ -641,13 +647,15 @@ Only output valid JSON, no other text."""
                 ]
                 response = await self._llm_provider.complete(
                     messages=messages,
-                    max_tokens=1024,
+                    max_tokens=512,
                     temperature=0.1,  # Low temperature for consistent classification
                     json_mode=True,
                 )
 
                 # Parse the LLM response
                 classifications = self._parse_classification_response(response.content)
+                if not classifications:
+                    raise ValueError("LLM returned no classifications")
 
                 for classification in classifications:
                     ev_idx = classification.get("evidence_index", 0) - 1
@@ -679,7 +687,6 @@ Only output valid JSON, no other text."""
             f"LLM classified {len(evidence)} evidence pieces: "
             f"{len(supporting)} supporting, {len(refuting)} refuting, {len(neutral)} neutral"
         )
-
         return supporting, refuting
 
     def _parse_classification_response(self, response: str) -> list[dict]:
