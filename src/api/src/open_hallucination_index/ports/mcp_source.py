@@ -9,7 +9,8 @@ Defines the contract for Wikipedia, Context7, and other MCP servers.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from contextvars import ContextVar, Token
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from open_hallucination_index.domain.entities import Claim, Evidence
@@ -99,3 +100,28 @@ class MCPQueryError(Exception):
     """Raised when an MCP query fails."""
 
     pass
+
+
+# -----------------------------------------------------------------------------
+# Request-scoped MCP tool cache (per request/text/claim)
+# -----------------------------------------------------------------------------
+
+_mcp_call_cache: ContextVar[dict[str, list[dict[str, Any]]] | None] = ContextVar(
+    "mcp_call_cache",
+    default=None,
+)
+
+
+def set_mcp_call_cache() -> Token[dict[str, list[dict[str, Any]]] | None]:
+    """Enable request-scoped MCP call cache for the current context."""
+    return _mcp_call_cache.set({})
+
+
+def reset_mcp_call_cache(token: Token[dict[str, list[dict[str, Any]]] | None]) -> None:
+    """Reset the request-scoped MCP call cache to the previous context."""
+    _mcp_call_cache.reset(token)
+
+
+def get_mcp_call_cache() -> dict[str, list[dict[str, Any]]] | None:
+    """Get the current request-scoped MCP call cache (if enabled)."""
+    return _mcp_call_cache.get()

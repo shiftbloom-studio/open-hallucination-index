@@ -217,29 +217,26 @@ class GraphRAGEvaluator(BaseEvaluator):
 
         atomic_facts: list[AtomicFact] = []
 
-        for sentence in sentences:
+        for index, sentence in enumerate(sentences):
             result = await self.verify(sentence)
             atomic_facts.append(
                 AtomicFact(
                     text=sentence,
-                    is_supported=result.verdict in {
+                    source_text=text,
+                    index=index,
+                    verified=result.verdict in {
                         VerificationVerdict.SUPPORTED,
                         VerificationVerdict.PARTIAL,
                     },
-                    confidence=result.trust_score,
                     evidence=result.evidence,
                 )
             )
 
         latency_ms = (time.perf_counter() - start_time) * 1000
 
-        supported = sum(1 for f in atomic_facts if f.is_supported)
-        precision = supported / len(atomic_facts) if atomic_facts else 0.0
-
         return FActScoreResult(
-            input_text=text,
+            original_text=text,
             atomic_facts=atomic_facts,
-            precision=precision,
             latency_ms=latency_ms,
             evaluator=self.name,
         )

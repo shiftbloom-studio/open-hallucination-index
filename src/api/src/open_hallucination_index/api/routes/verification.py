@@ -29,6 +29,7 @@ from open_hallucination_index.infrastructure.dependencies import (
     get_verify_use_case,
 )
 from open_hallucination_index.ports.llm_provider import LLMProvider
+from open_hallucination_index.ports.mcp_source import reset_mcp_call_cache, set_mcp_call_cache
 from open_hallucination_index.ports.verification_oracle import VerificationStrategy
 
 router = APIRouter()
@@ -249,6 +250,7 @@ async def verify_text(
         },
     )
 
+    token = set_mcp_call_cache()
     try:
         result: VerificationResult = await use_case.execute(
             text=input_text,
@@ -272,6 +274,8 @@ async def verify_text(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Verification failed: {e!s}",
         ) from e
+    finally:
+        reset_mcp_call_cache(token)
 
     elapsed_ms = (time.perf_counter() - start) * 1000
     logger.info(
@@ -390,8 +394,12 @@ async def verify_batch(
             )
 
     # Process all texts with concurrency limit
-    tasks = [verify_with_limit(text) for text in filtered_texts]
-    gathered = await asyncio.gather(*tasks, return_exceptions=True)
+    token = set_mcp_call_cache()
+    try:
+        tasks = [verify_with_limit(text) for text in filtered_texts]
+        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        reset_mcp_call_cache(token)
 
     # Transform results
     responses: list[VerifyTextResponse] = []

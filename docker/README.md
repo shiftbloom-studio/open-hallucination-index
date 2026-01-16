@@ -80,6 +80,21 @@ Common dev-only services (Neo4j, Qdrant, Redis, vLLM, API, MCP, Frontend, Nginx)
 
 ---
 
+## CI/CD
+
+Docker images are automatically built and pushed to GitHub Container Registry on pushes to main branch and tags.
+
+- Workflow: [.github/workflows/docker.yml](../.github/workflows/docker.yml)
+- Images:
+  - `ghcr.io/{repo}/api` - Built from `docker/api/Dockerfile`
+  - `ghcr.io/{repo}/mcp-server` - Built from `docker/mcp-server/Dockerfile`
+  - `ghcr.io/{repo}/frontend` - Built from `src/frontend/Dockerfile`
+- Tags: `latest`, branch names, SHA, semantic versions
+
+To use pre-built images, update `docker-compose.yml` image tags from `:local` to registry URLs.
+
+---
+
 ## Key environment variables
 
 These are read from the repo root .env:

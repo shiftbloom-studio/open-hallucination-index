@@ -12,6 +12,8 @@ SSE should only be used for streaming/real-time updates.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 from abc import abstractmethod
 from datetime import datetime
@@ -25,6 +27,7 @@ from open_hallucination_index.ports.mcp_source import (
     MCPConnectionError,
     MCPKnowledgeSource,
     MCPQueryError,
+    get_mcp_call_cache,
 )
 
 if TYPE_CHECKING:
@@ -168,6 +171,23 @@ class HTTPMCPAdapter(MCPKnowledgeSource):
         if not self._client:
             raise MCPQueryError(f"{self.source_name} not connected")
 
+        cache = get_mcp_call_cache()
+        cache_key: str | None = None
+        if cache is not None:
+            try:
+                args_payload = json.dumps(arguments, sort_keys=True, default=str)
+                cache_key = hashlib.sha256(f"{tool_name}:{args_payload}".encode("utf-8")).hexdigest()
+                cached = cache.get(cache_key)
+                if cached is not None:
+                    logger.debug(
+                        "MCP cache hit for %s (%s)",
+                        tool_name,
+                        self.source_name,
+                    )
+                    return cached
+            except Exception:
+                cache_key = None
+
         try:
             async with self._call_semaphore:
                 response = await self._client.post(
@@ -180,15 +200,19 @@ class HTTPMCPAdapter(MCPKnowledgeSource):
             # Normalize response to list format
             if isinstance(data, dict):
                 if "results" in data:
-                    return data["results"]
+                    results = data["results"]
                 elif "error" in data:
                     raise MCPQueryError(data["error"])
                 else:
-                    return [data]
+                    results = [data]
             elif isinstance(data, list):
-                return data
+                results = data
             else:
-                return [{"content": str(data)}]
+                results = [{"content": str(data)}]
+
+            if cache is not None and cache_key is not None:
+                cache[cache_key] = results
+            return results
 
         except httpx.TimeoutException:
             raise MCPQueryError(f"Timeout calling {tool_name} on {self.source_name}") from None

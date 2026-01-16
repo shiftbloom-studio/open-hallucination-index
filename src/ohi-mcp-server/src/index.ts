@@ -49,9 +49,60 @@ const ENABLE_CACHE = process.env.ENABLE_CACHE !== "false";
 const rateLimiter = new RateLimiter();
 const cache = new ResponseCache(CACHE_TTL, ENABLE_CACHE);
 
+const TOOL_RATE_KEY: Record<string, string> = {
+  search_wikipedia: "mediawiki",
+  get_wikipedia_summary: "wikimedia_rest",
+  get_summary: "wikimedia_rest",
+  search_wikidata: "wikidata",
+  query_wikidata_sparql: "wikidata",
+  search_dbpedia: "dbpedia",
+  search_openalex: "openalex",
+  search_crossref: "crossref",
+  get_doi_metadata: "crossref",
+  search_europepmc: "europepmc",
+  search_pubmed: "ncbi",
+  search_clinical_trials: "clinicaltrials",
+  get_citations: "opencitations",
+  search_gdelt: "gdelt",
+  get_world_bank_indicator: "worldbank",
+  search_vulnerabilities: "osv",
+  get_vulnerability: "osv",
+  "resolve-library-id": "context7",
+  "query-docs": "context7",
+};
+
+const TOOL_CACHE_KEY: Record<string, string> = {
+  ...TOOL_RATE_KEY,
+  search_all: "search_all",
+  search_academic: "academic",
+};
+
 // Helper function for direct HTTP API tool calls
 async function executeToolCall(toolName: string, args: Record<string, unknown>): Promise<unknown> {
-  return await toolAggregator.callTool(toolName, args);
+  const cacheSource = TOOL_CACHE_KEY[toolName] || toolName;
+  const cached = cache.get<unknown>(cacheSource, toolName, args || {});
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const rateKey = TOOL_RATE_KEY[toolName];
+  if (rateKey) {
+    await rateLimiter.acquire(rateKey);
+  }
+
+  const result = await toolAggregator.callTool(toolName, args);
+
+  const shouldCache =
+    typeof result !== "object" ||
+    result === null ||
+    !("success" in result) ||
+    (result as { success?: boolean }).success !== false;
+
+  if (shouldCache) {
+    cache.set(cacheSource, toolName, args || {}, result);
+  }
+
+  return result;
 }
 // Registry and aggregator are singleton instances from modules
 

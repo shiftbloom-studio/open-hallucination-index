@@ -31,6 +31,7 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   gdelt: { requestsPerSecond: 2, burstSize: 5 },
   worldbank: { requestsPerSecond: 5, burstSize: 10 },
   osv: { requestsPerSecond: 5, burstSize: 10 },
+  context7: { requestsPerSecond: 0.5, burstSize: 1 },
 };
 
 export class RateLimiter {
