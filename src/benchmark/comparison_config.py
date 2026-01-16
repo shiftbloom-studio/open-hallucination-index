@@ -56,7 +56,7 @@ class OpenAIConfig:
     model: str = "gpt-4"  # Standard GPT-4 (slower, more prone to hallucination)
     temperature: float = 0.0  # Deterministic for reproducibility
     max_tokens: int = 1024
-    timeout_seconds: float = 120.0
+    timeout_seconds: float = 240.0
     max_retries: int = 3
     requests_per_minute: int = 20  # Rate limiting
     
@@ -72,7 +72,7 @@ class OpenAIConfig:
             model=os.getenv("OPENAI_MODEL", "gpt-4"),
             temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0")),
             max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "1024")),
-            timeout_seconds=float(os.getenv("OPENAI_TIMEOUT", "120.0")),
+            timeout_seconds=float(os.getenv("OPENAI_TIMEOUT", "240.0")),
             requests_per_minute=int(os.getenv("OPENAI_RPM", "20")),
         )
     
@@ -281,7 +281,7 @@ class ComparisonBenchmarkConfig:
     # Reduced concurrency to prevent connection pool exhaustion and API overload
     concurrency: int = 3  # Lower default to prevent overwhelming local API
     ohi_concurrency: int = 3  # Match main concurrency for OHI
-    timeout_seconds: float = 120.0
+    timeout_seconds: float = 240.0
     warmup_requests: int = 5
     hallucination_max_samples: int = 60
     
@@ -335,9 +335,9 @@ class ComparisonBenchmarkConfig:
                 os.getenv("BENCHMARK_OUTPUT_DIR", "benchmark_results/comparison")
             ),
             chart_dpi=int(os.getenv("CHART_DPI", "200")),
-            concurrency=int(os.getenv("BENCHMARK_CONCURRENCY", "5")),
+            concurrency=int(os.getenv("BENCHMARK_CONCURRENCY", "4")),
             ohi_concurrency=int(os.getenv("OHI_CONCURRENCY", "2")),
-            timeout_seconds=float(os.getenv("BENCHMARK_TIMEOUT", "120.0")),
+            timeout_seconds=float(os.getenv("BENCHMARK_TIMEOUT", "240.0")),
             warmup_requests=int(os.getenv("BENCHMARK_WARMUP", "5")),
             hallucination_max_samples=int(os.getenv("BENCHMARK_HALLUCINATION_MAX", "60")),
         )

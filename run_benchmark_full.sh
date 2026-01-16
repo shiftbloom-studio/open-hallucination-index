@@ -73,7 +73,7 @@ docker exec -t \
     --hallucination-max 15 \
     --output-dir "${OUTPUT_DIR}" \
     --chart-dpi 200 \
-    --concurrency 1 \
+    --concurrency 2 \
     --verbose
 
 echo ""
