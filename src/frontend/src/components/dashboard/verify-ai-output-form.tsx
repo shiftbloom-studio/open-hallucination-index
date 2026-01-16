@@ -19,7 +19,7 @@ import { ClaimSummary, createApiClient, VerifyTextResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import CitationTraceViewer from "@/components/dashboard/citation-trace-viewer";
 
-const CHARACTERS_PER_TOKEN = 1000;
+const CHARACTERS_PER_TOKEN = 100;
 const STANDARD_TARGET_SOURCES = 6;
 const EXPERT_TARGET_SOURCES = 18;
 
@@ -46,7 +46,8 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
   const [verificationResult, setVerificationResult] = useState<VerifyTextResponse | null>(null);
 
   const textLength = text.length;
-  const tokensNeeded = Math.max(1, Math.ceil(textLength / CHARACTERS_PER_TOKEN));
+  const baseTokensNeeded = Math.max(1, Math.ceil(textLength / CHARACTERS_PER_TOKEN));
+  const tokensNeeded = analysisMode === "expert" ? baseTokensNeeded * 2 : baseTokensNeeded;
   const hasEnoughTokens = userTokens >= tokensNeeded;
   const targetSources = analysisMode === "expert" ? EXPERT_TARGET_SOURCES : STANDARD_TARGET_SOURCES;
 
@@ -87,7 +88,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
       const deductResponse = await fetch("/api/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, context }),
+        body: JSON.stringify({ text, context, mode: analysisMode }),
       });
 
       if (!deductResponse.ok) {

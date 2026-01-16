@@ -3,8 +3,8 @@ export const dynamic = "force-dynamic";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-const INITIAL_TOKENS = 5;
-const DAILY_TOKENS = 5;
+const INITIAL_TOKENS = 2;
+const DAILY_TOKENS = 2;
 
 // Helper function to check if a day has passed since last claim
 function canClaimDailyTokens(lastClaimDate: string | null): boolean {
@@ -116,7 +116,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { text, context } = await request.json();
+    const { text, context, mode } = await request.json();
 
     if (typeof text !== "string") {
       return NextResponse.json(
@@ -125,10 +125,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Calculate tokens needed (1 token per 1000 characters, minimum 1)
+    // Calculate tokens needed (1 token per 100 characters, 2 tokens for expert mode)
     // We derive this from the actual strings, not a self-reported length
     const totalLength = text.length + (context?.length ?? 0);
-    const tokensNeeded = Math.max(1, Math.ceil(totalLength / 1000));
+    const baseTokensNeeded = Math.max(1, Math.ceil(totalLength / 100));
+    const tokensNeeded = mode === "expert" ? baseTokensNeeded * 2 : baseTokensNeeded;
 
     // Atomic deduction using RPC to prevent race conditions and ensure non-negative balance
     const { data, error: rpcError } = await supabase.rpc(
