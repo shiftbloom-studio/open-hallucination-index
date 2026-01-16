@@ -44,7 +44,7 @@ test.describe('Legal Pages', () => {
 });
 
 test.describe('Accessibility', () => {
-  const pages = ['/', '/pricing', '/auth/login', '/auth/signup'];
+  const pages = ['/', '/tokens', '/auth/login', '/auth/signup'];
 
   for (const pagePath of pages) {
     test(`should have no critical accessibility issues on ${pagePath}`, async ({ page }) => {

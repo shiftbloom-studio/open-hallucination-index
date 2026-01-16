@@ -136,11 +136,11 @@ describe('User Flow Integration Tests', () => {
       };
 
       trackPageView('/');
-      trackPageView('/pricing');
+      trackPageView('/tokens');
       trackPageView('/auth/login');
       trackPageView('/dashboard');
 
-      expect(pageViews).toEqual(['/', '/pricing', '/auth/login', '/dashboard']);
+      expect(pageViews).toEqual(['/', '/tokens', '/auth/login', '/dashboard']);
     });
 
     it('should handle protected routes', () => {
@@ -155,7 +155,7 @@ describe('User Flow Integration Tests', () => {
       };
 
       expect(canAccess('/')).toBe(true);
-      expect(canAccess('/pricing')).toBe(true);
+      expect(canAccess('/tokens')).toBe(true);
       expect(canAccess('/dashboard')).toBe(false);
     });
   });

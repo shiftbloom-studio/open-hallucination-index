@@ -27,7 +27,7 @@ test.describe("Dark Mode", () => {
   });
 
   test("should render correctly in dark mode", async ({ page }) => {
-    await page.goto("/pricing");
+    await page.goto("/tokens");
 
     // Verify text is visible (contrast should be appropriate)
     const heading = page.locator("h1, h2").first();
@@ -58,14 +58,14 @@ test.describe("Responsive Design", () => {
       await expect(page.locator("body")).toBeVisible();
     });
 
-    test(`pricing page should render correctly at ${viewport.name}`, async ({
+    test(`tokens page should render correctly at ${viewport.name}`, async ({
       page,
     }) => {
       await page.setViewportSize({
         width: viewport.width,
         height: viewport.height,
       });
-      await page.goto("/pricing");
+      await page.goto("/tokens");
 
       await expect(page.locator("body")).toBeVisible();
     });

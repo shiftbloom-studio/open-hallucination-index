@@ -141,8 +141,8 @@ function EvidenceCard({ evidence, type }: { evidence: Evidence; type: "supportin
 }
 
 export default function CitationTraceViewer({ trace, claimText }: CitationTraceViewerProps) {
-  const [showEvidence, setShowEvidence] = useState(true);
-  const [viewMode, setViewMode] = useState<"list" | "3d">("list");
+  const [showEvidence, setShowEvidence] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "3d">("3d");
   
   const totalEvidence = trace.supporting_evidence.length + trace.refuting_evidence.length;
   

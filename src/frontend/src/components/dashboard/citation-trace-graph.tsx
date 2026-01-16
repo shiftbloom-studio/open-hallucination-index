@@ -111,7 +111,7 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
   }, [trace, claimText]);
 
   return (
-    <div className="relative h-[400px] w-full overflow-hidden rounded-lg border border-slate-700/50 bg-slate-950 shadow-inner">
+    <div className="relative h-[500px] w-full overflow-hidden rounded-lg border border-slate-700/50 bg-slate-950 shadow-inner">
         <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-full bg-slate-900/80 px-3 py-1 text-xs backdrop-blur border border-slate-700">
             <Zap className="h-3 w-3 text-yellow-400 fill-yellow-400" />
             <span className="font-medium text-slate-300">Live Neural Net</span>
@@ -182,7 +182,7 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
         }}
         
         // Initial Camera Position
-        onEngineStop={() => graphRef.current.zoomToFit(400)}
+        onEngineStop={() => graphRef.current.zoomToFit(1000, 50)}
         cooldownTicks={100}
       />
     </div>

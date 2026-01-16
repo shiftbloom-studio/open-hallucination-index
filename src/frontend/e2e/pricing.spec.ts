@@ -1,15 +1,15 @@
 import { test, expect } from '@playwright/test';
 
-test.describe.skip('Pricing Page (temporarily disabled)', () => {
+test.describe.skip('Tokens Page (temporarily disabled)', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/tokens');
   });
 
-  test('should display pricing heading', async ({ page }) => {
+  test('should display tokens heading', async ({ page }) => {
     await expect(page.locator('h1, h2').first()).toBeVisible();
   });
 
-  test('should display all three pricing packages', async ({ page }) => {
+  test('should display all three tokens packages', async ({ page }) => {
     // Check for the three token packages
     await expect(page.getByText('10').first()).toBeVisible();
     await expect(page.getByText('100').first()).toBeVisible();

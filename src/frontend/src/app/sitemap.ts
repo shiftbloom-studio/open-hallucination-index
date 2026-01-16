@@ -7,7 +7,7 @@ const siteUrl =
 const routes = [
   "",
   "/about",
-  "/pricing",
+  "/tokens",
   "/agb",
   "/accessibility",
   "/cookies",

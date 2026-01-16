@@ -137,6 +137,28 @@ class TargetedOHISource(OHIMCPAdapter):
         logger.debug(f"TargetedOHISource.find_evidence for {self._source_name_override}, search_type={self._search_type}")
         return await self.search_for_evidence(claim, max_results=5, search_type=self._search_type)
 
+    def _map_string_to_source(self, source_str: str) -> EvidenceSource:
+        """Map string source name to EvidenceSource enum."""
+        s = source_str.lower()
+        if "wikipedia" in s or "wikidata" in s or "dbpedia" in s:
+            return EvidenceSource.WIKIPEDIA
+        if "pubmed" in s or "ncbi" in s:
+            return EvidenceSource.PUBMED
+        if "clinical" in s and "trials" in s:
+            return EvidenceSource.CLINICAL_TRIALS
+        if "news" in s or "gdelt" in s:
+            return EvidenceSource.NEWS
+        if "world" in s and "bank" in s:
+            return EvidenceSource.WORLD_BANK
+        if "osv" in s or "vulnerability" in s:
+            return EvidenceSource.OSV
+        if "context7" in s or "library" in s or "documentation" in s:
+            return EvidenceSource.MCP_CONTEXT7
+        if "openalex" in s or "crossref" in s or "europe" in s and "pmc" in s or "academic" in s:
+            return EvidenceSource.ACADEMIC
+        
+        return EvidenceSource.KNOWLEDGE_GRAPH
+
     async def search_for_evidence(
         self,
         claim: Claim,
@@ -191,11 +213,19 @@ class TargetedOHISource(OHIMCPAdapter):
 
         try:
             results = await self.call_tool(tool_name, arguments)
-            source = TOOL_TO_SOURCE.get(tool_name, EvidenceSource.KNOWLEDGE_GRAPH)
+            
+            evidence_list: list[Evidence] = []
+            default_source = TOOL_TO_SOURCE.get(tool_name, EvidenceSource.KNOWLEDGE_GRAPH)
 
-            evidence_list = [
-                self._create_evidence(result, source, tool_name) for result in results[:max_results]
-            ]
+            for result in results[:max_results]:
+                # Try to map specific source if provided in result
+                source_str = result.get("source", "") or result.get("origin", "")
+                if source_str:
+                    source = self._map_string_to_source(str(source_str))
+                else:
+                    source = default_source
+                
+                evidence_list.append(self._create_evidence(result, source, tool_name))
 
             logger.info(
                 f"OHI MCP search for '{claim.text[:50]}...' "

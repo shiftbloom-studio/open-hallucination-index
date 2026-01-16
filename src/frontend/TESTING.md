@@ -89,7 +89,7 @@ e2e/
 ├── auth.spec.ts              # Authentication page tests
 ├── homepage.spec.ts          # Homepage tests
 ├── navigation.spec.ts        # Navigation and accessibility tests
-├── pricing.spec.ts           # Pricing page tests
+├── tokens.spec.ts           # Tokens page tests
 └── visual-and-interactions.spec.ts  # Visual regression & interaction tests
 ```
 
@@ -115,10 +115,10 @@ describe('Button', () => {
 ```typescript
 import { test, expect } from '@playwright/test';
 
-test('should navigate to pricing page', async ({ page }) => {
+test('should navigate to tokens page', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: /pricing/i }).click();
-  await expect(page).toHaveURL(/.*pricing/);
+  await page.getByRole('link', { name: /tokens/i }).click();
+  await expect(page).toHaveURL(/.*tokens/);
 });
 ```
 
