@@ -158,6 +158,11 @@ class WeightedScorer(Scorer):
         Returns:
             Score contribution (0.0 - 1.0).
         """
+        # If the oracle used the LLM plausibility fallback (no evidence),
+        # use its bounded confidence directly as the base contribution.
+        if "LLM plausibility prior used" in verification.trace.reasoning:
+            return max(0.0, min(1.0, verification.trace.confidence))
+
         status = verification.status
         base_weight = STATUS_WEIGHTS.get(status, 0.5)
 

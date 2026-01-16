@@ -174,10 +174,32 @@ class HybridVerificationOracle(VerificationOracle):
         # Classify evidence as supporting or refuting
         supporting_evidence, refuting_evidence = await self._classify_evidence(claim, all_evidence)
 
+        # If no evidence found anywhere, allow LLM plausibility fallback (low weight)
+        if not all_evidence and self._llm_provider is not None:
+            status, confidence, reasoning = await self._llm_plausibility_fallback(claim)
+            trace = CitationTrace(
+                claim_id=claim.id,
+                status=status,
+                reasoning=reasoning,
+                supporting_evidence=[],
+                refuting_evidence=[],
+                confidence=confidence,
+                verification_strategy=active_strategy.value,
+            )
+            return status, trace
+
         # Determine verification status
         status, confidence, reasoning = self._determine_status(
             claim, supporting_evidence, refuting_evidence
         )
+
+        # Lightly blend in LLM plausibility prior as an initial bias
+        if self._llm_provider is not None and all_evidence:
+            prior_confidence, prior_reason = await self._llm_plausibility_prior(claim)
+            confidence = 0.9 * confidence + 0.1 * prior_confidence
+            confidence = max(0.0, min(1.0, confidence))
+            if prior_reason:
+                reasoning = f"{reasoning} LLM prior: {prior_reason}".strip()
 
         trace = CitationTrace(
             claim_id=claim.id,
@@ -688,6 +710,91 @@ Respond with valid JSON only in this exact shape:
             f"{len(supporting)} supporting, {len(refuting)} refuting, {len(neutral)} neutral"
         )
         return supporting, refuting
+
+    async def _llm_plausibility_fallback(
+        self, claim: Claim
+    ) -> tuple[VerificationStatus, float, str]:
+        """
+        Provide a low-weight plausibility estimate when no evidence exists.
+
+        The LLM returns a plausibility score in [0, 1]. We map it to a
+        conservative confidence range [0.375, 0.625] to avoid over-trusting.
+        """
+        if self._llm_provider is None:
+            return (
+                VerificationStatus.UNVERIFIABLE,
+                0.3,
+                "No relevant evidence found in knowledge sources.",
+            )
+
+        confidence, reason = await self._llm_plausibility_prior(claim)
+
+        reasoning = (
+            "No external evidence found. LLM plausibility prior used: "
+            f"{confidence:.2f}. {reason}".strip()
+        )
+
+        return VerificationStatus.UNCERTAIN, confidence, reasoning
+
+    async def _llm_plausibility_prior(self, claim: Claim) -> tuple[float, str]:
+        """
+        Get a conservative plausibility prior in [0.375, 0.625] from the LLM.
+        """
+        if self._llm_provider is None:
+            return 0.5, ""
+
+        from open_hallucination_index.ports.llm_provider import LLMMessage
+
+        prompt = f"""You are a cautious fact-checking assistant. Without using external sources,
+estimate how plausible the following claim is based on general world knowledge.
+
+CLAIM: "{claim.text}"
+
+Respond with valid JSON only in this exact shape:
+{{
+  "plausibility": 0.0,
+  "reason": "short explanation"
+}}
+"""
+
+        response = await self._llm_provider.complete(
+            messages=[
+                LLMMessage(role="system", content="You provide conservative plausibility estimates."),
+                LLMMessage(role="user", content=prompt),
+            ],
+            temperature=0.1,
+            max_tokens=256,
+            json_mode=True,
+        )
+
+        plausibility, reason = self._parse_plausibility_response(response.content)
+
+        # Map plausibility to a conservative confidence band
+        confidence = 0.375 + (0.25 * plausibility)
+        confidence = max(0.375, min(0.625, confidence))
+
+        return confidence, reason
+
+    def _parse_plausibility_response(self, response: str) -> tuple[float, str]:
+        """Parse plausibility JSON response from the LLM."""
+        try:
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)(?:```|$)", response, re.IGNORECASE)
+            if json_match:
+                candidate = json_match.group(1).strip()
+                if candidate.startswith("{") or candidate.startswith("["):
+                    response = candidate
+
+            response = response.strip()
+            data = json.loads(response) if response else {}
+            plausibility = float(data.get("plausibility", 0.5))
+            reason = str(data.get("reason", ""))
+        except Exception as e:
+            logger.warning("Failed to parse plausibility response: %s", e)
+            plausibility = 0.5
+            reason = ""
+
+        plausibility = max(0.0, min(1.0, plausibility))
+        return plausibility, reason
 
     def _parse_classification_response(self, response: str) -> list[dict]:
         """Parse the LLM classification response."""
