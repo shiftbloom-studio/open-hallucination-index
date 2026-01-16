@@ -181,5 +181,5 @@ docker/
 - API: [src/api/README.md](../src/api/README.md)
 - MCP server: [src/ohi-mcp-server/README.md](../src/ohi-mcp-server/README.md)
 - Frontend: [src/frontend/README.md](../src/frontend/README.md)
-- Ingestion: [src/ingestion/README.md](../src/ingestion/README.md)
-- Benchmark: [src/benchmark/README.md](../src/benchmark/README.md)
+- Ingestion: [gui_ingestion_app/README.md](../gui_ingestion_app/README.md)
+- Benchmark: [gui_benchmark_app/README.md](../gui_benchmark_app/README.md)

@@ -61,10 +61,10 @@ Tip: Use **adaptive** for best coverage, **graph_exact** for lowest latency, and
 
 ```bash
 # From the project root
-pip install -e src/benchmark/
+pip install -e gui_benchmark_app/benchmark/
 
 # Or with development dependencies
-pip install -e "src/benchmark/[dev]"
+pip install -e "gui_benchmark_app/benchmark/[dev]"
 ```
 
 ---
@@ -91,7 +91,7 @@ python -m benchmark --help
 
 ```bash
 # Install GUI dependencies and run
-pip install -e "src/benchmark/"
+pip install -e "gui_benchmark_app/benchmark/"
 ohi-benchmark-gui
 ```
 
@@ -132,7 +132,7 @@ asyncio.run(run_benchmark())
 |----------|-------------|---------|
 | `OHI_API_HOST` | API host | `localhost` |
 | `OHI_API_PORT` | API port | `8080` |
-| `BENCHMARK_DATASET` | Path to CSV dataset | `src/benchmark/benchmark_dataset.csv` |
+| `BENCHMARK_DATASET` | Path to CSV dataset | `benchmark/benchmark_dataset.csv` (relative to working directory) |
 | `BENCHMARK_OUTPUT_DIR` | Output directory | `benchmark_results` |
 | `BENCHMARK_CONCURRENCY` | Parallel requests | `3` |
 | `OHI_CONCURRENCY` | OHI-specific parallel requests (comparison benchmark) | `2` |

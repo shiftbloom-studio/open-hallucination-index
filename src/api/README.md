@@ -231,5 +231,5 @@ From src/api:
 
 - Root docs in [docs/API.md](../docs/API.md)
 - Frontend integration in [src/frontend/README.md](../src/frontend/README.md)
-- Ingestion pipeline in [src/ingestion/README.md](../src/ingestion/README.md)
+- Ingestion pipeline in [gui_ingestion_app/README.md](../gui_ingestion_app/README.md)
 - MCP server in [src/ohi-mcp-server/README.md](../src/ohi-mcp-server/README.md)

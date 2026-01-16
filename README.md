@@ -54,8 +54,8 @@ Use these for deep, project-specific details and operational tips:
 
 - [src/api/README.md](src/api/README.md) – Verification API, filters, caching, strategies, knowledge-track
 - [src/ohi-mcp-server/README.md](src/ohi-mcp-server/README.md) – MCP server, tools, routing, and ops
-- [src/benchmark/README.md](src/benchmark/README.md) – Benchmark suite, metrics, and reports
-- [src/ingestion/README.md](src/ingestion/README.md) – Wikipedia ingestion pipeline and tuning
+- [gui_benchmark_app/README.md](gui_benchmark_app/README.md) – Benchmark suite, metrics, and reports
+- [gui_ingestion_app/README.md](gui_ingestion_app/README.md) – Wikipedia ingestion pipeline and tuning
 - [src/frontend/README.md](src/frontend/README.md) – Frontend architecture, data flows, and UI
 - [docker/README.md](docker/README.md) – Full stack Docker orchestration and service map
 
@@ -164,9 +164,9 @@ open-hallucination-index/
 │   │   ├── src/            # React/Next.js source code
 │   │   ├── e2e/            # Playwright E2E tests
 │   │   └── package.json    # Node.js dependencies
-│   ├── ingestion/          # Wikipedia ingestion pipeline
-│   ├── benchmark/          # Research-grade benchmark suite
 │   └── ohi-mcp-server/     # MCP Server (Node)
+├── gui_ingestion_app/      # Standalone ingestion GUI + pipeline package
+├── gui_benchmark_app/      # Standalone benchmark GUI + package
 ├── docs/                   # Documentation
 │   ├── CONTRIBUTING.md     # Contribution guidelines
 │   ├── CODE_OF_CONDUCT.md  # Community standards
