@@ -28,8 +28,8 @@ _model_load_lock = Lock()
 @lru_cache(maxsize=1)
 def _get_model(model_name: str):
     """Load and cache the sentence transformer model."""
-    from sentence_transformers import SentenceTransformer
     import torch
+    from sentence_transformers import SentenceTransformer
 
     logger.info(f"Loading embedding model: {model_name}")
 

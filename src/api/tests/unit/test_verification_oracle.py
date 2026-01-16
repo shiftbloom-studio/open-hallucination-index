@@ -7,22 +7,22 @@ from uuid import uuid4
 
 import pytest
 
-from open_hallucination_index.domain.entities import (
+from interfaces.stores import (
+    GraphKnowledgeStore,
+    VectorKnowledgeStore,
+    VectorQuery,
+)
+from interfaces.verification import VerificationStrategy
+from models.entities import (
     Claim,
     ClaimType,
     Evidence,
     EvidenceSource,
 )
-from open_hallucination_index.domain.results import VerificationStatus
-from open_hallucination_index.domain.services.verification_oracle import (
+from models.results import VerificationStatus
+from pipeline.oracle import (
     HybridVerificationOracle,
 )
-from open_hallucination_index.ports.knowledge_store import (
-    GraphKnowledgeStore,
-    VectorKnowledgeStore,
-    VectorQuery,
-)
-from open_hallucination_index.ports.verification_oracle import VerificationStrategy
 
 
 class MockGraphStore(GraphKnowledgeStore):

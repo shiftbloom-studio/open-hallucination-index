@@ -1,10 +1,11 @@
 import os
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from open_hallucination_index.domain.entities import (
+import pytest
+from fastapi.testclient import TestClient
+
+from models.entities import (
     Claim,
     ClaimType,
     Evidence,

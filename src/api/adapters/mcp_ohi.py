@@ -34,12 +34,12 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from adapters.mcp_client import HTTPMCPAdapter
-from models.entities import Evidence, EvidenceSource
 from interfaces.mcp import MCPQueryError
+from models.entities import Evidence, EvidenceSource
 
 if TYPE_CHECKING:
-    from models.entities import Claim
     from config.settings import MCPSettings
+    from models.entities import Claim
 
 logger = logging.getLogger(__name__)
 

@@ -10,12 +10,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from interfaces.scoring import Scorer
 from models.results import (
     ClaimVerification,
     TrustScore,
     VerificationStatus,
 )
-from interfaces.scoring import Scorer
 
 if TYPE_CHECKING:
     pass

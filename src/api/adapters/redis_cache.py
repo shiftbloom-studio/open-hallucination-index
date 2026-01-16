@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, Any
 
 import redis.asyncio as redis
 
-from models.results import ClaimVerification, VerificationResult
 from interfaces.cache import CacheProvider
+from models.results import ClaimVerification, VerificationResult
 
 if TYPE_CHECKING:
     from config.settings import RedisSettings

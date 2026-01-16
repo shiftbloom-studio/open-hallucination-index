@@ -5,8 +5,8 @@ Tests for Domain Results
 
 from uuid import uuid4
 
-from open_hallucination_index.domain.entities import Claim, ClaimType
-from open_hallucination_index.domain.results import (
+from models.entities import Claim, ClaimType
+from models.results import (
     CitationTrace,
     ClaimVerification,
     TrustScore,

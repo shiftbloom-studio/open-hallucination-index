@@ -44,12 +44,12 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.models import Distance, Filter, PointStruct, VectorParams
 
-from models.entities import Evidence, EvidenceSource
 from interfaces.stores import VectorKnowledgeStore, VectorQuery
+from models.entities import Evidence, EvidenceSource
 
 if TYPE_CHECKING:
-    from models.entities import Claim
     from config.settings import QdrantSettings
+    from models.entities import Claim
 
 logger = logging.getLogger(__name__)
 
@@ -315,7 +315,6 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             # Use hybrid search if sparse vectors provided, otherwise dense only
             if query.sparse_indices and query.sparse_values:
                 # Hybrid search with sparse + dense
-                from qdrant_client.models import SparseVector, QueryRequest
                 
                 # TODO: Qdrant client API for hybrid query may need adjustment
                 # For now, fall back to dense search

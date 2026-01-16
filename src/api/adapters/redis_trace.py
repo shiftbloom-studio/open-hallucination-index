@@ -17,6 +17,10 @@ from uuid import UUID
 
 import redis.asyncio as redis
 
+from interfaces.tracking import (
+    KnowledgeTracker,
+    KnowledgeTrackerError,
+)
 from models.track import (
     EdgeType,
     KnowledgeEdge,
@@ -24,10 +28,6 @@ from models.track import (
     KnowledgeNode,
     NodeType,
     TraceData,
-)
-from interfaces.tracking import (
-    KnowledgeTracker,
-    KnowledgeTrackerError,
 )
 
 if TYPE_CHECKING:

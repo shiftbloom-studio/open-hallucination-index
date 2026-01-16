@@ -1,12 +1,25 @@
-"""Unit tests for LLM adapter."""
+"""Unit tests for OpenAI LLM adapter."""
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from open_hallucination_index.adapters.llm_client import LLMClient
-from open_hallucination_index.domain.entities import Claim
+from adapters.openai import LLMProviderError, OpenAILLMAdapter
+from interfaces.llm import LLMMessage, LLMResponse
+
+
+@pytest.fixture
+def mock_settings():
+    """Mock LLM settings."""
+    settings = MagicMock()
+    settings.base_url = "http://localhost:8000/v1"
+    settings.api_key = MagicMock()
+    settings.api_key.get_secret_value.return_value = "test_key"
+    settings.timeout_seconds = 30.0
+    settings.max_retries = 2
+    settings.model = "gpt-4"
+    return settings
 
 
 @pytest.fixture
@@ -16,125 +29,93 @@ def mock_openai_client():
     mock_response = MagicMock()
     mock_choice = MagicMock()
     mock_message = MagicMock()
-    mock_message.content = '["Python was created in 1991", "Python emphasizes readability"]'
+    mock_message.content = "Test response content"
     mock_choice.message = mock_message
+    mock_choice.finish_reason = "stop"
     mock_response.choices = [mock_choice]
+    mock_response.model = "gpt-4"
+    mock_response.usage = MagicMock()
+    mock_response.usage.prompt_tokens = 10
+    mock_response.usage.completion_tokens = 5
+    mock_response.usage.total_tokens = 15
+    mock_response.model_dump.return_value = {"id": "test"}
     mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+    # Mock models.list for health check
+    mock_client.models = MagicMock()
+    mock_client.models.list = AsyncMock(return_value=MagicMock())
     return mock_client
 
 
 @pytest.fixture
-def llm_client(mock_openai_client):
-    """LLM client with mocked OpenAI client."""
-    with patch("openai.AsyncOpenAI", return_value=mock_openai_client):
-        client = LLMClient(
-            api_key="test_key",
-            model="gpt-4",
-            base_url="http://localhost:8000/v1",
-        )
-        client.client = mock_openai_client
-        return client
+def llm_adapter(mock_settings, mock_openai_client):
+    """LLM adapter with mocked client."""
+    with patch("adapters.openai.AsyncOpenAI", return_value=mock_openai_client):
+        with patch("adapters.openai.httpx.AsyncClient"):
+            with patch("adapters.openai.httpx.AsyncHTTPTransport"):
+                adapter = OpenAILLMAdapter(mock_settings)
+                adapter._client = mock_openai_client
+                return adapter
 
 
-class TestLLMClient:
-    """Test LLMClient adapter."""
+class TestOpenAILLMAdapter:
+    """Test OpenAILLMAdapter."""
 
-    def test_initialization(self, llm_client: LLMClient):
-        """Test client initialization."""
-        assert llm_client is not None
-        assert llm_client.client is not None
+    def test_initialization(self, llm_adapter: OpenAILLMAdapter):
+        """Test adapter initialization."""
+        assert llm_adapter is not None
+        assert llm_adapter.model_name == "gpt-4"
 
     @pytest.mark.asyncio
-    async def test_decompose_claims_basic(self, llm_client: LLMClient):
-        """Test claim decomposition."""
-        text = "Python was created in 1991 and emphasizes readability."
-        
-        claims = await llm_client.decompose_claims(text)
-        
-        assert len(claims) > 0
-        assert all(isinstance(claim, Claim) for claim in claims)
+    async def test_complete(self, llm_adapter: OpenAILLMAdapter, mock_openai_client):
+        """Test completing a message."""
+        messages = [
+            LLMMessage(role="user", content="Hello, world!")
+        ]
+
+        response = await llm_adapter.complete(messages)
+
+        assert isinstance(response, LLMResponse)
+        assert response.content == "Test response content"
+        assert response.model == "gpt-4"
+        mock_openai_client.chat.completions.create.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_decompose_claims_single(self, llm_client: LLMClient):
-        """Test decomposing single claim."""
-        text = "Python is a programming language."
-        
-        # Mock single claim response
-        mock_message = MagicMock()
-        mock_message.content = '["Python is a programming language"]'
-        mock_choice = MagicMock()
-        mock_choice.message = mock_message
-        mock_response = MagicMock()
-        mock_response.choices = [mock_choice]
-        llm_client.client.chat.completions.create = AsyncMock(return_value=mock_response)
-        
-        claims = await llm_client.decompose_claims(text)
-        
-        assert len(claims) == 1
+    async def test_complete_with_temperature(self, llm_adapter: OpenAILLMAdapter, mock_openai_client):
+        """Test completing with custom temperature."""
+        messages = [
+            LLMMessage(role="system", content="You are helpful."),
+            LLMMessage(role="user", content="Hello!")
+        ]
 
-    @pytest.mark.asyncio
-    async def test_decompose_claims_empty(self, llm_client: LLMClient):
-        """Test decomposing empty text."""
-        text = ""
-        
-        claims = await llm_client.decompose_claims(text)
-        
-        # Should handle empty input gracefully
-        assert isinstance(claims, list)
+        await llm_adapter.complete(messages, temperature=0.7)
 
-    @pytest.mark.asyncio
-    async def test_generate_response(self, llm_client: LLMClient):
-        """Test generating LLM response."""
-        prompt = "What is Python?"
-        
-        mock_message = MagicMock()
-        mock_message.content = "Python is a programming language."
-        mock_choice = MagicMock()
-        mock_choice.message = mock_message
-        mock_response = MagicMock()
-        mock_response.choices = [mock_choice]
-        llm_client.client.chat.completions.create = AsyncMock(return_value=mock_response)
-        
-        response = await llm_client.generate_response(prompt)
-        
-        assert response is not None
-        assert isinstance(response, str)
+        call_args = mock_openai_client.chat.completions.create.call_args
+        assert call_args.kwargs["temperature"] == 0.7
 
 
-class TestLLMErrorHandling:
+class TestLLMAdapterErrorHandling:
     """Test error handling scenarios."""
 
     @pytest.mark.asyncio
-    async def test_api_error_handling(self, llm_client: LLMClient):
+    async def test_api_error(self, llm_adapter: OpenAILLMAdapter, mock_openai_client):
         """Test handling of API errors."""
-        llm_client.client.chat.completions.create = AsyncMock(
-            side_effect=Exception("API error")
-        )
-        
-        with pytest.raises(Exception):
-            await llm_client.decompose_claims("test text")
+        from openai import APIStatusError
 
-    @pytest.mark.asyncio
-    async def test_invalid_json_response(self, llm_client: LLMClient):
-        """Test handling invalid JSON response."""
-        mock_message = MagicMock()
-        mock_message.content = "Invalid JSON"
-        mock_choice = MagicMock()
-        mock_choice.message = mock_message
         mock_response = MagicMock()
-        mock_response.choices = [mock_choice]
-        llm_client.client.chat.completions.create = AsyncMock(return_value=mock_response)
-        
-        # Should handle invalid JSON gracefully
-        claims = await llm_client.decompose_claims("test text")
-        assert isinstance(claims, list)
+        mock_response.status_code = 500
+        mock_openai_client.chat.completions.create.side_effect = APIStatusError(
+            message="Server error",
+            response=mock_response,
+            body=None,
+        )
+
+        with pytest.raises(LLMProviderError):
+            await llm_adapter.complete([LLMMessage(role="user", content="test")])
 
     @pytest.mark.asyncio
-    async def test_timeout_handling(self, llm_client: LLMClient):
-        """Test handling of timeout errors."""
-        llm_client.client.chat.completions.create = AsyncMock(
-            side_effect=TimeoutError("Request timeout")
-        )
-        
-        with pytest.raises(TimeoutError):
-            await llm_client.decompose_claims("test text")
+    async def test_health_check(self, llm_adapter: OpenAILLMAdapter, mock_openai_client):
+        """Test health check."""
+        result = await llm_adapter.health_check()
+
+        # Health check should call the API and return True on success
+        assert result is True

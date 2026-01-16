@@ -16,21 +16,29 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from services.verify import VerifyTextUseCase
+from adapters.openai import LLMProviderError
+from adapters.redis_cache import RedisCacheError
+from config.dependencies import (
+    get_llm_provider_optional,
+    get_verify_use_case,
+)
+from interfaces.llm import LLMProvider
+from interfaces.mcp import (
+    MCPConnectionError,
+    MCPQueryError,
+    reset_mcp_call_cache,
+    set_mcp_call_cache,
+)
+from interfaces.verification import EvidenceTier, VerificationStrategy
 from models.results import (
     CitationTrace,
     TrustScore,
     VerificationResult,
     VerificationStatus,
 )
+from pipeline.decomposer import DecompositionError
 from server.filters.verify_filters import build_default_filters
-from config.dependencies import (
-    get_llm_provider_optional,
-    get_verify_use_case,
-)
-from interfaces.llm import LLMProvider
-from interfaces.mcp import reset_mcp_call_cache, set_mcp_call_cache
-from interfaces.verification import EvidenceTier, VerificationStrategy
+from services.verify import VerifyTextUseCase
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -278,6 +286,80 @@ async def verify_text(
             skip_decomposition=request.skip_decomposition,
             tier=tier,
         )
+    except (MCPConnectionError, MCPQueryError) as e:
+        audit_logger.warning(f"[OUTPUT] ID: {request_seq} - RESULT: ERROR - SOURCES: 0")
+        logger.error(
+            "Verify request failed - external service unavailable",
+            extra={
+                "request_id": str(request_id),
+                "stage": "mcp_sources",
+                "error_type": type(e).__name__,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="External knowledge source temporarily unavailable",
+        ) from e
+    except LLMProviderError as e:
+        audit_logger.warning(f"[OUTPUT] ID: {request_seq} - RESULT: ERROR - SOURCES: 0")
+        logger.error(
+            "Verify request failed - LLM service error",
+            extra={
+                "request_id": str(request_id),
+                "stage": "llm_decomposition",
+                "error_type": type(e).__name__,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Language model service temporarily unavailable",
+        ) from e
+    except DecompositionError as e:
+        audit_logger.warning(f"[OUTPUT] ID: {request_seq} - RESULT: ERROR - SOURCES: 0")
+        logger.warning(
+            "Verify request failed - claim decomposition error",
+            extra={
+                "request_id": str(request_id),
+                "stage": "decomposition",
+                "error_type": type(e).__name__,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Could not extract verifiable claims from the input text",
+        ) from e
+    except RedisCacheError as e:
+        # Cache errors should not fail the request - log and continue without cache
+        logger.warning(
+            "Cache unavailable, proceeding without caching",
+            extra={
+                "request_id": str(request_id),
+                "error_type": type(e).__name__,
+            },
+        )
+        # Re-execute without cache
+        result = await use_case.execute(
+            text=input_text,
+            strategy=strategy,
+            use_cache=False,
+            context=request.context,
+            target_sources=request.target_sources,
+            skip_decomposition=request.skip_decomposition,
+            tier=tier,
+        )
+    except TimeoutError as e:
+        audit_logger.warning(f"[OUTPUT] ID: {request_seq} - RESULT: TIMEOUT - SOURCES: 0")
+        logger.error(
+            "Verify request timed out",
+            extra={
+                "request_id": str(request_id),
+                "stage": "use_case.execute",
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Verification request timed out",
+        ) from e
     except Exception as e:
         audit_logger.warning(f"[OUTPUT] ID: {request_seq} - RESULT: ERROR - SOURCES: 0")
         logger.error(
@@ -286,11 +368,12 @@ async def verify_text(
                 "request_id": str(request_id),
                 "stage": "use_case.execute",
                 "error_type": type(e).__name__,
+                "error_message": str(e),
             },
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Verification failed: {e!s}",
+            detail="An unexpected error occurred during verification",
         ) from e
     finally:
         reset_mcp_call_cache(token)

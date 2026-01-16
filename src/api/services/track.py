@@ -14,20 +14,20 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from interfaces.llm import LLMMessage
 from models.track import (
     MCP_SOURCE_DESCRIPTIONS,
     KnowledgeTrackResult,
     SourceReference,
     TraceData,
 )
-from interfaces.llm import LLMMessage
 
 if TYPE_CHECKING:
+    from interfaces.llm import LLMProvider
+    from interfaces.tracking import KnowledgeTracker
     from pipeline.mesh import (
         KnowledgeMeshBuilder,
     )
-    from interfaces.tracking import KnowledgeTracker
-    from interfaces.llm import LLMProvider
 
 logger = logging.getLogger(__name__)
 

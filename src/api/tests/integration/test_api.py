@@ -11,8 +11,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from open_hallucination_index.domain.entities import Claim, ClaimType
-from open_hallucination_index.domain.results import (
+from models.entities import Claim, ClaimType
+from models.results import (
     CitationTrace,
     ClaimVerification,
     TrustScore,

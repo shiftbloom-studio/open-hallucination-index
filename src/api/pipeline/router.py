@@ -13,12 +13,12 @@ This enables latency-optimized evidence retrieval by:
 
 from __future__ import annotations
 
-import re
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from interfaces.llm import LLMMessage, LLMProvider
 
@@ -389,15 +389,26 @@ Return valid JSON only:
             
             data = json.loads(content)
             
-            domain_str = data.get("domain", "general").lower()
+            # Handle domain field (might be string or list)
+            domain_raw = data.get("domain", "general")
+            if isinstance(domain_raw, list):
+                domain_str = domain_raw[0].lower() if domain_raw else "general"
+            else:
+                domain_str = str(domain_raw).lower()
+            
             try:
                 domain = ClaimDomain(domain_str)
             except ValueError:
                 domain = ClaimDomain.GENERAL
                 
             confidence = float(data.get("confidence", 0.5))
-            entities = data.get("entities", [])
-            keywords = data.get("keywords", [])
+            
+            # Handle entities and keywords (ensure they're lists of strings)
+            entities_raw = data.get("entities", [])
+            entities = [str(e) for e in entities_raw] if isinstance(entities_raw, list) else []
+            
+            keywords_raw = data.get("keywords", [])
+            keywords = [str(k) for k in keywords_raw] if isinstance(keywords_raw, list) else []
             
             # Combine logic
             recommendations = self._build_recommendations(domain, entities, keywords)

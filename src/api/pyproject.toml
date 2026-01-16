@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "open-hallucination-index"
 version = "0.1.0"
 description = "Middleware API for LLM hallucination detection via claim verification against trusted knowledge graphs and vector stores"
-readme = "../README.md"
+readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 authors = [

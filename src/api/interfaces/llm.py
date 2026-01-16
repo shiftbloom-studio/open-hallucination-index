@@ -57,6 +57,7 @@ class LLMProvider(ABC):
         temperature: float = 0.0,
         max_tokens: int | None = None,
         stop: list[str] | None = None,
+        json_mode: bool = False,
     ) -> LLMResponse:
         """
         Generate a completion for the given messages.

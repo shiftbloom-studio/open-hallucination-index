@@ -1,0 +1,193 @@
+{
+  "run_id": "comparison_20260116_180925_4bf061",
+  "timestamp": "2026-01-16T18:09:25.385884+00:00",
+  "config": {
+    "evaluators": [
+      "ohi",
+      "vector_rag",
+      "graph_rag"
+    ],
+    "metrics": [
+      "hallucination",
+      "truthfulqa",
+      "factscore",
+      "latency"
+    ],
+    "hallucination_dataset": "benchmark\\benchmark_dataset.csv",
+    "ohi_all_strategies": false,
+    "cache_testing": false
+  },
+  "evaluators": {
+    "OHI": {
+      "evaluator": "OHI",
+      "hallucination": {
+        "total": 60,
+        "accuracy": 0.9333,
+        "precision": 1.0,
+        "recall": 0.9333,
+        "f1_score": 0.9655,
+        "specificity": 0.0,
+        "hallucination_pass_rate": 0.0,
+        "mcc": 0.0,
+        "confusion_matrix": {
+          "tp": 56,
+          "tn": 0,
+          "fp": 0,
+          "fn": 4
+        }
+      },
+      "truthfulqa": {
+        "total_questions": 60,
+        "accuracy": 0.6167,
+        "mc1_accuracy": 0.0,
+        "mc2_accuracy": 0.0,
+        "category_results": {}
+      },
+      "factscore": {
+        "total_texts": 5,
+        "total_facts": 32,
+        "supported_facts": 26,
+        "factscore": 0.8125,
+        "avg_factscore": 0.7944,
+        "std_factscore": 0.1681,
+        "avg_facts_per_text": 6.4
+      },
+      "latency": {
+        "total_requests": 124,
+        "mean_ms": 7610.14,
+        "median_ms": 6931.95,
+        "std_ms": 2624.83,
+        "p50_ms": 6931.95,
+        "p90_ms": 11118.25,
+        "p95_ms": 11676.38,
+        "p99_ms": 13529.88,
+        "min_ms": 2491.12,
+        "max_ms": 21109.75,
+        "throughput_rps": 0.14
+      }
+    },
+    "VectorRAG": {
+      "evaluator": "VectorRAG",
+      "hallucination": {
+        "total": 60,
+        "accuracy": 0.8,
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1_score": 0.8889,
+        "specificity": 0.0,
+        "hallucination_pass_rate": 0.0,
+        "mcc": 0.0,
+        "confusion_matrix": {
+          "tp": 48,
+          "tn": 0,
+          "fp": 0,
+          "fn": 12
+        }
+      },
+      "truthfulqa": {
+        "total_questions": 60,
+        "accuracy": 0.5667,
+        "mc1_accuracy": 0.0,
+        "mc2_accuracy": 0.0,
+        "category_results": {}
+      },
+      "factscore": {
+        "total_texts": 5,
+        "total_facts": 11,
+        "supported_facts": 5,
+        "factscore": 0.4545,
+        "avg_factscore": 0.4667,
+        "std_factscore": 0.3232,
+        "avg_facts_per_text": 2.2
+      },
+      "latency": {
+        "total_requests": 124,
+        "mean_ms": 2176.65,
+        "median_ms": 2074.38,
+        "std_ms": 518.65,
+        "p50_ms": 2074.38,
+        "p90_ms": 2100.65,
+        "p95_ms": 2186.67,
+        "p99_ms": 4243.6,
+        "min_ms": 2025.33,
+        "max_ms": 6216.53,
+        "throughput_rps": 0.48
+      }
+    },
+    "GraphRAG": {
+      "evaluator": "GraphRAG",
+      "hallucination": {
+        "total": 60,
+        "accuracy": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "specificity": 0.0,
+        "hallucination_pass_rate": 0.0,
+        "mcc": 0.0,
+        "confusion_matrix": {
+          "tp": 60,
+          "tn": 0,
+          "fp": 0,
+          "fn": 0
+        }
+      },
+      "truthfulqa": {
+        "total_questions": 60,
+        "accuracy": 0.6,
+        "mc1_accuracy": 0.0,
+        "mc2_accuracy": 0.0,
+        "category_results": {}
+      },
+      "factscore": {
+        "total_texts": 5,
+        "total_facts": 11,
+        "supported_facts": 11,
+        "factscore": 1.0,
+        "avg_factscore": 1.0,
+        "std_factscore": 0.0,
+        "avg_facts_per_text": 2.2
+      },
+      "latency": {
+        "total_requests": 124,
+        "mean_ms": 12794.87,
+        "median_ms": 12723.76,
+        "std_ms": 3316.58,
+        "p50_ms": 12723.76,
+        "p90_ms": 13301.67,
+        "p95_ms": 13489.68,
+        "p99_ms": 25688.64,
+        "min_ms": 5500.5,
+        "max_ms": 35856.18,
+        "throughput_rps": 0.08
+      }
+    }
+  },
+  "rankings": {
+    "by_f1": [
+      "GraphRAG",
+      "OHI",
+      "VectorRAG"
+    ],
+    "by_accuracy": [
+      "GraphRAG",
+      "OHI",
+      "VectorRAG"
+    ],
+    "by_safety": [
+      "OHI",
+      "VectorRAG",
+      "GraphRAG"
+    ],
+    "by_factscore": [
+      "GraphRAG",
+      "OHI",
+      "VectorRAG"
+    ],
+    "by_latency": [
+      "VectorRAG",
+      "OHI",
+      "GraphRAG"
+    ]
+  }
+}

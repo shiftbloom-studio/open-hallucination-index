@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from open_hallucination_index.domain.entities import (
+from models.entities import (
     Claim,
     ClaimType,
     Evidence,
@@ -145,5 +145,16 @@ class TestEvidence:
             "news",
             "world_bank",
             "osv",
+            # Direct MCP source adapters
+            "wikimedia_rest",
+            "wikidata",
+            "opencitations",
+            "openalex",
+            "ncbi",
+            "mediawiki",
+            "europe_pmc",
+            "dbpedia",
+            "crossref",
+            "clinicaltrials",
         ]
         assert sources == expected

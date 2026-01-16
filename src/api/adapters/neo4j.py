@@ -53,14 +53,14 @@ from uuid import uuid4
 from neo4j import AsyncGraphDatabase
 from neo4j.exceptions import AuthError, ServiceUnavailable
 
-from models.entities import Evidence, EvidenceSource
 from interfaces.stores import GraphKnowledgeStore
+from models.entities import Evidence, EvidenceSource
 
 if TYPE_CHECKING:
     from neo4j import AsyncDriver
 
-    from models.entities import Claim
     from config.settings import Neo4jSettings
+    from models.entities import Claim
 
 logger = logging.getLogger(__name__)
 

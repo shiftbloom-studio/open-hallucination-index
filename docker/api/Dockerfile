@@ -18,7 +18,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY src/api/pyproject.toml /app/pyproject.toml
-COPY README.md /README.md
+COPY src/api/README.md /app/README.md
 # Copy all Python modules directly
 COPY src/api/__init__.py /app/__init__.py
 COPY src/api/models /app/models

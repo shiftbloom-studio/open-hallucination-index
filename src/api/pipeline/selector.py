@@ -15,17 +15,17 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from interfaces.llm import LLMProvider
 from pipeline.router import (
     ClaimDomain,
     RoutingDecision,
     SourceTier,
     get_claim_router,
 )
-from interfaces.llm import LLMProvider
 
 if TYPE_CHECKING:
-    from models.entities import Claim
     from interfaces.mcp import MCPKnowledgeSource
+    from models.entities import Claim
 
 logger = logging.getLogger(__name__)
 
@@ -164,13 +164,16 @@ class SmartMCPSelector:
             routing_decision=decision,
         )
 
-    def select_batch(self, claims: list[Claim]) -> dict[str, MCPSelection]:
+    async def select_batch(self, claims: list[Claim]) -> dict[str, MCPSelection]:
         """
         Select sources for multiple claims.
 
         Returns a mapping of claim_id → MCPSelection.
         """
-        return {str(claim.id): self.select(claim) for claim in claims}
+        import asyncio
+
+        results = await asyncio.gather(*(self.select(claim) for claim in claims))
+        return {str(claim.id): result for claim, result in zip(claims, results, strict=True)}
 
     def get_sources_for_selection(self, selection: MCPSelection) -> list[MCPKnowledgeSource]:
         """

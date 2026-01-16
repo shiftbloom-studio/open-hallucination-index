@@ -26,13 +26,13 @@ from typing import TYPE_CHECKING, Any
 from models.entities import Evidence, EvidenceSource
 
 if TYPE_CHECKING:
-    from models.entities import Claim
-    from pipeline.selector import SmartMCPSelector
+    from interfaces.mcp import MCPKnowledgeSource
     from interfaces.stores import (
         GraphKnowledgeStore,
         VectorKnowledgeStore,
     )
-    from interfaces.mcp import MCPKnowledgeSource
+    from models.entities import Claim
+    from pipeline.selector import SmartMCPSelector
 
 logger = logging.getLogger(__name__)
 

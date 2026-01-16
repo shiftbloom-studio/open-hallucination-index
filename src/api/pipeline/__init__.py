@@ -5,13 +5,13 @@ OHI Pipeline - Verification Flow Stages
 The verification pipeline: decompose → route → collect → verify → score
 """
 
-from pipeline.decomposer import LLMClaimDecomposer
-from pipeline.router import ClaimRouter
 from pipeline.collector import AdaptiveEvidenceCollector
-from pipeline.selector import SmartMCPSelector
-from pipeline.oracle import HybridVerificationOracle
-from pipeline.scorer import WeightedScorer
+from pipeline.decomposer import LLMClaimDecomposer
 from pipeline.mesh import KnowledgeMeshBuilder
+from pipeline.oracle import HybridVerificationOracle
+from pipeline.router import ClaimRouter
+from pipeline.scorer import WeightedScorer
+from pipeline.selector import SmartMCPSelector
 
 __all__ = [
     # Stage 1: Decomposition

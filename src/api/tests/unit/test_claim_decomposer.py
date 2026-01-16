@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from open_hallucination_index.domain.entities import ClaimType
-from open_hallucination_index.domain.services.claim_decomposer import (
+from interfaces.llm import LLMResponse
+from models.entities import ClaimType
+from pipeline.decomposer import (
     DecompositionError,
     LLMClaimDecomposer,
 )
-from open_hallucination_index.ports.llm_provider import LLMResponse
 
 
 class TestLLMClaimDecomposer:

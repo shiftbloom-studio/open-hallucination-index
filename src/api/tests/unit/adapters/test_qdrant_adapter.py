@@ -5,55 +5,64 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from open_hallucination_index.adapters.qdrant_vector_store import QdrantVectorStore
-from open_hallucination_index.domain.entities import Evidence
+from adapters.qdrant import QdrantVectorAdapter
+from config.settings import QdrantSettings
+from models.entities import Evidence
+
+
+@pytest.fixture
+def mock_settings():
+    """Mock Qdrant settings."""
+    settings = MagicMock(spec=QdrantSettings)
+    settings.host = "localhost"
+    settings.port = 6333
+    settings.grpc_port = 6334
+    settings.api_key = None
+    settings.collection_name = "test_collection"
+    settings.vector_size = 384
+    settings.use_grpc = False
+    return settings
 
 
 @pytest.fixture
 def mock_qdrant_client():
     """Mock Qdrant client."""
-    return MagicMock()
+    client = MagicMock()
+    client.search = MagicMock(return_value=[])
+    return client
 
 
 @pytest.fixture
-def mock_embedding_model():
-    """Mock sentence transformer."""
+def mock_embedding_func():
+    """Mock embedding function."""
     import numpy as np
 
-    mock_model = MagicMock()
-    mock_model.encode.return_value = np.random.rand(384).astype("float32")
-    return mock_model
+    async def embed(texts: list[str]) -> list[list[float]]:
+        return [np.random.rand(384).astype("float32").tolist() for _ in texts]
+
+    return embed
 
 
 @pytest.fixture
-def qdrant_store(mock_qdrant_client, mock_embedding_model):
+def qdrant_store(mock_settings, mock_qdrant_client, mock_embedding_func):
     """Qdrant store with mocked client."""
-    with patch(
-        "qdrant_client.QdrantClient", return_value=mock_qdrant_client
-    ), patch(
-        "sentence_transformers.SentenceTransformer", return_value=mock_embedding_model
-    ):
-        store = QdrantVectorStore(
-            url="http://localhost:6333",
-            collection_name="test_collection",
-            embedding_model="sentence-transformers/all-MiniLM-L12-v2",
-        )
-        store.client = mock_qdrant_client
-        store.model = mock_embedding_model
+    with patch("adapters.qdrant.QdrantClient", return_value=mock_qdrant_client):
+        store = QdrantVectorAdapter(mock_settings, embedding_func=mock_embedding_func)
+        store._client = mock_qdrant_client
         return store
 
 
-class TestQdrantVectorStore:
-    """Test QdrantVectorStore adapter."""
+class TestQdrantVectorAdapter:
+    """Test QdrantVectorAdapter adapter."""
 
-    def test_initialization(self, qdrant_store: QdrantVectorStore):
+    def test_initialization(self, qdrant_store: QdrantVectorAdapter):
         """Test store initialization."""
         assert qdrant_store is not None
         assert qdrant_store.client is not None
         assert qdrant_store.model is not None
 
     @pytest.mark.asyncio
-    async def test_find_evidence_semantic(self, qdrant_store: QdrantVectorStore):
+    async def test_find_evidence_semantic(self, qdrant_store: QdrantVectorAdapter):
         """Test semantic search for evidence."""
         claim = "Python is a programming language"
         
@@ -75,7 +84,7 @@ class TestQdrantVectorStore:
         assert evidence[0].score >= 0.0
 
     @pytest.mark.asyncio
-    async def test_find_evidence_empty(self, qdrant_store: QdrantVectorStore):
+    async def test_find_evidence_empty(self, qdrant_store: QdrantVectorAdapter):
         """Test search with no results."""
         claim = "Nonexistent information"
         
@@ -86,7 +95,7 @@ class TestQdrantVectorStore:
         assert len(evidence) == 0
 
     @pytest.mark.asyncio
-    async def test_embedding_generation(self, qdrant_store: QdrantVectorStore):
+    async def test_embedding_generation(self, qdrant_store: QdrantVectorAdapter):
         """Test embedding generation."""
         text = "Test text for embedding"
         
@@ -102,7 +111,7 @@ class TestQdrantErrorHandling:
 
     @pytest.mark.asyncio
     async def test_search_error_handling(
-        self, qdrant_store: QdrantVectorStore
+        self, qdrant_store: QdrantVectorAdapter
     ):
         """Test handling of search errors."""
         qdrant_store.client.search.side_effect = Exception("Search failed")
@@ -112,7 +121,7 @@ class TestQdrantErrorHandling:
 
     @pytest.mark.asyncio
     async def test_embedding_error_handling(
-        self, qdrant_store: QdrantVectorStore
+        self, qdrant_store: QdrantVectorAdapter
     ):
         """Test handling of embedding errors."""
         qdrant_store.model.encode.side_effect = Exception("Embedding failed")

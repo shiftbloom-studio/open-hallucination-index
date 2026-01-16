@@ -22,13 +22,13 @@ from uuid import uuid4
 
 import httpx
 
-from models.entities import Evidence, EvidenceSource
 from interfaces.mcp import (
     MCPConnectionError,
     MCPKnowledgeSource,
     MCPQueryError,
     get_mcp_call_cache,
 )
+from models.entities import Evidence, EvidenceSource
 
 if TYPE_CHECKING:
     from models.entities import Claim
@@ -176,7 +176,7 @@ class HTTPMCPAdapter(MCPKnowledgeSource):
         if cache is not None:
             try:
                 args_payload = json.dumps(arguments, sort_keys=True, default=str)
-                cache_key = hashlib.sha256(f"{tool_name}:{args_payload}".encode("utf-8")).hexdigest()
+                cache_key = hashlib.sha256(f"{tool_name}:{args_payload}".encode()).hexdigest()
                 cached = cache.get(cache_key)
                 if cached is not None:
                     logger.debug(
@@ -267,10 +267,7 @@ class HTTPMCPAdapter(MCPKnowledgeSource):
 
         # Normalize scores that may be on 0-100 scale or otherwise out of range
         if score > 1.0:
-            if score <= 100.0:
-                score = score / 100.0
-            else:
-                score = 1.0
+            score = score / 100.0 if score <= 100.0 else 1.0
         elif score < 0.0:
             score = 0.0
 

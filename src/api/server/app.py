@@ -16,9 +16,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse, Response
 from fastapi.security import APIKeyHeader
 
-from server.routes import health_router, track_router, verify_router
-from config.settings import get_settings
 from config.dependencies import lifespan_manager
+from config.settings import get_settings
+from server.routes import health_router, track_router, verify_router
 
 # API Key header
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -81,7 +81,7 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
     async def timeout_middleware(request: Request, call_next):
         try:
             return await asyncio.wait_for(call_next(request), timeout=240.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ORJSONResponse(
                 status_code=504,
                 content={

@@ -13,9 +13,9 @@ import re
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from models.entities import Claim, ClaimType
 from interfaces.decomposition import ClaimDecomposer
 from interfaces.llm import LLMMessage
+from models.entities import Claim, ClaimType
 
 if TYPE_CHECKING:
     from interfaces.llm import LLMProvider
@@ -137,7 +137,7 @@ class LLMClaimDecomposer(ClaimDecomposer):
                 messages,
                 temperature=0.0,
                 max_tokens=2048,
-                json_mode=True,  # [NEU] Aktivieren
+                json_mode=True,
             )
 
             claims = self._parse_response(response.content, text)

@@ -14,29 +14,29 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, cast
 
-from models.entities import Evidence
-from models.results import (
-    CitationTrace,
-    VerificationStatus,
-)
 from interfaces.verification import (
     EvidenceTier,
     VerificationOracle,
     VerificationStrategy,
 )
+from models.entities import Evidence
+from models.results import (
+    CitationTrace,
+    VerificationStatus,
+)
 
 if TYPE_CHECKING:
+    from interfaces.llm import LLMProvider
+    from interfaces.mcp import MCPKnowledgeSource
+    from interfaces.stores import (
+        GraphKnowledgeStore,
+        VectorKnowledgeStore,
+    )
     from models.entities import Claim
     from pipeline.collector import (
         AdaptiveEvidenceCollector,
     )
     from pipeline.selector import SmartMCPSelector
-    from interfaces.stores import (
-        GraphKnowledgeStore,
-        VectorKnowledgeStore,
-    )
-    from interfaces.llm import LLMProvider
-    from interfaces.mcp import MCPKnowledgeSource
 
 logger = logging.getLogger(__name__)
 

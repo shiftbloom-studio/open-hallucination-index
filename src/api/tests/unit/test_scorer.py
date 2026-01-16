@@ -7,13 +7,13 @@ from uuid import uuid4
 
 import pytest
 
-from open_hallucination_index.domain.entities import Claim, ClaimType
-from open_hallucination_index.domain.results import (
+from models.entities import Claim, ClaimType
+from models.results import (
     CitationTrace,
     ClaimVerification,
     VerificationStatus,
 )
-from open_hallucination_index.domain.services.scorer import StrictScorer, WeightedScorer
+from pipeline.scorer import StrictScorer, WeightedScorer
 
 
 def create_verification(

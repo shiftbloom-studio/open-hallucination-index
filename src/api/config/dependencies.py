@@ -19,41 +19,41 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
-from adapters.redis_cache import RedisCacheAdapter
 from adapters.embeddings import LocalEmbeddingAdapter
+from adapters.mcp_ohi import OHIMCPAdapter, TargetedOHISource
 from adapters.neo4j import Neo4jGraphAdapter
 from adapters.openai import OpenAILLMAdapter
-from adapters.mcp_ohi import OHIMCPAdapter, TargetedOHISource
-from adapters.redis_trace import RedisTraceAdapter
 from adapters.qdrant import QdrantVectorAdapter
-from services.track import (
-    KnowledgeTrackService,
-)
-from services.verify import VerifyTextUseCase
-from pipeline.decomposer import LLMClaimDecomposer
-from pipeline.collector import (
-    AdaptiveEvidenceCollector,
-)
-from pipeline.selector import SmartMCPSelector
-from pipeline.mesh import KnowledgeMeshBuilder
-from pipeline.scorer import WeightedScorer
-from pipeline.oracle import (
-    HybridVerificationOracle,
-)
+from adapters.redis_cache import RedisCacheAdapter
+from adapters.redis_trace import RedisTraceAdapter
 from config.settings import get_settings
 from interfaces.cache import CacheProvider
 from interfaces.decomposition import ClaimDecomposer
+from interfaces.llm import LLMProvider
+from interfaces.mcp import MCPKnowledgeSource
+from interfaces.scoring import Scorer
 from interfaces.stores import (
     GraphKnowledgeStore,
     VectorKnowledgeStore,
 )
-from interfaces.llm import LLMProvider
-from interfaces.mcp import MCPKnowledgeSource
-from interfaces.scoring import Scorer
 from interfaces.verification import (
     VerificationOracle,
     VerificationStrategy,
 )
+from pipeline.collector import (
+    AdaptiveEvidenceCollector,
+)
+from pipeline.decomposer import LLMClaimDecomposer
+from pipeline.mesh import KnowledgeMeshBuilder
+from pipeline.oracle import (
+    HybridVerificationOracle,
+)
+from pipeline.scorer import WeightedScorer
+from pipeline.selector import SmartMCPSelector
+from services.track import (
+    KnowledgeTrackService,
+)
+from services.verify import VerifyTextUseCase
 
 logger = logging.getLogger(__name__)
 

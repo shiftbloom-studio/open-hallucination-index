@@ -1,12 +1,26 @@
 """Unit tests for Neo4j graph store adapter."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
-from open_hallucination_index.adapters.neo4j_graph_store import Neo4jGraphStore
-from open_hallucination_index.domain.entities import Evidence, EvidenceSource
+from adapters.neo4j import Neo4jGraphAdapter
+from config.settings import Neo4jSettings
+from models.entities import Evidence
+
+
+@pytest.fixture
+def mock_settings():
+    """Mock Neo4j settings."""
+    settings = MagicMock(spec=Neo4jSettings)
+    settings.uri = "bolt://localhost:7687"
+    settings.username = "neo4j"
+    settings.password = SecretStr("test_password")
+    settings.database = "neo4j"
+    settings.max_connection_pool_size = 50
+    return settings
 
 
 @pytest.fixture
@@ -20,28 +34,24 @@ def mock_neo4j_driver():
 
 
 @pytest.fixture
-def neo4j_store(mock_neo4j_driver):
+def neo4j_store(mock_settings, mock_neo4j_driver):
     """Neo4j store with mocked driver."""
-    with patch("neo4j.GraphDatabase.driver", return_value=mock_neo4j_driver):
-        store = Neo4jGraphStore(
-            uri="bolt://localhost:7687",
-            user="neo4j",
-            password="test_password",
-        )
-        store.driver = mock_neo4j_driver
+    with patch("adapters.neo4j.GraphDatabase.driver", return_value=mock_neo4j_driver):
+        store = Neo4jGraphAdapter(mock_settings)
+        store._driver = mock_neo4j_driver
         return store
 
 
-class TestNeo4jGraphStore:
-    """Test Neo4jGraphStore adapter."""
+class TestNeo4jGraphAdapter:
+    """Test Neo4jGraphAdapter adapter."""
 
-    def test_initialization(self, neo4j_store: Neo4jGraphStore):
+    def test_initialization(self, neo4j_store: Neo4jGraphAdapter):
         """Test store initialization."""
         assert neo4j_store is not None
-        assert neo4j_store.driver is not None
+        assert neo4j_store._driver is not None
 
     @pytest.mark.asyncio
-    async def test_find_evidence_basic(self, neo4j_store: Neo4jGraphStore):
+    async def test_find_evidence_basic(self, neo4j_store: Neo4jGraphAdapter):
         """Test finding evidence for a claim."""
         claim = "Python was created in 1991"
         
@@ -57,7 +67,7 @@ class TestNeo4jGraphStore:
         mock_result = MagicMock()
         mock_result.__iter__.return_value = iter([mock_record])
         
-        mock_session = neo4j_store.driver.session.return_value.__enter__.return_value
+        mock_session = neo4j_store._driver.session.return_value.__enter__.return_value
         mock_session.run.return_value = mock_result
         
         evidence = await neo4j_store.find_evidence(claim, limit=5)
@@ -66,21 +76,21 @@ class TestNeo4jGraphStore:
         assert isinstance(evidence[0], Evidence)
 
     @pytest.mark.asyncio
-    async def test_find_evidence_empty(self, neo4j_store: Neo4jGraphStore):
+    async def test_find_evidence_empty(self, neo4j_store: Neo4jGraphAdapter):
         """Test finding evidence with no results."""
         claim = "Completely fabricated claim"
         
         mock_result = MagicMock()
         mock_result.__iter__.return_value = iter([])
         
-        mock_session = neo4j_store.driver.session.return_value.__enter__.return_value
+        mock_session = neo4j_store._driver.session.return_value.__enter__.return_value
         mock_session.run.return_value = mock_result
         
         evidence = await neo4j_store.find_evidence(claim, limit=5)
         
         assert len(evidence) == 0
 
-    def test_close(self, neo4j_store: Neo4jGraphStore):
+    def test_close(self, neo4j_store: Neo4jGraphAdapter):
         """Test closing the connection."""
         neo4j_store.close()
         # Should not raise exception
@@ -91,29 +101,25 @@ class TestNeo4jConnectionHandling:
     """Test connection handling and error scenarios."""
 
     @pytest.mark.asyncio
-    async def test_connection_error_handling(self):
+    async def test_connection_error_handling(self, mock_settings):
         """Test handling of connection errors."""
-        with patch("neo4j.GraphDatabase.driver") as mock_driver_fn:
+        with patch("adapters.neo4j.GraphDatabase.driver") as mock_driver_fn:
             mock_driver = MagicMock()
             mock_driver.session.side_effect = Exception("Connection failed")
             mock_driver_fn.return_value = mock_driver
-            
-            store = Neo4jGraphStore(
-                uri="bolt://localhost:7687",
-                user="neo4j",
-                password="test",
-            )
-            store.driver = mock_driver
-            
+
+            store = Neo4jGraphAdapter(mock_settings)
+            store._driver = mock_driver
+
             # Should handle error gracefully
             with pytest.raises(Exception):
                 await store.find_evidence("test claim")
 
-    def test_verify_connectivity(self, neo4j_store: Neo4jGraphStore):
+    def test_verify_connectivity(self, neo4j_store: Neo4jGraphAdapter):
         """Test connectivity verification."""
-        mock_session = neo4j_store.driver.session.return_value.__enter__.return_value
+        mock_session = neo4j_store._driver.session.return_value.__enter__.return_value
         mock_session.run.return_value = MagicMock()
         
         # Should not raise exception with mocked driver
-        result = neo4j_store.driver.verify_connectivity()
+        result = neo4j_store._driver.verify_connectivity()
         assert result is not None or result is None  # Mock can return anything

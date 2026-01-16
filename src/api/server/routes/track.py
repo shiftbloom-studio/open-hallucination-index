@@ -15,14 +15,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from config.dependencies import (
+    get_knowledge_track_service,
+)
 from models.track import (
     EdgeType,
     KnowledgeMesh,
     KnowledgeTrackResult,
     NodeType,
-)
-from config.dependencies import (
-    get_knowledge_track_service,
 )
 
 router = APIRouter()

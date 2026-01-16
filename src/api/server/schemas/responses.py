@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from models.results import TrustScore, VerificationStatus, CitationTrace
+from models.results import CitationTrace, TrustScore, VerificationStatus
 
 
 class ClaimSummary(BaseModel):

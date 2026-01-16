@@ -7,7 +7,6 @@ CLI entrypoint for running the API server.
 
 from __future__ import annotations
 
-import logging
 import sys
 
 import uvicorn
@@ -25,8 +24,7 @@ def main() -> None:
     # NOTE: Logging is now configured in the lifespan manager to avoid
     # duplicate logs when workers are spawned or app factory is called multiple times.
     # Only log startup messages here (before uvicorn takes over).
-    logger = logging.getLogger(__name__)
-    
+
     # Basic console output for startup (uvicorn will configure its own logging)
     print(f"Starting {settings.api.title} v{settings.api.version}")
     print(f"Environment: {settings.environment}")
@@ -53,4 +51,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    sys.exit(main() or 0)
+    main()
+    sys.exit(0)

@@ -13,13 +13,13 @@ from typing import Literal
 from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 
-from config.settings import get_settings
 from config.dependencies import (
     get_cache_provider,
     get_graph_store,
     get_llm_provider,
     get_vector_store,
 )
+from config.settings import get_settings
 
 router = APIRouter()
 

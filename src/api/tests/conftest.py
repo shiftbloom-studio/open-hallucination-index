@@ -12,19 +12,19 @@ from uuid import uuid4
 
 import pytest
 
-from open_hallucination_index.domain.entities import (
+from interfaces.verification import VerificationStrategy
+from models.entities import (
     Claim,
     ClaimType,
     Evidence,
     EvidenceSource,
 )
-from open_hallucination_index.domain.results import (
+from models.results import (
     CitationTrace,
     ClaimVerification,
     TrustScore,
     VerificationStatus,
 )
-from open_hallucination_index.ports.verification_oracle import VerificationStrategy
 
 if TYPE_CHECKING:
     pass

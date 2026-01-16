@@ -19,7 +19,9 @@ import hashlib
 import time
 from typing import TYPE_CHECKING
 
+from models.entities import Claim, ClaimType
 from models.results import (
+    CitationTrace,
     ClaimVerification,
     TrustScore,
     VerificationResult,
@@ -29,8 +31,8 @@ from models.results import (
 if TYPE_CHECKING:
     from interfaces.cache import CacheProvider
     from interfaces.decomposition import ClaimDecomposer
-    from interfaces.tracking import KnowledgeTracker
     from interfaces.scoring import Scorer
+    from interfaces.tracking import KnowledgeTracker
     from interfaces.verification import (
         EvidenceTier,
         VerificationOracle,
@@ -123,8 +125,6 @@ class VerifyTextUseCase:
 
         # Step 2: Decompose text into claims
         if skip_decomposition:
-            from models.entities import Claim, ClaimType
-
             claims = [
                 Claim(
                     text=text.strip(),
@@ -153,9 +153,9 @@ class VerifyTextUseCase:
             cached_claims = {h: v for h, v in cached_map.items() if v is not None}
 
         # Step 3: Verify each claim (skip cached claims)
-        claims_to_verify: list = []
-        results_by_claim_id: dict = {}
-        cached_claim_ids: set = set()
+        claims_to_verify: list[Claim] = []
+        results_by_claim_id: dict[object, tuple[VerificationStatus, CitationTrace]] = {}
+        cached_claim_ids: set[object] = set()
 
         for claim, claim_hash in zip(claims, claim_hashes, strict=True):
             cached = cached_claims.get(claim_hash)
