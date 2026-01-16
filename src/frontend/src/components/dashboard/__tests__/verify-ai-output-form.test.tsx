@@ -18,7 +18,15 @@ vi.mock('@/lib/api', () => ({
   createApiClient: vi.fn(() => ({
     verifyText: vi.fn().mockResolvedValue({
       id: 'test-id',
-      trust_score: { score: 0.85 },
+      trust_score: { 
+        overall: 0.85,
+        claims_total: 3,
+        claims_supported: 2,
+        claims_refuted: 1,
+        claims_unverifiable: 0,
+        confidence: 0.9,
+        scoring_method: 'weighted_average'
+      },
       summary: 'Analyzed 3 claim(s): 2 supported, 1 refuted. Trust level: high.',
       claims: [
         {
@@ -27,6 +35,7 @@ vi.mock('@/lib/api', () => ({
           status: 'supported',
           confidence: 0.95,
           reasoning: 'Verified against knowledge base',
+          trace: null,
         },
         {
           id: 'claim-2',
@@ -34,6 +43,7 @@ vi.mock('@/lib/api', () => ({
           status: 'supported',
           confidence: 0.90,
           reasoning: 'Verified against knowledge base',
+          trace: null,
         },
         {
           id: 'claim-3',
@@ -41,6 +51,7 @@ vi.mock('@/lib/api', () => ({
           status: 'refuted',
           confidence: 0.99,
           reasoning: 'The Eiffel Tower is made of iron',
+          trace: null,
         },
       ],
       processing_time_ms: 150,

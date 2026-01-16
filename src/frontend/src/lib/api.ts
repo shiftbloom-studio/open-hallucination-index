@@ -8,8 +8,11 @@ export interface VerifyTextRequest {
   text: string;
   context?: string | null;
   strategy?: "graph_exact" | "vector_semantic" | "hybrid" | "cascading" | "mcp_enhanced" | "adaptive" | null;
+  tier?: "local" | "default" | "max" | null;
   use_cache?: boolean;
   target_sources?: number;
+  skip_decomposition?: boolean;
+  return_evidence?: boolean;
 }
 
 export interface BatchVerifyRequest {
@@ -34,7 +37,37 @@ export interface ReadinessStatus {
 }
 
 // From ref/responses.py & ref/verification.py
-export type VerificationStatus = "verified" | "refuted" | "unverified" | string; // Implied from usage, fallback to string
+export type VerificationStatus = "verified" | "refuted" | "unverified" | "supported" | "partially_supported" | "uncertain" | string;
+
+export type EvidenceSource = 
+  | "graph_exact" | "graph_inferred" | "vector_semantic" | "external_api" | "cached"
+  | "mcp_wikipedia" | "mcp_context7" | "wikipedia" | "knowledge_graph" | "academic"
+  | "pubmed" | "clinical_trials" | "news" | "world_bank" | "osv" | "wikimedia_rest"
+  | "wikidata" | "opencitations" | "openalex" | "ncbi" | "mediawiki" | "europe_pmc"
+  | "dbpedia" | "crossref" | "clinicaltrials" | string;
+
+export interface Evidence {
+  id: string; // UUID
+  source: EvidenceSource;
+  source_id?: string | null;
+  content: string;
+  structured_data?: Record<string, unknown> | null;
+  similarity_score?: number | null;
+  match_type?: string | null;
+  classification_confidence?: number | null;
+  retrieved_at: string; // ISO datetime
+  source_uri?: string | null;
+}
+
+export interface CitationTrace {
+  claim_id: string; // UUID
+  status: VerificationStatus;
+  reasoning: string;
+  supporting_evidence: Evidence[];
+  refuting_evidence: Evidence[];
+  confidence: number;
+  verification_strategy: string;
+}
 
 export interface ClaimSummary {
   id: string; // UUID
@@ -42,6 +75,7 @@ export interface ClaimSummary {
   status: VerificationStatus;
   confidence: number;
   reasoning: string;
+  trace?: CitationTrace | null;
 }
 
 // TrustScore structure matching Python backend (domain/results.py)

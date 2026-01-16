@@ -15,8 +15,14 @@ export const mockHealthResponse = {
 export const mockVerifyResponse = {
   id: '550e8400-e29b-41d4-a716-446655440000',
   trust_score: {
-    score: 0.85,
+    overall: 0.85,
+    claims_total: 2,
+    claims_supported: 2,
+    claims_refuted: 0,
+    claims_unverifiable: 0,
     confidence: 0.9,
+    scoring_method: 'weighted_average',
+    score: 0.85, // backward compatibility
   },
   summary: 'The text contains 2 claims, 1 verified and 1 unverified.',
   claims: [
@@ -26,6 +32,7 @@ export const mockVerifyResponse = {
       status: 'verified',
       confidence: 0.95,
       reasoning: 'This is a well-known scientific fact.',
+      trace: null,
     },
     {
       id: '550e8400-e29b-41d4-a716-446655440002',
@@ -33,6 +40,7 @@ export const mockVerifyResponse = {
       status: 'verified',
       confidence: 0.92,
       reasoning: 'Common knowledge confirmed by physics.',
+      trace: null,
     },
   ],
   processing_time_ms: 150,

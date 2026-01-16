@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { ClaimSummary, createApiClient, VerifyTextResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import CitationTraceViewer from "@/components/dashboard/citation-trace-viewer";
 
 const CHARACTERS_PER_TOKEN = 1000;
 const STANDARD_TARGET_SOURCES = 6;
@@ -39,6 +40,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
   const [text, setText] = useState("");
   const [context, setContext] = useState("");
   const [analysisMode, setAnalysisMode] = useState<"standard" | "expert">("standard");
+  const [returnEvidence, setReturnEvidence] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState<VerifyTextResponse | null>(null);
 
@@ -88,6 +90,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
         context: context || undefined,
         strategy: "adaptive",
         target_sources: targetSources,
+        return_evidence: returnEvidence,
       });
 
       setVerificationResult(result);
@@ -98,7 +101,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
     } finally {
       setIsVerifying(false);
     }
-  }, [text, context, tokensNeeded, userTokens, hasEnoughTokens, onTokensUpdated, targetSources]);
+  }, [text, context, tokensNeeded, userTokens, hasEnoughTokens, onTokensUpdated, targetSources, returnEvidence]);
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
@@ -192,6 +195,19 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
             <p className="text-xs text-muted-foreground">
               Sets the preferred number of sources to query for verification.
             </p>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="return-evidence"
+              checked={returnEvidence}
+              onChange={(e) => setReturnEvidence(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            <Label htmlFor="return-evidence" className="text-sm font-normal cursor-pointer">
+              Include detailed evidence and citation traces
+            </Label>
           </div>
 
           <div className="flex items-center justify-between pt-2">
@@ -296,30 +312,34 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
             <div className="space-y-3">
               <h4 className="text-sm font-medium text-muted-foreground">Analyzed Claims</h4>
               {verificationResult.claims.map((claim: ClaimSummary) => (
-                <div
-                  key={claim.id}
-                  className={cn(
-                    "p-4 rounded-lg border",
-                    getStatusColor(claim.status)
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5">
-                      {getStatusIcon(claim.status)}
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <p className="text-sm font-medium">{claim.text}</p>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span className="capitalize">{claim.status}</span>
-                        <span>Confidence: {(claim.confidence * 100).toFixed(0)}%</span>
+                <div key={claim.id} className="space-y-2">
+                  <div
+                    className={cn(
+                      "p-4 rounded-lg border",
+                      getStatusColor(claim.status)
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5">
+                        {getStatusIcon(claim.status)}
                       </div>
-                      {claim.reasoning && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {claim.reasoning}
-                        </p>
-                      )}
+                      <div className="flex-1 space-y-2">
+                        <p className="text-sm font-medium">{claim.text}</p>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <span className="capitalize">{claim.status}</span>
+                          <span>Confidence: {(claim.confidence * 100).toFixed(0)}%</span>
+                        </div>
+                        {claim.reasoning && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {claim.reasoning}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  {claim.trace && (
+                    <CitationTraceViewer trace={claim.trace} claimText={claim.text} />
+                  )}
                 </div>
               ))}
             </div>

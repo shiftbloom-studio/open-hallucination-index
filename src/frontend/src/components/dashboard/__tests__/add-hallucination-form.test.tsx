@@ -16,7 +16,15 @@ vi.mock('@/lib/api', () => ({
   createApiClient: vi.fn(() => ({
     verifyText: vi.fn().mockResolvedValue({
       id: 'test-id',
-      trust_score: { score: 0.85 },
+      trust_score: { 
+        overall: 0.85,
+        claims_total: 0,
+        claims_supported: 0,
+        claims_refuted: 0,
+        claims_unverifiable: 0,
+        confidence: 0.9,
+        scoring_method: 'weighted_average'
+      },
       summary: 'Test summary',
       claims: [],
       processing_time_ms: 100,

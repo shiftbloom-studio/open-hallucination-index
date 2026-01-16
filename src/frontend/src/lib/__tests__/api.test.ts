@@ -76,7 +76,7 @@ describe("ApiClient", () => {
       });
 
       expect(result).toEqual(mockVerifyResponse);
-      expect(result.trust_score.score).toBe(0.85);
+      expect(result.trust_score.overall).toBe(0.85);
       expect(result.claims).toHaveLength(2);
     });
 
