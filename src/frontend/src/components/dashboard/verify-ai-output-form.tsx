@@ -42,12 +42,31 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
   const [analysisMode, setAnalysisMode] = useState<"standard" | "expert">("standard");
   const [returnEvidence, setReturnEvidence] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [verificationResult, setVerificationResult] = useState<VerifyTextResponse | null>(null);
 
   const textLength = text.length;
   const tokensNeeded = Math.max(1, Math.ceil(textLength / CHARACTERS_PER_TOKEN));
   const hasEnoughTokens = userTokens >= tokensNeeded;
   const targetSources = analysisMode === "expert" ? EXPERT_TARGET_SOURCES : STANDARD_TARGET_SOURCES;
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isVerifying) {
+      setProgress(0);
+      interval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 90) return prev;
+          // Faster at beginning, slows down
+          const increment = prev < 30 ? 10 : prev < 60 ? 5 : 1;
+          return prev + increment;
+        });
+      }, 800);
+    } else {
+      setProgress(100);
+    }
+    return () => clearInterval(interval);
+  }, [isVerifying]);
 
   const handleVerify = useCallback(async () => {
     if (!text.trim()) {
@@ -238,6 +257,25 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
               )}
             </Button>
           </div>
+
+          {isVerifying && (
+            <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+               <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Verifying claims against {targetSources} sources...</span>
+                  <span>{progress}%</span>
+               </div>
+               <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-primary transition-all duration-500 ease-in-out" 
+                    style={{ width: `${progress}%` }}
+                  />
+               </div>
+               <p className="text-xs text-center text-muted-foreground animate-pulse">
+                 This may take up to 30 seconds depending on complexity.
+               </p>
+            </div>
+          )}
+          </CardContent>
 
           {!hasEnoughTokens && text.length > 0 && (
             <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">

@@ -12,18 +12,18 @@ test.describe('Homepage', () => {
   });
 
   test('should have navigation elements', async ({ page }) => {
-    // Check for navigation links - use first() as there may be multiple pricing links
-    await expect(page.getByRole('link', { name: /pricing/i }).first()).toBeVisible();
+    // Check for navigation links - use first() as there may be multiple tokens links
+    await expect(page.getByRole('link', { name: /tokens/i }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: /login/i }).first()).toBeVisible();
   });
 
-  test('should navigate to pricing page', async ({ page }, testInfo) => {
+  test('should navigate to tokens page', async ({ page }, testInfo) => {
     if (isWebkitProject(testInfo.project.name)) {
-      await page.goto('/pricing');
+      await page.goto('/tokens');
     } else {
-      await page.getByRole('link', { name: /pricing/i }).first().click();
+      await page.getByRole('link', { name: /tokens/i }).first().click();
     }
-    await expect(page).toHaveURL(/.*pricing/);
+    await expect(page).toHaveURL(/.*tokens/);
   });
 
   test('should navigate to login page', async ({ page }, testInfo) => {

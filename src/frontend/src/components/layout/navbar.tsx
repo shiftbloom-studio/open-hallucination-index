@@ -95,13 +95,13 @@ export function Navbar() {
         </Link>
         <nav className="flex items-center gap-4">
           <Link 
-            href="/pricing" 
+            href="/tokens" 
             className={cn(
               "text-neutral-300 hover:text-white font-medium transition-colors px-3 py-2",
-              pathname === "/pricing" && "text-white"
+              pathname === "/tokens" && "text-white"
             )}
           >
-            Pricing
+            Free Tokens
           </Link>
           <Link 
             href="/about" 
