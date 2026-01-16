@@ -129,7 +129,15 @@ class ToolAggregator {
   }
 
   private async getWikipediaSummary(args: Record<string, unknown>): Promise<ToolResult> {
-    const title = args.title as string;
+    const title = args.title;
+
+    if (typeof title !== "string" || title.trim().length === 0) {
+      return {
+        success: false,
+        results: [],
+        error: "Missing or invalid 'title' parameter",
+      };
+    }
 
     const wikimediaRest = sourceRegistry.get("wikimedia-rest") as WikimediaRESTSource;
     const result = await wikimediaRest?.getSummary(title);
@@ -142,10 +150,13 @@ class ToolAggregator {
   }
 
   private async getSummary(args: Record<string, unknown>): Promise<ToolResult> {
-    const title = args.title as string;
+    const titleValue = args.title;
+    if (typeof titleValue !== "string" || titleValue.trim().length === 0) {
+      return "The 'title' parameter is required and must be a non-empty string.";
+    }
 
     const wikimediaRest = sourceRegistry.get("wikimedia-rest") as WikimediaRESTSource;
-    const result = await wikimediaRest?.getSummary(title);
+    const result = await wikimediaRest?.getSummary(titleValue);
 
     return result?.content || "";
   }
@@ -186,6 +197,10 @@ class ToolAggregator {
 
   private async queryWikidataSPARQL(args: Record<string, unknown>): Promise<ToolResult> {
     const query = args.sparql as string;
+
+    if (!query || (typeof query === "string" && query.trim().length === 0)) {
+      return "The 'sparql' parameter is required and must be a non-empty string.";
+    }
 
     const wikidata = sourceRegistry.get("wikidata") as WikidataSource;
     const results = await wikidata?.sparqlQuery(query) || [];
@@ -240,7 +255,26 @@ class ToolAggregator {
   }
 
   private async getDOIMetadata(args: Record<string, unknown>): Promise<ToolResult> {
-    const doi = args.doi as string;
+    const rawDoi = args.doi;
+
+    if (typeof rawDoi !== "string" || !rawDoi.trim()) {
+      return {
+        success: false,
+        results: [],
+        error: "Missing or empty 'doi' parameter",
+      };
+    }
+
+    const doi = rawDoi.trim();
+    // Basic DOI format check: must start with "10." and contain a "/" separator
+    const doiPattern = /^10\.\S+\/\S+$/;
+    if (!doiPattern.test(doi)) {
+      return {
+        success: false,
+        results: [],
+        error: "Invalid DOI format",
+      };
+    }
 
     const crossref = sourceRegistry.get("crossref") as CrossrefSource;
     const result = await crossref?.getByDOI(doi);
@@ -287,7 +321,17 @@ class ToolAggregator {
   // ============ Citations ============
 
   private async getCitations(args: Record<string, unknown>): Promise<ToolResult> {
-    const doi = args.doi as string;
+    const rawDoi = args.doi;
+
+    if (typeof rawDoi !== "string" || rawDoi.trim().length === 0) {
+      return {
+        success: false,
+        results: [],
+        error: "The 'doi' parameter is required and must be a non-empty string.",
+      };
+    }
+
+    const doi = rawDoi.trim();
 
     const opencitations = sourceRegistry.get("opencitations") as OpenCitationsSource;
     const results = await opencitations?.getCitations(doi) || [];
