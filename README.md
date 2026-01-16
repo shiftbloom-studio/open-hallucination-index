@@ -75,15 +75,15 @@ Use these for deep, project-specific details and operational tips:
 
 ```mermaid
 flowchart TD
-  A[Input Text] --> B[Cache Lookup (Redis)]
+  A[Input Text] --> B["Cache Lookup - Redis"]
   B -->|Hit| Z[Return Cached VerificationResult]
-  B -->|Miss| C[Claim Decomposition (LLM)]
-  C --> D[Claim Routing (Domain + Sources)]
+  B -->|Miss| C["Claim Decomposition - LLM"]
+  C --> D["Claim Routing - Domain and Sources"]
   D --> E[Evidence Collection]
-  E --> E1[Local Tier: Neo4j + Qdrant]
+  E --> E1["Local Tier - Neo4j and Qdrant"]
   E1 -->|Insufficient| E2[MCP Tier: External Sources]
   E2 --> F[Hybrid Verification Oracle]
-  F --> G[Trust Scoring + Confidence]
+  F --> G["Trust Scoring and Confidence"]
   G --> H[VerificationResult + Citation Trace]
   H --> I[Cache + Response]
 ```
@@ -93,9 +93,9 @@ flowchart TD
 ```mermaid
 flowchart TD
   U[User] --> A[Next.js App Router]
-  A --> B[Auth + Session (Supabase)]
+  A --> B["Auth and Session - Supabase"]
   A --> C[React Query / Server Actions]
-  C --> D[API Proxy (/api/ohi/*)]
+  C --> D["API Proxy - /api/ohi/*"]
   D --> E[OHI API]
   E --> F[Verification Results]
   F --> G[UI Rendering + Charts]
@@ -108,8 +108,8 @@ flowchart TD
 flowchart TD
   A[CLI / Scheduler] --> B[Download Wikipedia Dumps]
   B --> C[Parse + Preprocess]
-  C --> D[Chunk + Tokenize]
-  D --> E[Embed (Dense + Sparse)]
+  C --> D["Chunk and Tokenize"]
+  D --> E["Embed - Dense and Sparse"]
   E --> F[Upload to Qdrant]
   E --> G[Upload to Neo4j]
   F --> H[Checkpoint + Metrics]
@@ -125,7 +125,7 @@ flowchart TD
   C --> D[OHI API Calls]
   D --> E[Result Collector]
   E --> F[Metrics + Statistical Tests]
-  F --> G[Reporters: Markdown/JSON/CSV/HTML]
+  F --> G["Reporters - Markdown JSON CSV HTML"]
   G --> H[benchmark_results/]
 ```
 
@@ -133,11 +133,11 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  A[MCP Client] --> B[Transport (SSE/STDIO)]
-  B --> C[Rate Limiter + Cache]
+  A[MCP Client] --> B["Transport - SSE STDIO"]
+  B --> C["Rate Limiter and Cache"]
   C --> D[Tool Router]
   D --> E[Source Adapters (Parallel)]
-  E --> F[Normalize + Aggregate]
+  E --> F["Normalize and Aggregate"]
   F --> G[Response Payload]
 ```
 

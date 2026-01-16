@@ -15,23 +15,23 @@ High-performance verification API for the Open Hallucination Index (OHI). This s
 
 ```mermaid
 flowchart TD
-    A[Verify Request] --> B[Pre-filters]
-    B -->|Blacklist| C[LLM Harm Filter]
-    C --> D[LLM Claim Filter]
+  A[Verify Request] --> B[Pre-filters]
+  B -->|Blacklist| C["LLM Harm Filter"]
+  C --> D["LLM Claim Filter"]
     D --> E[VerifyTextUseCase]
     E --> F{Cache Hit?}
     F -->|Yes| G[Return Cached Result]
-    F -->|No| H[Claim Decomposition]
-    H --> I[Claim Cache Check]
+  F -->|No| H["Claim Decomposition"]
+  H --> I["Claim Cache Check"]
     I --> J[Hybrid Verification Oracle]
     J --> K[Adaptive Evidence Collector]
-    K --> L[Local Tier: Neo4j + Qdrant]
-    L -->|Insufficient| M[MCP Tier: OHI MCP Sources]
+  K --> L["Local Tier - Neo4j and Qdrant"]
+  L -->|Insufficient| M["MCP Tier - OHI MCP Sources"]
     M --> N[Evidence Classification]
     N --> O[Trust Scoring]
     O --> P[VerificationResult]
-    P --> Q[Cache Result + Claims]
-    P --> R[Trace Store (Redis, 12h TTL)]
+  P --> Q["Cache Result and Claims"]
+  P --> R["Trace Store - Redis 12h TTL"]
     Q --> S[API Response]
     R --> S
 ```
