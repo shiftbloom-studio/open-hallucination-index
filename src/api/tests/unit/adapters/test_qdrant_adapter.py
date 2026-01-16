@@ -100,7 +100,7 @@ class TestQdrantVectorAdapter:
         
         assert len(evidence) > 0
         assert isinstance(evidence[0], Evidence)
-        assert evidence[0].similarity_score >= 0.0
+        assert evidence[0].similarity_score == 0.92
 
     @pytest.mark.asyncio
     async def test_find_evidence_empty(self, qdrant_store: QdrantVectorAdapter):
@@ -127,7 +127,7 @@ class TestQdrantVectorAdapter:
         qdrant_store.client.query_points.return_value = mock_response
 
         # Mock the embedding function to track calls
-        mock_embedding = MagicMock(return_value=[0.1] * 384)
+        mock_embedding = MagicMock(return_value=[0.1] * mock_settings.vector_size)
         qdrant_store._embedding_func = mock_embedding
 
         # Call the public method that should internally generate embeddings
