@@ -5,8 +5,8 @@ Evaluators Package
 Provides different claim verification strategies for benchmark comparison:
 - OHIEvaluator: Our hybrid verification system (expected winner)
 - GPT4Evaluator: Direct LLM-based verification (baseline)
-- VectorRAGEvaluator: Vector similarity with local DB (uses our data - less fair)
-- FairVectorRAGEvaluator: Vector similarity with public Wikipedia API (fair comparison)
+- VectorRAGEvaluator: Vector similarity with Qdrant (default baseline)
+- FairVectorRAGEvaluator: Vector similarity with public Wikipedia API (optional fair mode)
 """
 
 from benchmark.evaluators.base import (
@@ -40,15 +40,15 @@ __all__ = [
 ]
 
 
-def get_evaluator(name: str, config, fair_mode: bool = True):
+def get_evaluator(name: str, config, fair_mode: bool = False):
     """
     Factory function to create evaluator by name.
     
     Args:
         name: Evaluator name ("ohi", "gpt4", "vector_rag")
         config: ComparisonBenchmarkConfig instance
-        fair_mode: If True, VectorRAG uses public Wikipedia API (fair comparison).
-                   If False, uses our local Qdrant database (unfair advantage for VectorRAG).
+        fair_mode: If True, VectorRAG uses public Wikipedia API (fair mode).
+               If False, uses Qdrant vector database (default).
         
     Returns:
         Evaluator instance

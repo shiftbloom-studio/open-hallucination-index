@@ -1201,9 +1201,8 @@ class ChartsReporter(BaseReporter):
             self._draw_heatmap_on_axis(ax_heatmap, evaluators, fig)
 
             # Main title
-            winner = comparison_report.get_ranking("f1_score")[0] if evaluators else "N/A"
             fig.suptitle(
-                f"🏆 OHI Benchmark Comparison Dashboard\nWinner: {winner}",
+                "OHI Benchmark Comparison Dashboard",
                 fontsize=20, fontweight='bold', y=0.98
             )
 

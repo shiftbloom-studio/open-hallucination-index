@@ -408,19 +408,20 @@ class ComparisonBenchmarkRunner:
     
     def _init_redis(self) -> None:
         """Initialize Redis client for cache management."""
-        if self.config.cache_testing:
-            try:
-                self._redis = redis.Redis(
-                    host=self.config.redis_host,
-                    port=self.config.redis_port,
-                    password=self.config.redis_password,
-                    decode_responses=True,
-                )
-                self._redis.ping()
-                self.console.print(f"  [green]✓[/green] Redis connected ({self.config.redis_host}:{self.config.redis_port})")
-            except Exception as e:
-                self.console.print(f"  [yellow]⚠[/yellow] Redis not available: {e}")
-                self._redis = None
+        try:
+            self._redis = redis.Redis(
+                host=self.config.redis_host,
+                port=self.config.redis_port,
+                password=self.config.redis_password,
+                decode_responses=True,
+            )
+            self._redis.ping()
+            self.console.print(
+                f"  [green]✓[/green] Redis connected ({self.config.redis_host}:{self.config.redis_port})"
+            )
+        except Exception as e:
+            self.console.print(f"  [yellow]⚠[/yellow] Redis not available: {e}")
+            self._redis = None
     
     def _clear_cache(self) -> int:
         """
@@ -442,6 +443,16 @@ class ComparisonBenchmarkRunner:
         except Exception as e:
             logger.warning(f"Failed to clear cache: {e}")
             return 0
+
+    def _flush_cache_full(self, reason: str) -> None:
+        """Flush Redis cache fully (all keys in current DB)."""
+        if not self._redis:
+            return
+        try:
+            self._redis.flushdb()
+            logger.info(f"Redis cache flushed ({reason})")
+        except Exception as e:
+            logger.warning(f"Failed to flush Redis cache: {e}")
 
     def _effective_concurrency(self, evaluator: BaseEvaluator) -> int:
         """Determine evaluator-specific concurrency cap."""
@@ -484,7 +495,11 @@ class ComparisonBenchmarkRunner:
         
         for eval_name in active_evaluators:
             try:
-                evaluator = get_evaluator(eval_name, self.config)
+                evaluator = get_evaluator(
+                    eval_name,
+                    self.config,
+                    fair_mode=self.config.vector_rag_fair_mode,
+                )
                 is_healthy = await evaluator.health_check()
                 
                 if is_healthy:
@@ -532,6 +547,7 @@ class ComparisonBenchmarkRunner:
                 "hallucination_dataset": str(self.config.hallucination_dataset),
                 "ohi_all_strategies": self.config.ohi_all_strategies,
                 "cache_testing": self.config.cache_testing,
+                "vector_rag_fair_mode": self.config.vector_rag_fair_mode,
             },
         )
         self._current_report = report
@@ -757,6 +773,8 @@ class ComparisonBenchmarkRunner:
             EvaluatorMetrics with all metric results.
         """
         metrics = EvaluatorMetrics(evaluator_name=evaluator.name)
+
+        self._flush_cache_full(f"start:{evaluator.name}")
         
         # 1. Hallucination Detection
         if "hallucination" in self.config.metrics:
@@ -765,6 +783,7 @@ class ComparisonBenchmarkRunner:
             )
             metrics.hallucination = halluc_metrics
             metrics.latency.latencies_ms.extend(latencies)
+            self._flush_cache_full(f"after:hallucination:{evaluator.name}")
         
         # 2. TruthfulQA
         if "truthfulqa" in self.config.metrics:
@@ -773,6 +792,7 @@ class ComparisonBenchmarkRunner:
             )
             metrics.truthfulqa = tqa_metrics
             metrics.latency.latencies_ms.extend(latencies)
+            self._flush_cache_full(f"after:truthfulqa:{evaluator.name}")
         
         # 3. FActScore
         if "factscore" in self.config.metrics:
@@ -781,6 +801,7 @@ class ComparisonBenchmarkRunner:
             )
             metrics.factscore = fac_metrics
             metrics.latency.latencies_ms.extend(latencies)
+            self._flush_cache_full(f"after:factscore:{evaluator.name}")
         
         return metrics
     

@@ -100,11 +100,16 @@ class VectorRAGEvaluator(BaseEvaluator):
         client = await self._get_qdrant_client()
         
         try:
-            # Use query_points with named vector "dense" for wikipedia_hybrid collection
+            using_vector = (
+                "dense"
+                if self.rag_config.collection_name == "wikipedia_hybrid"
+                else None
+            )
+
             results = client.query_points(
                 collection_name=self.rag_config.collection_name,
                 query=query_embedding,
-                using="dense",
+                using=using_vector,
                 limit=top_k,
                 with_payload=True,
             )

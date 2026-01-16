@@ -27,7 +27,7 @@ from benchmark.evaluators.base import (
 
 
 class GraphRAGEvaluator(BaseEvaluator):
-    """Graph-only evaluator using Neo4j keyword matching."""
+    """Graph-only evaluator using Neo4j keyword/fulltext matching."""
 
     name = "GraphRAG"
 
@@ -78,36 +78,99 @@ class GraphRAGEvaluator(BaseEvaluator):
                 break
         return unique_terms
 
+    def _build_fulltext_query(self, terms: list[str]) -> str:
+        return " ".join(terms)
+
+    def _node_text(self, node: Any) -> str:
+        parts: list[str] = []
+        for key in ("first_paragraph", "content", "text", "title", "name"):
+            value = node.get(key)
+            if value:
+                parts.append(str(value))
+        return " ".join(parts)
+
+    def _node_label(self, node: Any) -> str:
+        labels = list(getattr(node, "labels", []) or [])
+        if labels:
+            return labels[0]
+        return "node"
+
     def _query_graph(self, terms: list[str], limit: int) -> list[dict[str, Any]]:
         if not terms:
             return []
-
-        cypher = """
-        UNWIND $terms AS term
-        MATCH (n)
-        WHERE (
-            (exists(n.name) AND toLower(n.name) CONTAINS term) OR
-            (exists(n.title) AND toLower(n.title) CONTAINS term) OR
-            (exists(n.text) AND toLower(n.text) CONTAINS term) OR
-            (exists(n.content) AND toLower(n.content) CONTAINS term)
-        )
-        WITH n, collect(DISTINCT term) AS matched_terms
-        RETURN n, size(matched_terms) AS match_count, matched_terms
-        ORDER BY match_count DESC
-        LIMIT $limit
-        """
 
         driver = self._driver
         if driver is None:
             return []
 
+        if self.graph_config.use_fulltext:
+            query = self._build_fulltext_query(terms)
+            cypher = """
+            CALL db.index.fulltext.queryNodes($index, $query) YIELD node, score
+            WITH node, score
+            ORDER BY score DESC
+            LIMIT $limit
+            OPTIONAL MATCH (node)-[r]-(neighbor)
+            RETURN node, score, collect(DISTINCT neighbor)[0..$neighbor_limit] AS neighbors
+            """
+
+            with driver.session() as session:
+                try:
+                    result = session.run(
+                        cypher,
+                        index=self.graph_config.fulltext_index,
+                        query=query,
+                        limit=limit,
+                        neighbor_limit=self.graph_config.neighbor_limit,
+                    )
+                    return [
+                        {
+                            "node": record["node"],
+                            "score": record["score"],
+                            "neighbors": record["neighbors"],
+                            "source": "fulltext",
+                        }
+                        for record in result
+                    ]
+                except Exception:
+                    pass
+
+        cypher = """
+        MATCH (n)
+        WHERE ANY(term IN $terms WHERE (
+            (n.name IS NOT NULL AND toLower(n.name) CONTAINS term) OR
+            (n.title IS NOT NULL AND toLower(n.title) CONTAINS term) OR
+            (n.text IS NOT NULL AND toLower(n.text) CONTAINS term) OR
+            (n.content IS NOT NULL AND toLower(n.content) CONTAINS term) OR
+            (n.first_paragraph IS NOT NULL AND toLower(n.first_paragraph) CONTAINS term)
+        ))
+        WITH n, [term IN $terms WHERE (
+            (n.name IS NOT NULL AND toLower(n.name) CONTAINS term) OR
+            (n.title IS NOT NULL AND toLower(n.title) CONTAINS term) OR
+            (n.text IS NOT NULL AND toLower(n.text) CONTAINS term) OR
+            (n.content IS NOT NULL AND toLower(n.content) CONTAINS term) OR
+            (n.first_paragraph IS NOT NULL AND toLower(n.first_paragraph) CONTAINS term)
+        )] AS matched_terms
+        WITH n, matched_terms
+        ORDER BY size(matched_terms) DESC
+        LIMIT $limit
+        OPTIONAL MATCH (n)-[r]-(neighbor)
+        RETURN n, matched_terms, collect(DISTINCT neighbor)[0..$neighbor_limit] AS neighbors
+        """
+
         with driver.session() as session:
-            result = session.run(cypher, terms=terms, limit=limit)
+            result = session.run(
+                cypher,
+                terms=terms,
+                limit=limit,
+                neighbor_limit=self.graph_config.neighbor_limit,
+            )
             return [
                 {
                     "node": record["n"],
-                    "match_count": record["match_count"],
                     "matched_terms": record["matched_terms"],
+                    "neighbors": record["neighbors"],
+                    "source": "keyword",
                 }
                 for record in result
             ]
@@ -154,8 +217,24 @@ class GraphRAGEvaluator(BaseEvaluator):
                     evaluator=self.name,
                 )
 
-            max_match = max(r["match_count"] for r in results)
-            max_score = max_match / max(1, len(terms))
+            scored_results: list[dict[str, Any]] = []
+            for r in results:
+                node = r["node"]
+                node_text = self._node_text(node).lower()
+                matched_terms = {
+                    t for t in terms if t and t in node_text
+                }
+                coverage = len(matched_terms) / max(1, len(terms))
+                scored_results.append(
+                    {
+                        **r,
+                        "coverage": coverage,
+                        "matched_terms": list(matched_terms),
+                        "node_text": node_text,
+                    }
+                )
+
+            max_score = max(r["coverage"] for r in scored_results)
 
             if max_score >= self.graph_config.min_support_ratio:
                 verdict = VerificationVerdict.SUPPORTED
@@ -165,21 +244,30 @@ class GraphRAGEvaluator(BaseEvaluator):
                 verdict = VerificationVerdict.UNVERIFIABLE
 
             evidence: list[EvidenceItem] = []
-            for r in results:
+            for r in scored_results:
                 node = r["node"]
-                content = (
-                    node.get("content")
-                    or node.get("text")
-                    or node.get("title")
-                    or node.get("name")
-                    or ""
-                )
+                content = self._node_text(node)
+                neighbors = r.get("neighbors") or []
+                neighbor_names = []
+                for neighbor in neighbors:
+                    neighbor_names.append(
+                        neighbor.get("name")
+                        or neighbor.get("title")
+                        or neighbor.get("id")
+                        or self._node_label(neighbor)
+                    )
+
                 evidence.append(
                     EvidenceItem(
                         text=str(content)[:300],
-                        source="neo4j",
-                        similarity_score=min(1.0, r["match_count"] / max(1, len(terms))),
-                        metadata={"matched_terms": r["matched_terms"]},
+                        source=f"neo4j:{self._node_label(node)}",
+                        similarity_score=min(1.0, r["coverage"]),
+                        metadata={
+                            "matched_terms": r["matched_terms"],
+                            "neighbors": [n for n in neighbor_names if n],
+                            "retrieval": r.get("source"),
+                            "fulltext_score": r.get("score"),
+                        },
                     )
                 )
 
@@ -193,6 +281,9 @@ class GraphRAGEvaluator(BaseEvaluator):
                 metadata={
                     "terms": terms,
                     "top_k": self.graph_config.top_k,
+                    "retrieval": (
+                        "fulltext" if self.graph_config.use_fulltext else "keyword"
+                    ),
                 },
             )
 

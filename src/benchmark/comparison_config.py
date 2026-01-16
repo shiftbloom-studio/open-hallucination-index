@@ -93,7 +93,7 @@ class VectorRAGConfig:
     
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
-    collection_name: str = "wikipedia_chunks"
+    collection_name: str = "wikipedia_hybrid"
     embedding_model: str = "all-MiniLM-L12-v2"
     top_k: int = 5  # Standard retrieval count
     similarity_threshold: float = 0.7  # Claim verified if similarity > threshold
@@ -104,7 +104,7 @@ class VectorRAGConfig:
         return cls(
             qdrant_host=os.getenv("QDRANT_HOST", "localhost"),
             qdrant_port=int(os.getenv("QDRANT_PORT", "6333")),
-            collection_name=os.getenv("QDRANT_COLLECTION", "wikipedia_chunks"),
+            collection_name=os.getenv("QDRANT_COLLECTION", "wikipedia_hybrid"),
             embedding_model=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L12-v2"),
             top_k=int(os.getenv("VECTOR_RAG_TOP_K", "5")),
             similarity_threshold=float(os.getenv("VECTOR_RAG_THRESHOLD", "0.7")),
@@ -125,6 +125,9 @@ class GraphRAGConfig:
     top_k: int = 5
     min_support_ratio: float = 0.5
     min_partial_ratio: float = 0.3
+    use_fulltext: bool = True
+    fulltext_index: str = "article_fulltext"
+    neighbor_limit: int = 6
 
     @classmethod
     def from_env(cls) -> "GraphRAGConfig":
@@ -136,6 +139,9 @@ class GraphRAGConfig:
             top_k=int(os.getenv("GRAPH_RAG_TOP_K", "5")),
             min_support_ratio=float(os.getenv("GRAPH_RAG_SUPPORT_RATIO", "0.5")),
             min_partial_ratio=float(os.getenv("GRAPH_RAG_PARTIAL_RATIO", "0.3")),
+            use_fulltext=os.getenv("GRAPH_RAG_USE_FULLTEXT", "true").lower() == "true",
+            fulltext_index=os.getenv("GRAPH_RAG_FULLTEXT_INDEX", "article_fulltext"),
+            neighbor_limit=int(os.getenv("GRAPH_RAG_NEIGHBOR_LIMIT", "6")),
         )
 
 
@@ -230,6 +236,11 @@ class ComparisonBenchmarkConfig:
     graph_rag: GraphRAGConfig = field(default_factory=GraphRAGConfig.from_env)
     truthfulqa: TruthfulQAConfig = field(default_factory=TruthfulQAConfig.from_env)
     factscore: FActScoreConfig = field(default_factory=FActScoreConfig.from_env)
+
+    # VectorRAG mode
+    # False = use Qdrant vector database (default)
+    # True = use public Wikipedia API (fair mode)
+    vector_rag_fair_mode: bool = False
     
     # OHI API Configuration
     ohi_api_host: str = "localhost"
@@ -308,6 +319,7 @@ class ComparisonBenchmarkConfig:
             vector_rag=VectorRAGConfig.from_env(),
             truthfulqa=TruthfulQAConfig.from_env(),
             factscore=FActScoreConfig.from_env(),
+            vector_rag_fair_mode=os.getenv("VECTOR_RAG_FAIR_MODE", "false").lower() == "true",
             ohi_api_host=os.getenv("OHI_API_HOST", "localhost"),
             ohi_api_port=os.getenv("OHI_API_PORT", "8080"),
             ohi_api_key=os.getenv("API_API_KEY"),  # Matches .env naming

@@ -9,7 +9,7 @@ Evaluators:
 -----------
 * OHI (Open Hallucination Index) - Hybrid verification with knowledge graph + vector + MCP
 * GPT-4 (OpenAI) - Direct LLM verification baseline
-* VectorRAG - Vector similarity baseline (using public Wikipedia API for fair comparison)
+* VectorRAG - Vector similarity baseline (Qdrant by default; optional fair mode via Wikipedia API)
 
 Metrics:
 --------

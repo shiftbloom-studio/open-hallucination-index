@@ -5,7 +5,7 @@
 # Complete benchmark comparing all verification systems:
 #   - OHI (Open Hallucination Index) - Our hybrid verification system
 #   - GPT-4 (OpenAI) - Direct LLM verification baseline
-#   - VectorRAG - Vector similarity baseline (public Wikipedia API)
+#   - VectorRAG - Vector similarity baseline (Qdrant)
 #
 # Metrics tested:
 #   - Hallucination Detection (HuggingFace datasets)
@@ -51,7 +51,7 @@ config = ComparisonBenchmarkConfig.from_env()
 print('  OHI-Local: ✓ Ready')
 print('  OHI-Max: ✓ Ready')
 
-print('  VectorRAG: ✓ Using Wikipedia API (fair comparison)')
+print('  VectorRAG: ✓ Using Qdrant vector database')
 print('  GraphRAG: ✓ Using Neo4j graph')
 "
 echo ""

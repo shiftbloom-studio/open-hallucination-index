@@ -359,7 +359,11 @@ async def run_benchmark(args: argparse.Namespace) -> int:
             
             for eval_name in config.get_active_evaluators():
                 try:
-                    evaluator = get_evaluator(eval_name, config)
+                    evaluator = get_evaluator(
+                        eval_name,
+                        config,
+                        fair_mode=config.vector_rag_fair_mode,
+                    )
                     is_healthy = await evaluator.health_check()
                     status = "[green]✓ Available[/green]" if is_healthy else "[yellow]⚠ Unavailable[/yellow]"
                     console.print(f"  {evaluator.name}: {status}")
