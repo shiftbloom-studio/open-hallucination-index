@@ -52,14 +52,7 @@ export class DBpediaSource extends BaseSource {
     `);
 
     const body = new URLSearchParams({ query: sparql, format: "json" }).toString();
-    let response = await httpClient.post<SparqlResults>(`${this.baseUrl}/sparql`, body, {
-      headers: {
-        Accept: "application/sparql-results+json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-    });
-
-    let bindings = response.data.results?.bindings || [];
+    let bindings = await this.fetchBindings(body);
 
     if (bindings.length === 0) {
       const fallback = this.firstKeyword(query);
@@ -79,14 +72,7 @@ export class DBpediaSource extends BaseSource {
         `);
 
         const fallbackBody = new URLSearchParams({ query: fallbackSparql, format: "json" }).toString();
-        response = await httpClient.post<SparqlResults>(`${this.baseUrl}/sparql`, fallbackBody, {
-          headers: {
-            Accept: "application/sparql-results+json",
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-        });
-
-        bindings = response.data.results?.bindings || [];
+        bindings = await this.fetchBindings(fallbackBody);
       }
     }
 
@@ -136,6 +122,25 @@ export class DBpediaSource extends BaseSource {
       content: binding.abstract?.value || "",
       url: resourceUri,
     };
+  }
+
+  private async fetchBindings(body: string): Promise<SparqlResults["results"]["bindings"]> {
+    try {
+      const response = await httpClient.post<SparqlResults>(`${this.baseUrl}/sparql`, body, {
+        headers: {
+          Accept: "application/sparql-results+json",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        timeout: 20000,
+      });
+
+      return response.data.results?.bindings || [];
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return [];
+      }
+      throw error;
+    }
   }
 
   private sanitizeForSparql(text: string): string {
