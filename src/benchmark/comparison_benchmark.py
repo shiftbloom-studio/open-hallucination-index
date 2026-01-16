@@ -109,10 +109,10 @@ Environment Variables:
     parser.add_argument(
         "--evaluators", "-e",
         type=str,
-        default="ohi_latency,ohi_max,graph_rag,vector_rag,gpt4",
+        default="ohi_local,ohi_max,graph_rag,vector_rag,gpt4",
         help=(
             "Comma-separated list of evaluators "
-            "(ohi, ohi_latency, ohi_max, gpt4, vector_rag, graph_rag)"
+            "(ohi, ohi_local, ohi_latency, ohi_max, gpt4, vector_rag, graph_rag)"
         ),
     )
 

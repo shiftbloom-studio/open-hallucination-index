@@ -48,7 +48,7 @@ docker exec ${CONTAINER} python -c "
 from benchmark.comparison_config import ComparisonBenchmarkConfig
 config = ComparisonBenchmarkConfig.from_env()
 
-print('  OHI-Latency: ✓ Ready')
+print('  OHI-Local: ✓ Ready')
 print('  OHI-Max: ✓ Ready')
 
 print('  VectorRAG: ✓ Using Wikipedia API (fair comparison)')
@@ -61,7 +61,7 @@ echo "Running Full Comparison Benchmark..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 docker exec ${CONTAINER} python -m benchmark.comparison_benchmark \
-    --evaluators ohi_latency,ohi_max,graph_rag,vector_rag \
+    --evaluators ohi_local,ohi_max,graph_rag,vector_rag \
     --metrics hallucination,truthfulqa,factscore,latency \
     --truthfulqa-max 20 \
     --factscore-max 20 \
