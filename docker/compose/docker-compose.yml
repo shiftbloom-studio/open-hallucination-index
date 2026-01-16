@@ -90,9 +90,9 @@ services:
     # Optimized for RTX 4090 (24GB VRAM)
     command: >
       --model cyankiwi/Hermes-4-14B-AWQ-4bit
-      --quantization awq
+      --quantization compressed-tensors
       --dtype half
-      --gpu-memory-utilization 0.95
+      --gpu-memory-utilization 0.90
       --enforce-eager
       --trust-remote-code
       --tensor-parallel-size 1
