@@ -12,7 +12,7 @@ import asyncio
 import json
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from open_hallucination_index.domain.entities import Evidence
 from open_hallucination_index.domain.results import (
@@ -654,10 +654,12 @@ class HybridVerificationOracle(VerificationOracle):
         if not self._llm_provider or not evidence:
             return supporting, refuting
 
+        deduped = self._dedupe_evidence(evidence)
+
         # Process evidence in smaller batches to avoid token limits
         batch_size = 3
-        for i in range(0, len(evidence), batch_size):
-            batch = evidence[i : i + batch_size]
+        for i in range(0, len(deduped), batch_size):
+            batch: list[Evidence] = deduped[i : i + batch_size]
 
             # Build evidence descriptions for the prompt
             evidence_descriptions = []
@@ -703,7 +705,6 @@ Respond with valid JSON only in this exact shape:
                     messages=messages,
                     max_tokens=512,
                     temperature=0.1,  # Low temperature for consistent classification
-                    json_mode=True,
                 )
 
                 # Parse the LLM response
@@ -714,7 +715,7 @@ Respond with valid JSON only in this exact shape:
                 for classification in classifications:
                     ev_idx = classification.get("evidence_index", 0) - 1
                     if 0 <= ev_idx < len(batch):
-                        ev = batch[ev_idx]
+                        ev = cast(Evidence, batch[ev_idx])
                         label = classification.get("classification", "NEUTRAL").upper()
 
                         if label == "SUPPORTS":
@@ -737,11 +738,49 @@ Respond with valid JSON only in this exact shape:
                 supporting.extend(batch_supporting)
                 refuting.extend(batch_refuting)
 
+        neutral_before = len(neutral)
+        neutral = self._limit_neutral_evidence(neutral, max_items=12)
         logger.info(
-            f"LLM classified {len(evidence)} evidence pieces: "
-            f"{len(supporting)} supporting, {len(refuting)} refuting, {len(neutral)} neutral"
+            f"LLM classified {len(deduped)} evidence pieces (from {len(evidence)}): "
+            f"{len(supporting)} supporting, {len(refuting)} refuting, "
+            f"{len(neutral)} neutral"
         )
+        if neutral_before > len(neutral):
+            logger.info(
+                "Trimmed neutral evidence from %d to %d",
+                neutral_before,
+                len(neutral),
+            )
         return supporting, refuting
+
+    @staticmethod
+    def _dedupe_evidence(evidence: list[Evidence]) -> list[Evidence]:
+        """Remove near-duplicate evidence items by source + content + url."""
+        seen: set[str] = set()
+        deduped: list[Evidence] = []
+        for ev in evidence:
+            content_key = " ".join(ev.content.lower().split())[:300]
+            key = f"{ev.source.value}|{ev.source_uri or ''}|{content_key}"
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(ev)
+        return deduped
+
+    @staticmethod
+    def _limit_neutral_evidence(
+        evidence: list[Evidence],
+        *,
+        max_items: int = 12,
+    ) -> list[Evidence]:
+        """Limit neutral evidence only (preserve supporting/refuting evidence)."""
+        if len(evidence) <= max_items:
+            return evidence
+        return sorted(
+            evidence,
+            key=lambda ev: ev.similarity_score if ev.similarity_score is not None else 0.0,
+            reverse=True,
+        )[:max_items]
 
     async def _llm_plausibility_fallback(
         self, claim: Claim
@@ -796,7 +835,6 @@ Respond with valid JSON only in this exact shape:
             ],
             temperature=0.1,
             max_tokens=256,
-            json_mode=True,
         )
 
         plausibility, reason = self._parse_plausibility_response(response.content)
@@ -1086,7 +1124,7 @@ Respond with valid JSON only in this exact shape:
         local_healthy = any(r is True for r in results[:2] if not isinstance(r, BaseException))
         return local_healthy
 
-    def get_latency_stats(self) -> dict[str, object]:
+    def get_latency_stats(self) -> dict[str, dict[str, Any]]:
         """
         Get latency statistics from the adaptive evidence collector.
 
