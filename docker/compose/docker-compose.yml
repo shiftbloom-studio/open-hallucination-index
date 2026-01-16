@@ -178,8 +178,8 @@ services:
       QDRANT_COLLECTION: "wikipedia_hybrid"
       QDRANT_VECTOR_SIZE: "384"
       
-      # Redis cache - disabled for testing
-      REDIS_ENABLED: "false"
+      # Redis cache (follows env)
+      REDIS_ENABLED: "${REDIS_ENABLED}"
       REDIS_HOST: "redis"
 
       # MCP Server configuration

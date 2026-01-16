@@ -412,6 +412,11 @@ async def get_llm_provider() -> LLMProvider:
     return _llm_provider
 
 
+async def get_llm_provider_optional() -> LLMProvider | None:
+    """Dependency: Get LLM provider instance if available."""
+    return _llm_provider
+
+
 async def get_graph_store() -> GraphKnowledgeStore:
     """Dependency: Get graph knowledge store instance."""
     if _graph_store is None:

@@ -1,8 +1,20 @@
-# Open Hallucination Index
+# Open Hallucination Index Frontend
 
-The Open Hallucination Index is an open-source initiative dedicated to enhancing AI safety by providing a robust toolkit for measuring factual consistency and mitigating generation errors in modern Generative AI architectures.
+Next.js 16 App Router application for the Open Hallucination Index. This UI focuses on claim verification workflows, evidence visualization, and actionable reporting.
 
-## Tech Stack
+---
+
+## Highlights
+
+- **App Router-first**: Server Components by default, client where needed
+- **Auth & Sessions**: Supabase + server-side utilities
+- **Data layer**: React Query + Server Actions
+- **UI system**: Tailwind v4 + shadcn/ui patterns
+- **Full TypeScript**: Schema-driven data + strict types
+
+---
+
+## Tech stack
 
 - **Framework**: Next.js 16.1.2 (App Router)
 - **Language**: TypeScript 5.9.3
@@ -20,7 +32,35 @@ The Open Hallucination Index is an open-source initiative dedicated to enhancing
 - **Theme**: next-themes 0.4.6
 - **Code Quality**: ESLint, Prettier
 
-## Getting Started
+---
+
+## End-to-end flow
+
+```mermaid
+flowchart TD
+	U[User] --> A[Next.js App Router]
+	A --> B[Auth + Session (Supabase)]
+	A --> C[React Query / Server Actions]
+	C --> D[API Proxy (/api/ohi/*)]
+	D --> E[OHI API]
+	E --> F[Verification Results]
+	F --> G[UI Rendering + Charts]
+	G --> U
+```
+
+### Page composition model
+
+```mermaid
+flowchart LR
+	A[Server Component] --> B[Data Fetch]
+	B --> C[Layout + Shell]
+	C --> D[Client Islands]
+	D --> E[User Interaction]
+```
+
+---
+
+## Getting started
 
 ### Prerequisites
 
@@ -73,9 +113,11 @@ npm run db:push
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+Open http://localhost:3000 in your browser to see the application.
 
-## Project Structure
+---
+
+## Project structure
 
 ```
 src/
@@ -96,7 +138,31 @@ src/
 └── test/                  # Test setup
 ```
 
-## Available Scripts
+---
+
+## API proxy
+
+The frontend ships with a server-side proxy route at `/api/ohi/*` that forwards
+requests to `DEFAULT_API_URL` and injects `DEFAULT_API_KEY` as `X-API-KEY`.
+
+Tip: Use the proxy to avoid CORS and keep API keys server-only.
+
+---
+
+## Features
+
+- 🔐 **Authentication**: Supabase-based auth with login/signup
+- 📊 **Dashboard**: Verification history and detailed drilldowns
+- 🧾 **Traceability**: Knowledge-track visualization ready
+- 🎨 **Dark Mode**: Theme switching with next-themes
+- 📱 **Responsive**: Mobile-first responsive design
+- 🔍 **Type Safe**: Full TypeScript support
+- ✅ **Testing**: Vitest for unit and integration tests
+- 🎯 **Form Validation**: React Hook Form with Zod schemas
+
+---
+
+## Scripts
 
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
@@ -110,25 +176,23 @@ src/
 - `npm run db:push` - Push schema to database
 - `npm run db:studio` - Open Drizzle Studio
 
-## Features
+---
 
-- 🔐 **Authentication**: Supabase-based auth with login/signup
-- 📊 **Dashboard**: User dashboard for managing hallucinations
-- 🎨 **Dark Mode**: Theme switching with next-themes
-- 📱 **Responsive**: Mobile-first responsive design
-- 🔍 **Type Safe**: Full TypeScript support
-- ✅ **Testing**: Vitest for unit and integration tests
-- 🎯 **Form Validation**: React Hook Form with Zod schemas
+## UX and performance tips
+
+- Prefer Server Components for data-heavy views
+- Use client components only where interactivity is required
+- Use React Query to cache API responses and avoid duplicate calls
+- If charts are slow, defer rendering until data is stable
+
+---
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. Please submit a pull request with a clear summary and screenshots where relevant.
 
-## API Proxy
-
-The frontend ships with a server-side proxy route at `/api/ohi/*` that forwards
-requests to `DEFAULT_API_URL` and injects `DEFAULT_API_KEY` as `X-API-KEY`.
+---
 
 ## License
 
-See the [LICENSE](LICENSE) file for details.
+See the LICENSE file for details.

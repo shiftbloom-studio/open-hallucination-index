@@ -11,6 +11,7 @@
 <p align="center">
   <a href="#project-overview">Project Overview</a> •
   <a href="#documentation">Documentation</a> •
+  <a href="#subsystem-guides">Subsystem Guides</a> •
   <a href="#project-structure">Structure</a> •
   <a href="#getting-started">Getting Started</a> •
   <a href="#contributing">Contributing</a>
@@ -45,6 +46,17 @@ Detailed documentation is stored in the docs folder:
 - [docs/API.md](docs/API.md) – Full API specification, models, examples
 - [docs/FRONTEND.md](docs/FRONTEND.md) – UI architecture, page structure, design principles
 
+## 🧭 Subsystem Guides
+
+Use these for deep, project-specific details and operational tips:
+
+- [src/api/README.md](src/api/README.md) – Verification API, filters, caching, strategies, knowledge-track
+- [src/ohi-mcp-server/README.md](src/ohi-mcp-server/README.md) – MCP server, tools, routing, and ops
+- [src/benchmark/README.md](src/benchmark/README.md) – Benchmark suite, metrics, and reports
+- [src/ingestion/README.md](src/ingestion/README.md) – Wikipedia ingestion pipeline and tuning
+- [src/frontend/README.md](src/frontend/README.md) – Frontend architecture, data flows, and UI
+- [docker/README.md](docker/README.md) – Full stack Docker orchestration and service map
+
 ## ✨ Features
 
 | Feature | Description |
@@ -56,6 +68,78 @@ Detailed documentation is stored in the docs folder:
 | **🎯 Trust Scoring** | Evidence-ratio based scoring with confidence intervals (0.0 - 1.0) |
 | **🧩 Knowledge Track** | Source‑aware provenance and 3D‑mesh graph for each verified claim |
 | **🔌 Pluggable Architecture** | Hexagonal design - easily swap knowledge sources and strategies |
+
+## 🧬 Project Workflows
+
+### API Verification Workflow
+
+```mermaid
+flowchart TD
+  A[Input Text] --> B[Cache Lookup (Redis)]
+  B -->|Hit| Z[Return Cached VerificationResult]
+  B -->|Miss| C[Claim Decomposition (LLM)]
+  C --> D[Claim Routing (Domain + Sources)]
+  D --> E[Evidence Collection]
+  E --> E1[Local Tier: Neo4j + Qdrant]
+  E1 -->|Insufficient| E2[MCP Tier: External Sources]
+  E2 --> F[Hybrid Verification Oracle]
+  F --> G[Trust Scoring + Confidence]
+  G --> H[VerificationResult + Citation Trace]
+  H --> I[Cache + Response]
+```
+
+### Frontend Workflow
+
+```mermaid
+flowchart TD
+  U[User] --> A[Next.js App Router]
+  A --> B[Auth + Session (Supabase)]
+  A --> C[React Query / Server Actions]
+  C --> D[API Proxy (/api/ohi/*)]
+  D --> E[OHI API]
+  E --> F[Verification Results]
+  F --> G[UI Rendering + Charts]
+  G --> U
+```
+
+### Ingestion Workflow
+
+```mermaid
+flowchart TD
+  A[CLI / Scheduler] --> B[Download Wikipedia Dumps]
+  B --> C[Parse + Preprocess]
+  C --> D[Chunk + Tokenize]
+  D --> E[Embed (Dense + Sparse)]
+  E --> F[Upload to Qdrant]
+  E --> G[Upload to Neo4j]
+  F --> H[Checkpoint + Metrics]
+  G --> H
+```
+
+### Benchmark Workflow
+
+```mermaid
+flowchart TD
+  A[Dataset CSV] --> B[Benchmark Runner]
+  B --> C[Strategy Executor]
+  C --> D[OHI API Calls]
+  D --> E[Result Collector]
+  E --> F[Metrics + Statistical Tests]
+  F --> G[Reporters: Markdown/JSON/CSV/HTML]
+  G --> H[benchmark_results/]
+```
+
+### MCP Server Workflow
+
+```mermaid
+flowchart TD
+  A[MCP Client] --> B[Transport (SSE/STDIO)]
+  B --> C[Rate Limiter + Cache]
+  C --> D[Tool Router]
+  D --> E[Source Adapters (Parallel)]
+  E --> F[Normalize + Aggregate]
+  F --> G[Response Payload]
+```
 
 ## 📁 Project Structure
 
