@@ -428,6 +428,27 @@ async function main() {
     const app = express();
     app.use(express.json());
 
+    // Request Timeout Middleware (1 minute default)
+    const REQUEST_TIMEOUT_MS = 60000;
+    app.use((req: Request, res: Response, next) => {
+      // Set socket timeout
+      req.socket.setTimeout(REQUEST_TIMEOUT_MS);
+      
+      // Handle timeout
+      const timeoutId = setTimeout(() => {
+        if (!res.headersSent) {
+          res.status(504).json({ 
+            error: "Request timed out",
+            message: "Operation took longer than 60 seconds"
+          });
+        }
+      }, REQUEST_TIMEOUT_MS);
+
+      // Clear timeout on finish
+      res.on('finish', () => clearTimeout(timeoutId));
+      next();
+    });
+
     // Health check
     app.get("/health", (_req: Request, res: Response) => {
       res.json({ 

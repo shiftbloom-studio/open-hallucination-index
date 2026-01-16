@@ -7,10 +7,11 @@ Creates and configures the FastAPI application with routers and middleware.
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 
 import yaml
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse, Response
 from fastapi.security import APIKeyHeader
@@ -74,6 +75,20 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Request Timeout Middleware (60s global hard limit)
+    @app.middleware("http")
+    async def timeout_middleware(request: Request, call_next):
+        try:
+            return await asyncio.wait_for(call_next(request), timeout=60.0)
+        except asyncio.TimeoutError:
+            return ORJSONResponse(
+                status_code=504,
+                content={
+                    "detail": "Request timed out",
+                    "message": "Operation took longer than 60 seconds",
+                },
+            )
 
     # Include routers
     app.include_router(health.router, prefix="/health", tags=["Health"])

@@ -144,6 +144,10 @@ async def _initialize_adapters() -> None:
         await _cache_provider.connect()
         logger.info(f"Cache connected: {settings.redis.host}:{settings.redis.port}")
 
+        if settings.redis.flush_on_startup:
+            logger.warning("Flushing Redis database on startup (REDIS_FLUSH_ON_STARTUP=True)")
+            await _cache_provider.clear()
+
         # Initialize Redis trace store (for knowledge-track endpoint)
         _trace_store = RedisTraceAdapter(settings.redis)
         await _trace_store.connect()

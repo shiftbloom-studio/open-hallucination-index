@@ -267,31 +267,28 @@ class RedisCacheAdapter(CacheProvider):
 
     async def clear(self) -> int:
         """
-        Clear all cached entries with our prefix.
+        Clear all cached entries (flush DB).
 
         Returns:
-            Number of entries cleared.
+            Number of keys in DB (rough estimate).
         """
         if self._client is None:
             return 0
 
         try:
-            pattern = f"{CACHE_PREFIX}*"
-            keys: list[bytes] = []
-
-            async for key in self._client.scan_iter(match=pattern):
-                keys.append(key)
-
-            if not keys:
-                return 0
-
-            deleted = await self._client.delete(*keys)
-            logger.info(f"Cleared {deleted} cached entries")
-            return int(deleted)
+            # Flush entire database to ensure clean slate (request, response, claims, traces)
+            await self._client.flushdb()
+            logger.info("Flushed Redis database (all keys cleared)")
+            return -1  # precise count unknown after flush
 
         except Exception as e:
             logger.error(f"Cache clear failed: {e}")
             return 0
+
+    async def close(self) -> None:
+        """Alias for disconnect."""
+        await self.disconnect()
+
 
     # -------------------------------------------------------------------------
     # Claim-Level Caching

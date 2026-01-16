@@ -286,7 +286,7 @@ class ComparisonBenchmarkConfig:
     concurrency: int = 5
     ohi_concurrency: int = 2
     timeout_seconds: float = 120.0
-    warmup_requests: int = 3
+    warmup_requests: int = 5
     hallucination_max_samples: int = 60
     
     # Statistical Parameters
@@ -343,6 +343,7 @@ class ComparisonBenchmarkConfig:
             concurrency=int(os.getenv("BENCHMARK_CONCURRENCY", "5")),
             ohi_concurrency=int(os.getenv("OHI_CONCURRENCY", "2")),
             timeout_seconds=float(os.getenv("BENCHMARK_TIMEOUT", "120.0")),
+            warmup_requests=int(os.getenv("BENCHMARK_WARMUP", "5")),
             hallucination_max_samples=int(os.getenv("BENCHMARK_HALLUCINATION_MAX", "60")),
         )
     

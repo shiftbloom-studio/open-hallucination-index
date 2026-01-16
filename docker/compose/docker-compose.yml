@@ -86,10 +86,10 @@ services:
       - ~/.cache/huggingface:/root/.cache/huggingface
       # WSL2 NVIDIA driver libs (provides libcuda.so)
       - /usr/lib/wsl:/usr/lib/wsl:ro
-    # cyankiwi/Hermes-4-14B-AWQ-4bit
+    # Qwen/Qwen2.5-14B-Instruct-AWQ
     # Optimized for RTX 4090 (24GB VRAM)
     command: >
-      --model cyankiwi/Hermes-4-14B-AWQ-4bit
+      --model Qwen/Qwen2.5-14B-Instruct-AWQ
       --quantization compressed-tensors
       --dtype half
       --gpu-memory-utilization 0.90
@@ -129,6 +129,7 @@ services:
       - CONTEXT7_BASE_URL=${CONTEXT7_BASE_URL:-https://context7.com}
       - MCP_MAX_PARALLEL_SOURCES=1
       - MCP_SOURCE_DELAY_MS=250
+      - ENABLE_CACHE=false
       # Polite pool email for Crossref & OpenAlex (higher rate limits)
       # Crossref: 50 req/sec (vs 1 req/sec anonymous)
       # OpenAlex: 100k req/day with faster response (vs rate-limited anonymous)
@@ -164,7 +165,7 @@ services:
 
       # Use in-network service names
       LLM_BASE_URL: "http://vllm:8000/v1"
-      LLM_MODEL: "cyankiwi/Hermes-4-14B-AWQ-4bit"
+      LLM_MODEL: "Qwen/Qwen2.5-14B-Instruct-AWQ"
       LLM_API_KEY: "${LLM_API_KEY:-no-key-required}"
       
       # Local embeddings (no OpenAI API needed)
@@ -183,6 +184,7 @@ services:
       # Redis cache (follows env)
       REDIS_ENABLED: "${REDIS_ENABLED}"
       REDIS_HOST: "redis"
+      REDIS_FLUSH_ON_STARTUP: "true"
 
       # MCP Server configuration
       MCP_WIKIPEDIA_ENABLED: "true"
@@ -200,7 +202,7 @@ services:
       # Timeout settings - INCREASED significantly for MCP sources
       VERIFY_LOCAL_TIMEOUT_MS: "2000.0"
       VERIFY_MCP_TIMEOUT_MS: "10000.0"
-      VERIFY_TOTAL_TIMEOUT_MS: "15000.0"
+      VERIFY_TOTAL_TIMEOUT_MS: "60000.0"
       # Evidence thresholds
       VERIFY_MIN_EVIDENCE_COUNT: "2"
       VERIFY_MIN_WEIGHTED_VALUE: "1.5"

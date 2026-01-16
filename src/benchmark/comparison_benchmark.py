@@ -170,6 +170,13 @@ Environment Variables:
     )
 
     parser.add_argument(
+        "--warmup", "-w",
+        type=int,
+        default=5,
+        help="Warmup requests per evaluator before measurement",
+    )
+
+    parser.add_argument(
         "--timeout",
         type=float,
         default=60.0,
@@ -304,6 +311,7 @@ def build_config(args: argparse.Namespace) -> ComparisonBenchmarkConfig:
     config.output_dir = args.output_dir
     config.chart_dpi = args.chart_dpi
     config.concurrency = args.concurrency
+    config.warmup_requests = args.warmup
     config.timeout_seconds = args.timeout
 
     if args.dataset:

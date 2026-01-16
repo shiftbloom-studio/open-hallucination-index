@@ -95,6 +95,10 @@ class RedisSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="REDIS_")
 
     enabled: bool = Field(default=True, description="Enable Redis caching")
+    flush_on_startup: bool = Field(
+        default=False,
+        description="Flush all keys in Redis DB on startup",
+    )
     host: str = Field(default="localhost")
     port: int = Field(default=6379)
     socket_path: str | None = Field(default=None, description="Path to Unix socket")

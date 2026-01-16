@@ -65,15 +65,17 @@ class TruthfulQACase:
         """
         claims: list[tuple[str, bool]] = []
         
-        # Add correct answers as true claims
+        # Add correct answers as true claims (use only the claim text)
         for answer in self.correct_answers:
-            claim = f"For the question '{self.question[:50]}...', the answer is: {answer}"
-            claims.append((claim, True))
-        
-        # Add incorrect answers as false claims
+            claim = answer.strip()
+            if claim:
+                claims.append((claim, True))
+
+        # Add incorrect answers as false claims (use only the claim text)
         for answer in self.incorrect_answers[:3]:  # Limit false answers
-            claim = f"For the question '{self.question[:50]}...', the answer is: {answer}"
-            claims.append((claim, False))
+            claim = answer.strip()
+            if claim:
+                claims.append((claim, False))
         
         return claims
 

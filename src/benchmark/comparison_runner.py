@@ -395,6 +395,9 @@ class ComparisonBenchmarkRunner:
         # Output directory
         self.output_dir = self.config.output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Hard stop for stuck requests (5 minutes per text)
+        self._max_latency_ms = 5 * 60 * 1000
     
     async def __aenter__(self) -> "ComparisonBenchmarkRunner":
         """Async context manager entry."""
@@ -774,36 +777,125 @@ class ComparisonBenchmarkRunner:
         """
         metrics = EvaluatorMetrics(evaluator_name=evaluator.name)
 
-        self._flush_cache_full(f"start:{evaluator.name}")
+        await self._warmup_evaluator(evaluator)
+        self._flush_cache_full(f"after:warmup:{evaluator.name}")
         
         # 1. Hallucination Detection
         if "hallucination" in self.config.metrics:
+            start = time.perf_counter()
             halluc_metrics, latencies = await self._run_hallucination_benchmark_live(
                 evaluator, display, stats
             )
             metrics.hallucination = halluc_metrics
             metrics.latency.latencies_ms.extend(latencies)
             self._flush_cache_full(f"after:hallucination:{evaluator.name}")
+            logger.info(
+                f"{evaluator.name} hallucination metric took {time.perf_counter() - start:.2f}s"
+            )
         
         # 2. TruthfulQA
         if "truthfulqa" in self.config.metrics:
+            start = time.perf_counter()
             tqa_metrics, latencies = await self._run_truthfulqa_benchmark_live(
                 evaluator, display, stats
             )
             metrics.truthfulqa = tqa_metrics
             metrics.latency.latencies_ms.extend(latencies)
             self._flush_cache_full(f"after:truthfulqa:{evaluator.name}")
+            logger.info(
+                f"{evaluator.name} truthfulqa metric took {time.perf_counter() - start:.2f}s"
+            )
         
         # 3. FActScore
         if "factscore" in self.config.metrics:
+            start = time.perf_counter()
             fac_metrics, latencies = await self._run_factscore_benchmark_live(
                 evaluator, display, stats
             )
             metrics.factscore = fac_metrics
             metrics.latency.latencies_ms.extend(latencies)
             self._flush_cache_full(f"after:factscore:{evaluator.name}")
+            logger.info(
+                f"{evaluator.name} factscore metric took {time.perf_counter() - start:.2f}s"
+            )
         
+        if metrics.latency.latencies_ms:
+            metrics.latency.latencies_ms.pop(0)
+
         return metrics
+
+    def _guard_latency(self, latency_ms: float, evaluator_name: str, label: str) -> None:
+        if latency_ms >= self._max_latency_ms:
+            raise RuntimeError(
+                f"Latency exceeded {self._max_latency_ms / 1000:.0f}s "
+                f"for {evaluator_name} ({label}). Aborting benchmark."
+            )
+
+    async def _verify_with_timeout(
+        self,
+        evaluator: BaseEvaluator,
+        claim: str,
+        label: str,
+    ) -> EvaluatorResult:
+        try:
+            return await asyncio.wait_for(
+                evaluator.verify(claim),
+                timeout=self._max_latency_ms / 1000,
+            )
+        except asyncio.TimeoutError as exc:
+            raise RuntimeError(
+                f"Latency exceeded {self._max_latency_ms / 1000:.0f}s "
+                f"for {evaluator.name} ({label}). Aborting benchmark."
+            ) from exc
+
+    async def _decompose_with_timeout(
+        self,
+        evaluator: BaseEvaluator,
+        text: str,
+        label: str,
+    ) -> FActScoreResult:
+        try:
+            return await asyncio.wait_for(
+                evaluator.decompose_and_verify(text),
+                timeout=self._max_latency_ms / 1000,
+            )
+        except asyncio.TimeoutError as exc:
+            raise RuntimeError(
+                f"Latency exceeded {self._max_latency_ms / 1000:.0f}s "
+                f"for {evaluator.name} ({label}). Aborting benchmark."
+            ) from exc
+
+    async def _warmup_evaluator(self, evaluator: BaseEvaluator) -> None:
+        """Warm up evaluator API and model before measuring metrics."""
+        warmup_requests = max(0, int(self.config.warmup_requests))
+        if warmup_requests == 0:
+            return
+
+        samples = [
+            "The Eiffel Tower is in Paris.",
+            "Albert Einstein was born in 1879.",
+            "Water boils at 100 degrees Celsius at sea level.",
+            "Python was created by Guido van Rossum.",
+            "The Earth orbits the Sun.",
+        ]
+        warmup_claims = samples[: min(warmup_requests, len(samples))]
+
+        try:
+            concurrency = min(self._effective_concurrency(evaluator), len(warmup_claims))
+            if hasattr(evaluator, "verify_batch"):
+                await evaluator.verify_batch(warmup_claims, concurrency=concurrency)
+            else:
+                for claim in warmup_claims:
+                    await evaluator.verify(claim)
+
+            if "factscore" in self.config.metrics:
+                warmup_text = (
+                    "The Moon orbits the Earth. It reflects sunlight and affects tides."
+                )
+                await evaluator.decompose_and_verify(warmup_text)
+
+        except Exception as e:
+            logger.warning(f"Warmup failed for {evaluator.name}: {e}")
     
     # ========================================================================
     # Live Benchmark Methods (with real-time display updates)
@@ -847,38 +939,47 @@ class ComparisonBenchmarkRunner:
             total=len(dataset.cases)
         )
         
-        # Process in batches
-        batch_size = self._effective_concurrency(evaluator)
-        for i in range(0, len(dataset.cases), batch_size):
-            batch = dataset.cases[i:i + batch_size]
-            claims = [case.text for case in batch]
+        # Process concurrently
+        semaphore = asyncio.Semaphore(self._effective_concurrency(evaluator))
+
+        async def _process_case(case) -> tuple[EvaluatorResult, Any]:
+            async with semaphore:
+                res = await self._verify_with_timeout(
+                    evaluator,
+                    case.text,
+                    "hallucination",
+                )
+                return res, case
+
+        tasks = [_process_case(case) for case in dataset.cases]
+
+        for future in asyncio.as_completed(tasks):
+            result, case = await future
+
+            latencies.append(result.latency_ms)
+            self._guard_latency(result.latency_ms, evaluator.name, "hallucination")
             
-            results = await evaluator.verify_batch(claims, concurrency=batch_size)
+            # Compare prediction to ground truth
+            predicted = result.predicted_label
+            expected = case.label
             
-            for case, result in zip(batch, results, strict=True):
-                latencies.append(result.latency_ms)
-                
-                # Compare prediction to ground truth
-                predicted = result.predicted_label
-                expected = case.label
-                
-                is_correct = False
-                if predicted and expected:
-                    metrics.true_positives += 1
-                    metrics.correct += 1
-                    is_correct = True
-                elif not predicted and not expected:
-                    metrics.true_negatives += 1
-                    metrics.correct += 1
-                    is_correct = True
-                elif predicted and not expected:
-                    metrics.false_positives += 1  # Dangerous!
-                else:
-                    metrics.false_negatives += 1
-                
-                # Update live display
-                display.advance(1, latency_ms=result.latency_ms)
-                display.add_result(correct=is_correct, error=result.error is not None)
+            is_correct = False
+            if predicted and expected:
+                metrics.true_positives += 1
+                metrics.correct += 1
+                is_correct = True
+            elif not predicted and not expected:
+                metrics.true_negatives += 1
+                metrics.correct += 1
+                is_correct = True
+            elif predicted and not expected:
+                metrics.false_positives += 1  # Dangerous!
+            else:
+                metrics.false_negatives += 1
+            
+            # Update live display
+            display.advance(1, latency_ms=result.latency_ms)
+            display.add_result(correct=is_correct, error=result.error is not None)
         
         return metrics, latencies
     
@@ -909,10 +1010,27 @@ class ComparisonBenchmarkRunner:
             total=len(claims)
         )
         
-        # Process claims
-        for claim_text, is_correct in claims:
-            result = await evaluator.verify(claim_text)
+        # Function to process single item
+        semaphore = asyncio.Semaphore(self._effective_concurrency(evaluator))
+
+        async def _process_item(item: tuple[str, bool]) -> tuple[EvaluatorResult, bool]:
+            claim_text, is_correct = item
+            async with semaphore:
+                res = await self._verify_with_timeout(
+                    evaluator,
+                    claim_text,
+                    "truthfulqa",
+                )
+                return res, is_correct
+
+        # Process claims concurrently and update live
+        tasks = [_process_item(item) for item in claims]
+        
+        for future in asyncio.as_completed(tasks):
+            result, is_correct = await future
+            
             latencies.append(result.latency_ms)
+            self._guard_latency(result.latency_ms, evaluator.name, "truthfulqa")
             
             # Check if evaluator agrees with ground truth
             predicted = result.predicted_label
@@ -924,7 +1042,7 @@ class ComparisonBenchmarkRunner:
             display.advance(1, latency_ms=result.latency_ms)
             is_error = result.error is not None
             if is_error:
-                logger.error(f"TruthfulQA Error (Claim: {claim_text[:50]}...): {result.error}")
+                logger.error(f"TruthfulQA Error (Claim: ...): {result.error}")
             
             display.add_result(correct=correct, error=is_error)
         
@@ -958,9 +1076,22 @@ class ComparisonBenchmarkRunner:
             total=len(sample_texts)
         )
         
-        for text in sample_texts:
-            result = await evaluator.decompose_and_verify(text)
+        semaphore = asyncio.Semaphore(self._effective_concurrency(evaluator))
+
+        async def _process_text(text: str) -> FActScoreResult:
+            async with semaphore:
+                return await self._decompose_with_timeout(
+                    evaluator,
+                    text,
+                    "factscore",
+                )
+
+        tasks = [_process_text(text) for text in sample_texts]
+
+        for future in asyncio.as_completed(tasks):
+            result = await future
             latencies.append(result.latency_ms)
+            self._guard_latency(result.latency_ms, evaluator.name, "factscore")
             
             metrics.total_facts += result.total_facts
             metrics.supported_facts += result.supported_facts
