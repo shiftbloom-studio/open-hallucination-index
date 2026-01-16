@@ -326,6 +326,7 @@ class ToolAggregator {
     if (typeof rawDoi !== "string" || rawDoi.trim().length === 0) {
       return {
         success: false,
+        results: [],
         error: "The 'doi' parameter is required and must be a non-empty string.",
       };
     }
