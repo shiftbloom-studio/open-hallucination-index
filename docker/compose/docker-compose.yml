@@ -86,14 +86,15 @@ services:
       - ~/.cache/huggingface:/root/.cache/huggingface
       # WSL2 NVIDIA driver libs (provides libcuda.so)
       - /usr/lib/wsl:/usr/lib/wsl:ro
-    # TheBloke/openinstruct-mistral-7B-AWQ
+    # cyankiwi/Hermes-4-14B-AWQ-4bit
     # Optimized for RTX 4090 (24GB VRAM)
     command: >
-      --model TheBloke/openinstruct-mistral-7B-AWQ
+      --model cyankiwi/Hermes-4-14B-AWQ-4bit
+      --quantization awq
       --dtype half
-      --max-model-len 4096
-      --max-num-seqs 64
-      --gpu-memory-utilization 0.7
+      --gpu-memory-utilization 0.95
+      --enforce-eager
+      --trust-remote-code
       --tensor-parallel-size 1
       --enable-prefix-caching
       --enable-chunked-prefill
@@ -161,7 +162,7 @@ services:
 
       # Use in-network service names
       LLM_BASE_URL: "http://vllm:8000/v1"
-      LLM_MODEL: "TheBloke/openinstruct-mistral-7B-AWQ"
+      LLM_MODEL: "cyankiwi/Hermes-4-14B-AWQ-4bit"
       LLM_API_KEY: "${LLM_API_KEY:-no-key-required}"
       
       # Local embeddings (no OpenAI API needed)

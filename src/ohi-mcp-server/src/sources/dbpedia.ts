@@ -51,9 +51,12 @@ export class DBpediaSource extends BaseSource {
       LIMIT ${limit}
     `);
 
-    let response = await httpClient.get<SparqlResults>(`${this.baseUrl}/sparql`, {
-      params: { query: sparql, format: "json" },
-      headers: { Accept: "application/sparql-results+json" },
+    const body = new URLSearchParams({ query: sparql, format: "json" }).toString();
+    let response = await httpClient.post<SparqlResults>(`${this.baseUrl}/sparql`, body, {
+      headers: {
+        Accept: "application/sparql-results+json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
     });
 
     let bindings = response.data.results?.bindings || [];
@@ -75,9 +78,12 @@ export class DBpediaSource extends BaseSource {
           LIMIT ${limit}
         `);
 
-        response = await httpClient.get<SparqlResults>(`${this.baseUrl}/sparql`, {
-          params: { query: fallbackSparql, format: "json" },
-          headers: { Accept: "application/sparql-results+json" },
+        const fallbackBody = new URLSearchParams({ query: fallbackSparql, format: "json" }).toString();
+        response = await httpClient.post<SparqlResults>(`${this.baseUrl}/sparql`, fallbackBody, {
+          headers: {
+            Accept: "application/sparql-results+json",
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
         });
 
         bindings = response.data.results?.bindings || [];
