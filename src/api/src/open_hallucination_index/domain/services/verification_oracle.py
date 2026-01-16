@@ -729,9 +729,13 @@ Respond with valid JSON only:
                 if not classifications:
                     raise ValueError("LLM returned no classifications")
 
+                # Track which evidence items were classified
+                classified_indices: set[int] = set()
+                
                 for classification in classifications:
                     ev_idx = classification.get("evidence_index", 0) - 1
                     if 0 <= ev_idx < len(batch):
+                        classified_indices.add(ev_idx)
                         ev = cast(Evidence, batch[ev_idx])
                         label = classification.get("classification", "NEUTRAL").upper()
 
@@ -747,6 +751,14 @@ Respond with valid JSON only:
                             )
                         else:
                             neutral.append(ev)
+                
+                # Handle unclassified evidence (LLM didn't return classification)
+                for ev_idx, ev in enumerate(batch):
+                    if ev_idx not in classified_indices:
+                        neutral.append(ev)
+                        logger.debug(
+                            f"Evidence unclassified by LLM, defaulting to NEUTRAL: {ev.content[:80]}..."
+                        )
 
             except Exception as e:
                 logger.warning(f"Failed to classify evidence batch with LLM: {e}")
@@ -757,10 +769,10 @@ Respond with valid JSON only:
 
         neutral_before = len(neutral)
         neutral = self._limit_neutral_evidence(neutral, max_items=12)
+        total_classified = len(supporting) + len(refuting) + neutral_before
         logger.info(
-            f"LLM classified {len(deduped)} evidence pieces (from {len(evidence)}): "
-            f"{len(supporting)} supporting, {len(refuting)} refuting, "
-            f"{len(neutral)} neutral"
+            f"LLM classification complete: {len(supporting)} supporting, {len(refuting)} refuting, "
+            f"{neutral_before} neutral (total: {total_classified}/{len(deduped)} from {len(evidence)} input)"
         )
         if neutral_before > len(neutral):
             logger.info(
@@ -891,10 +903,12 @@ Respond with valid JSON only:
         supporting: list[Evidence] = []
         refuting: list[Evidence] = []
         neutral: list[Evidence] = []
+        classified_indices: set[int] = set()
         
         for classification in classifications:
             ev_idx = classification.get("evidence_index", 0) - 1
             if 0 <= ev_idx < len(batch):
+                classified_indices.add(ev_idx)
                 ev = batch[ev_idx]
                 label = classification.get("classification", "NEUTRAL").upper()
                 
@@ -904,6 +918,11 @@ Respond with valid JSON only:
                     refuting.append(ev)
                 else:
                     neutral.append(ev)
+        
+        # Default unclassified evidence to neutral
+        for ev_idx, ev in enumerate(batch):
+            if ev_idx not in classified_indices:
+                neutral.append(ev)
         
         return supporting, refuting, neutral
 
@@ -1042,10 +1061,13 @@ Respond with valid JSON only:
                 )
                 
                 classifications = self._parse_classification_response(response.content)
+                classified_indices: set[int] = set()
+                neutral_count = 0
                 
                 for classification in classifications:
                     ev_idx = classification.get("evidence_index", 0) - 1
                     if 0 <= ev_idx < len(batch):
+                        classified_indices.add(ev_idx)
                         original_ev = batch[ev_idx]
                         label = classification.get("classification", "NEUTRAL").upper()
                         
@@ -1070,11 +1092,18 @@ Respond with valid JSON only:
                                 logger.debug(
                                     f"LLM: {label} ({confidence}) - {ev_with_confidence.content[:80]}..."
                                 )
-                            # NEUTRAL (0.5) items are not included in either list
+                            else:
+                                # NEUTRAL (0.5) items are not included in either list
+                                neutral_count += 1
                             
                         except KeyError:
                             logger.warning(f"Unknown classification label: {label}")
                             continue
+                
+                # Count unclassified items
+                unclassified = len(batch) - len(classified_indices)
+                if unclassified > 0:
+                    logger.debug(f"Confidence classification: {unclassified} evidence items unclassified by LLM")
             
             except Exception as e:
                 logger.warning(f"Failed to classify batch with confidence: {e}")
