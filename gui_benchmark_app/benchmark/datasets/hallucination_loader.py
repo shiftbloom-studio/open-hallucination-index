@@ -13,6 +13,8 @@ import csv
 from dataclasses import dataclass, field
 from pathlib import Path
 import warnings
+import random
+import re
 
 
 @dataclass(frozen=True)
@@ -90,7 +92,6 @@ class HallucinationDataset:
     
     def sample(self, n: int, seed: int = 42) -> "HallucinationDataset":
         """Return random sample of n cases."""
-        import random
         if n > len(self.cases):
             warnings.warn(
                 f"Requested sample size {n} is larger than the available number of cases "
@@ -422,9 +423,6 @@ class HallucinationLoader:
         Returns:
             New HallucinationCase marked as hallucination
         """
-        import random
-        import re
-        
         text = factual_case.text
         hallucination_type = "synthetic"
         
@@ -457,9 +455,14 @@ class HallucinationLoader:
                 numbers = re.findall(r'\b\d+\b', text)
                 if numbers:
                     old_num = numbers[0]
-                    new_num = str(int(old_num) + random.choice([-100, -10, -5, 5, 10, 100]))
-                    text = text.replace(old_num, new_num, 1)
-                    hallucination_type = "numeric_error"
+                    base_value = int(old_num)
+                    delta = random.choice([-100, -10, -5, 5, 10, 100])
+                    new_value = base_value + delta
+                    # Avoid producing negative numbers, which are often implausible in this context
+                    if new_value >= 0:
+                        new_num = str(new_value)
+                        text = text.replace(old_num, new_num, 1)
+                        hallucination_type = "numeric_error"
         
         # Strategy 3: Entity swapping (30% chance)
         else:
@@ -515,8 +518,6 @@ class HallucinationLoader:
         Returns:
             Augmented dataset with sufficient hallucinations
         """
-        import random
-        
         current_hall_ratio = dataset.hallucination_count / dataset.total if dataset.total > 0 else 0
         
         if current_hall_ratio >= min_hallucination_ratio:
