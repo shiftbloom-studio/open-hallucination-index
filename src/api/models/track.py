@@ -123,7 +123,7 @@ class KnowledgeMesh(BaseModel):
         return len(self.edges)
 
 
-class MCPSourceInfo(StrEnum):
+class MCPSource(StrEnum):
     """Available MCP sources with their descriptions."""
 
     # Wikipedia cluster
@@ -146,6 +146,11 @@ class MCPSourceInfo(StrEnum):
 
     # Documentation source
     CONTEXT7 = "context7"
+
+    # Infrastructure / storage cluster
+    NEO4J = "neo4j"
+    QDRANT = "qdrant"
+    REDIS = "redis"
 
 
 # Human-readable descriptions for each MCP source
@@ -176,7 +181,7 @@ class SourceReference(BaseModel):
     Contains URL, description, and evidence snippet from the source.
     """
 
-    mcp_source: str = Field(..., description="Name of the MCP source")
+    mcp_source: MCPSource = Field(..., description="Name of the MCP source")
     source_description: str = Field(..., description="Human-readable description of the source")
     url: str | None = Field(default=None, description="Direct URL to the source content")
     evidence_snippet: str | None = Field(
