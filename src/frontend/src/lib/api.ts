@@ -1,6 +1,6 @@
 // --- Types tailored to Python Pydantic Models ---
 
-interface ApiError {
+export interface ApiError {
   status?: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   detail?: any;
