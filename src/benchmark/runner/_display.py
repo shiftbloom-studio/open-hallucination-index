@@ -7,19 +7,27 @@ Provides real-time progress visualization with:
 - Live KPI cards (throughput, accuracy, latency)
 - Completed evaluator results table
 
+Optimized for:
+- Docker exec environments
+- Git Bash within VS Code
+- Standard terminal emulators
+
 Design Philosophy:
 - Decoupled from benchmark execution logic
 - Throttled updates to prevent UI freezing
 - Thread-safe for async contexts
+- Graceful fallback for limited terminals
 """
 
 from __future__ import annotations
 
+import os
+import sys
 import time
 from typing import Any
 
 from rich.align import Align
-from rich.box import ROUNDED
+from rich.box import ROUNDED, SIMPLE, ASCII
 from rich.columns import Columns
 from rich.console import Console, Group
 from rich.live import Live
@@ -40,6 +48,94 @@ from rich.text import Text
 from benchmark.runner._types import COLORS, LiveStats
 
 
+def _detect_terminal_capabilities() -> dict[str, bool]:
+    """
+    Detect terminal capabilities for optimal rendering.
+    
+    Returns:
+        Dict with capability flags:
+        - unicode: Can render Unicode characters
+        - colors: Supports ANSI colors
+        - live: Supports live updating (cursor control)
+        - wide: Terminal is at least 80 columns
+    """
+    # Check for Docker environment
+    in_docker = os.path.exists("/.dockerenv") or bool(os.environ.get("DOCKER_CONTAINER"))
+    
+    # Check terminal type
+    term = os.environ.get("TERM", "").lower()
+    colorterm = os.environ.get("COLORTERM", "").lower()
+    
+    # Git Bash detection
+    in_gitbash = "MINGW" in os.environ.get("MSYSTEM", "") or "msys" in term
+    
+    # VS Code integrated terminal
+    in_vscode = os.environ.get("TERM_PROGRAM") == "vscode"
+    
+    # Force color support for common environments
+    force_color = os.environ.get("FORCE_COLOR", "").lower() in ("1", "true", "yes")
+    
+    # Detect capabilities
+    has_unicode = (
+        sys.stdout.encoding
+        and sys.stdout.encoding.lower() in ("utf-8", "utf8")
+    )
+    
+    has_colors = (
+        force_color
+        or colorterm in ("truecolor", "24bit")
+        or "256color" in term
+        or "color" in term
+        or in_vscode
+        or in_docker  # Docker usually supports colors
+    )
+    
+    # Live updates work in most modern terminals
+    # But can be problematic in piped/redirected output
+    has_live = sys.stdout.isatty() and not os.environ.get("CI")
+    
+    # Width detection
+    try:
+        width = os.get_terminal_size().columns
+        is_wide = width >= 80
+    except OSError:
+        is_wide = True  # Assume wide if can't detect
+    
+    return {
+        "unicode": has_unicode,
+        "colors": has_colors,
+        "live": has_live,
+        "wide": is_wide,
+        "docker": in_docker,
+        "gitbash": in_gitbash,
+        "vscode": in_vscode,
+    }
+
+
+def create_optimized_console() -> Console:
+    """
+    Create a Rich Console optimized for the current environment.
+    
+    Handles Docker exec, Git Bash, and VS Code integrated terminal.
+    
+    Returns:
+        Configured Console instance
+    """
+    caps = _detect_terminal_capabilities()
+    
+    # Force certain settings for problematic environments
+    force_terminal = caps["colors"] or caps["docker"] or caps["vscode"]
+    
+    return Console(
+        force_terminal=force_terminal,
+        force_interactive=caps["live"],
+        color_system="auto" if caps["colors"] else None,
+        width=120 if not caps["wide"] else None,
+        legacy_windows=False,  # We handle Git Bash separately
+        soft_wrap=True,
+    )
+
+
 class LiveBenchmarkDisplay:
     """
     Real-time benchmark display with Rich Live.
@@ -49,6 +145,12 @@ class LiveBenchmarkDisplay:
     - Current task progress bar
     - Live KPI cards (throughput, accuracy, latency)
     - Running statistics table
+    
+    Optimized for Docker exec and Git Bash environments with:
+    - ASCII fallback for box drawing
+    - Reduced refresh rate to prevent flickering
+    - Simpler spinners that render reliably
+    - Graceful degradation for limited terminals
     
     Usage:
         ```python
@@ -67,11 +169,11 @@ class LiveBenchmarkDisplay:
         - Safe to call from async contexts
     """
     
-    # Background refresh rate (Hz)
-    REFRESH_RATE: float = 4.0
+    # Background refresh rate (Hz) - lower for Docker/Git Bash stability
+    REFRESH_RATE: float = 2.0
     
     # Minimum interval between manual updates (seconds)
-    UPDATE_THROTTLE: float = 0.5
+    UPDATE_THROTTLE: float = 0.25
     
     def __init__(self, console: Console, stats: LiveStats) -> None:
         """
@@ -86,29 +188,45 @@ class LiveBenchmarkDisplay:
         self._live: Live | None = None
         self._last_update_time: float = 0.0
         
-        # Progress bar component
+        # Detect terminal capabilities
+        self._caps = _detect_terminal_capabilities()
+        
+        # Choose appropriate box style
+        self._box = ROUNDED if self._caps["unicode"] else ASCII
+        self._simple_box = SIMPLE if self._caps["unicode"] else ASCII
+        
+        # Choose spinner - dots work better in Docker/Git Bash
+        spinner_name = "dots" if self._caps["unicode"] else "line"
+        
+        # Progress bar component with environment-aware configuration
         self._progress = Progress(
-            SpinnerColumn(),
+            SpinnerColumn(spinner_name=spinner_name),
             TextColumn("[bold cyan]{task.description}[/bold cyan]"),
-            BarColumn(bar_width=40),
+            BarColumn(bar_width=30, complete_style="cyan", finished_style="green"),
             MofNCompleteColumn(),
             TaskProgressColumn(),
             TimeElapsedColumn(),
-            TextColumn("•"),
+            TextColumn("[dim]|[/dim]"),
             TimeRemainingColumn(),
             console=console,
             expand=True,
+            transient=False,
         )
         self._task_id: int | None = None
     
     def __enter__(self) -> LiveBenchmarkDisplay:
         """Start the live display context."""
+        # Use lower refresh rate for Docker/Git Bash
+        refresh_rate = 2.0 if (self._caps["docker"] or self._caps["gitbash"]) else 4.0
+        
         self._live = Live(
             self._render(),
             console=self.console,
-            refresh_per_second=self.REFRESH_RATE,
+            refresh_per_second=refresh_rate,
             auto_refresh=True,
             transient=False,
+            vertical_overflow="visible",
+            # Don't redirect in Docker - causes issues
             redirect_stdout=False,
             redirect_stderr=False,
         )
@@ -118,6 +236,8 @@ class LiveBenchmarkDisplay:
     def __exit__(self, *args: Any) -> None:
         """Stop the live display context."""
         if self._live:
+            # Final render before exit
+            self._live.update(self._render(), refresh=True)
             self._live.__exit__(*args)
     
     # ========================================================================
@@ -229,8 +349,12 @@ class LiveBenchmarkDisplay:
         
         now = time.perf_counter()
         if force or (now - self._last_update_time >= self.UPDATE_THROTTLE):
-            self._live.update(self._render(), refresh=True)
-            self._last_update_time = now
+            try:
+                self._live.update(self._render(), refresh=True)
+                self._last_update_time = now
+            except Exception:
+                # Silently handle rendering errors in constrained environments
+                pass
     
     def _render(self) -> Group:
         """Render the complete display layout."""
@@ -245,21 +369,30 @@ class LiveBenchmarkDisplay:
         """Render the header panel with status and progress."""
         elapsed = time.perf_counter() - self.stats.start_time
         
+        # Use ASCII-safe status indicators
         if self.stats.completed_evaluators == self.stats.total_evaluators:
-            status = f"[bold {COLORS.cyan}]✓ COMPLETE[/bold {COLORS.cyan}]"
+            status_icon = "[+]" if not self._caps["unicode"] else "✓"
+            status = f"[bold {COLORS.cyan}]{status_icon} COMPLETE[/bold {COLORS.cyan}]"
         else:
-            status = f"[bold {COLORS.good}]● RUNNING[/bold {COLORS.good}]"
+            status_icon = "[>]" if not self._caps["unicode"] else "●"
+            status = f"[bold {COLORS.good}]{status_icon} RUNNING[/bold {COLORS.good}]"
         
         evaluator_name = self.stats.current_evaluator or "initializing"
+        
+        # Format elapsed time nicely
+        mins, secs = divmod(int(elapsed), 60)
+        time_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+        
         lines = [
-            f"{status}  [dim]Evaluator[/dim] [bold]{evaluator_name}[/bold]",
-            f"[dim]Progress[/dim] {self.stats.completed_evaluators}/{self.stats.total_evaluators} evaluators • [dim]elapsed[/dim] {elapsed:.1f}s",
+            f"{status}  [dim]Evaluator:[/dim] [bold white]{evaluator_name}[/bold white]",
+            f"[dim]Progress:[/dim] {self.stats.completed_evaluators}/{self.stats.total_evaluators} evaluators  [dim]|[/dim]  [dim]Elapsed:[/dim] {time_str}",
         ]
         
         return Panel(
             Align.left("\n".join(lines)),
+            title="[bold cyan]OHI Benchmark[/bold cyan]",
             border_style="cyan",
-            box=ROUNDED,
+            box=self._box,
             padding=(0, 2),
         )
     
@@ -268,8 +401,8 @@ class LiveBenchmarkDisplay:
         return Panel(
             self._progress,
             title=f"[dim]{self.stats.current_metric}[/dim]",
-            border_style="dim",
-            box=ROUNDED,
+            border_style="blue",
+            box=self._simple_box,
             padding=(0, 1),
         )
     
@@ -291,7 +424,7 @@ class LiveBenchmarkDisplay:
             sorted_lat = sorted(self.stats.current_latencies)
             n = len(sorted_lat)
             p50 = sorted_lat[int(n * 0.5)] if n > 0 else 0
-            p95 = sorted_lat[int(n * 0.95)] if n > 0 else 0
+            p95 = sorted_lat[min(int(n * 0.95), n - 1)] if n > 0 else 0
         
         # Style accuracy based on value
         if accuracy >= 80:
@@ -303,12 +436,18 @@ class LiveBenchmarkDisplay:
         
         error_style = f"bold {COLORS.bad}" if self.stats.current_errors > 0 else "dim"
         
+        # Use ASCII-safe icons
+        if self._caps["unicode"]:
+            icons = {"speed": "⚡", "target": "🎯", "time": "⏱️", "chart": "📊", "warn": "⚠️"}
+        else:
+            icons = {"speed": ">", "target": "*", "time": "@", "chart": "#", "warn": "!"}
+        
         cards = [
-            self._kpi_card("⚡ Throughput", f"{throughput:.2f} req/s", style="bold cyan"),
-            self._kpi_card("🎯 Accuracy", f"{accuracy:.1f}%", style=acc_style),
-            self._kpi_card("⏱️ P50 / P95", f"{p50:.0f}ms / {p95:.0f}ms"),
-            self._kpi_card("📊 Processed", str(self.stats.current_completed), style="bold"),
-            self._kpi_card("⚠️ Errors", str(self.stats.current_errors), style=error_style),
+            self._kpi_card(f"{icons['speed']} Throughput", f"{throughput:.2f}/s", style="bold cyan"),
+            self._kpi_card(f"{icons['target']} Accuracy", f"{accuracy:.1f}%", style=acc_style),
+            self._kpi_card(f"{icons['time']} P50/P95", f"{p50:.0f}/{p95:.0f}ms"),
+            self._kpi_card(f"{icons['chart']} Done", f"{self.stats.current_completed}", style="bold"),
+            self._kpi_card(f"{icons['warn']} Errors", str(self.stats.current_errors), style=error_style),
         ]
         
         return Columns(cards, equal=True, expand=True)
@@ -317,30 +456,44 @@ class LiveBenchmarkDisplay:
         """Create a styled KPI card."""
         txt = Text()
         txt.append(f"{title}\n", style="dim")
-        txt.append(value, style=style or "bold")
-        return Panel(txt, box=ROUNDED, padding=(0, 1), border_style="dim")
+        txt.append(value, style=style or "bold white")
+        return Panel(
+            txt,
+            box=self._simple_box,
+            padding=(0, 1),
+            border_style="dim",
+        )
     
     def _render_results_table(self) -> Panel:
         """Render completed evaluator results table."""
         if not self.stats.evaluator_results:
             return Panel(
-                "[dim]No results yet...[/dim]",
+                "[dim]Waiting for results...[/dim]",
                 border_style="dim",
-                box=ROUNDED,
+                box=self._simple_box,
             )
         
         table = Table(
-            box=ROUNDED,
+            box=self._box,
             expand=True,
             show_header=True,
             header_style="bold cyan",
+            row_styles=["", "dim"],  # Alternate row styling
         )
-        table.add_column("Evaluator", style="cyan", no_wrap=True)
-        table.add_column("Accuracy", justify="right")
-        table.add_column("F1", justify="right")
-        table.add_column("P50", justify="right")
-        table.add_column("P95", justify="right")
-        table.add_column("Status", justify="center")
+        table.add_column("Evaluator", style="bold white", no_wrap=True, min_width=12)
+        table.add_column("Accuracy", justify="right", min_width=8)
+        table.add_column("F1", justify="right", min_width=8)
+        table.add_column("P50", justify="right", min_width=8)
+        table.add_column("P95", justify="right", min_width=8)
+        table.add_column("Status", justify="center", min_width=8)
+        
+        # Status icons
+        if self._caps["unicode"]:
+            complete_icon = f"[{COLORS.good}]✓[/{COLORS.good}]"
+            running_icon = f"[{COLORS.warn}]…[/{COLORS.warn}]"
+        else:
+            complete_icon = f"[{COLORS.good}][OK][/{COLORS.good}]"
+            running_icon = f"[{COLORS.warn}][..][/{COLORS.warn}]"
         
         for name, metrics in self.stats.evaluator_results.items():
             acc = metrics.get("accuracy", 0) * 100
@@ -349,8 +502,15 @@ class LiveBenchmarkDisplay:
             p95 = metrics.get("p95", 0)
             status = metrics.get("status", "running")
             
-            acc_style = COLORS.good if acc >= 80 else (COLORS.warn if acc >= 60 else COLORS.bad)
-            status_icon = f"[{COLORS.good}]✓[/{COLORS.good}]" if status == "complete" else f"[{COLORS.warn}]…[/{COLORS.warn}]"
+            # Color accuracy based on value
+            if acc >= 80:
+                acc_style = COLORS.good
+            elif acc >= 60:
+                acc_style = COLORS.warn
+            else:
+                acc_style = COLORS.bad
+            
+            status_icon = complete_icon if status == "complete" else running_icon
             
             table.add_row(
                 name,
@@ -363,7 +523,8 @@ class LiveBenchmarkDisplay:
         
         return Panel(
             table,
-            title="[dim]Completed Evaluators[/dim]",
-            border_style="dim",
-            box=ROUNDED,
+            title="[bold]Evaluator Results[/bold]",
+            border_style="cyan",
+            box=self._box,
+            padding=(0, 0),
         )
