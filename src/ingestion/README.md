@@ -24,8 +24,8 @@ High-performance Wikipedia ingestion pipeline for the Open Hallucination Index p
 flowchart TD
     A[CLI / Scheduler] --> B[Download Wikipedia Dumps]
     B --> C[Parse + Preprocess]
-    C --> D[Chunk + Tokenize]
-    D --> E[Embed (Dense + Sparse)]
+    C --> D["Chunk and Tokenize"]
+    D --> E["Embed - Dense and Sparse"]
     E --> F[Upload to Qdrant]
     E --> G[Upload to Neo4j]
     F --> H[Checkpoint + Metrics]
