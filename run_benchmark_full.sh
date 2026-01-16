@@ -60,15 +60,20 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Running Full Comparison Benchmark..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-docker exec -e BENCHMARK_TIMEOUT=180.0 ${CONTAINER} python -m benchmark.comparison_benchmark \
+# Use -t for pseudo-TTY and FORCE_COLOR for Rich compatibility in Docker/Git Bash
+docker exec -t \
+    -e TERM=xterm-256color \
+    -e FORCE_COLOR=1 \
+    -e BENCHMARK_TIMEOUT=180.0 \
+    ${CONTAINER} python -m benchmark.comparison_benchmark \
     --evaluators ohi_local,ohi_max,graph_rag,vector_rag \
     --metrics hallucination,truthfulqa,factscore,latency \
-    --truthfulqa-max 40 \
-    --factscore-max 60 \
+    --truthfulqa-max 50 \
+    --factscore-max 50 \
     --hallucination-max 50 \
     --output-dir "${OUTPUT_DIR}" \
     --chart-dpi 200 \
-    --concurrency 1 \
+    --concurrency 4 \
     --verbose
 
 echo ""

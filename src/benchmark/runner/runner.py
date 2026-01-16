@@ -87,8 +87,10 @@ class ComparisonBenchmarkRunner:
             config: Optional configuration (loads from env if not provided)
             console: Optional Rich console (creates new if not provided)
         """
+        from benchmark.runner._display import create_optimized_console
+        
         self.config = config or ComparisonBenchmarkConfig.from_env()
-        self.console = console or Console()
+        self.console = console or create_optimized_console()
         
         # Generate unique run ID
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")

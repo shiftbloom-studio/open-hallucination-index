@@ -30,7 +30,8 @@ fi
 echo "Running quick evaluator test..."
 echo ""
 
-docker exec ${CONTAINER} python /app/benchmark/test_evaluators_quick.py
+# Use -t for pseudo-TTY and FORCE_COLOR for Rich compatibility
+docker exec -t -e TERM=xterm-256color -e FORCE_COLOR=1 ${CONTAINER} python /app/benchmark/test_evaluators_quick.py
 
 echo ""
 echo "✅ Quick test complete!"

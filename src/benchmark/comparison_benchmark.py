@@ -349,8 +349,9 @@ def build_config(args: argparse.Namespace) -> ComparisonBenchmarkConfig:
 
 async def run_benchmark(args: argparse.Namespace) -> int:
     """Run the comparison benchmark."""
-    # Force terminal on Windows/GitBash often helps avoid frozen output
-    console = Console(force_terminal=True, color_system="auto")
+    # Use optimized console for Docker/Git Bash environments
+    from benchmark.runner import create_optimized_console
+    console = create_optimized_console()
 
     try:
         config = build_config(args)
@@ -410,7 +411,8 @@ async def generate_charts_only(args: argparse.Namespace) -> int:
     """Generate charts from an existing report."""
     import json
 
-    console = Console()
+    from benchmark.runner import create_optimized_console
+    console = create_optimized_console()
 
     if not args.report:
         console.print("[red]Error: --report is required with --charts-only[/red]")
