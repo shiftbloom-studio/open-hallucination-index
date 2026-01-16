@@ -275,7 +275,6 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
                </p>
             </div>
           )}
-          </CardContent>
 
           {!hasEnoughTokens && text.length > 0 && (
             <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
