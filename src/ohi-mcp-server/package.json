@@ -14,12 +14,13 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
     "express": "^5.2.1",
-    "zod": "^4.3.5",
-    "sanitize-html": "^2.17.0"
+    "sanitize-html": "^2.17.0",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^25.0.8",
+    "@types/sanitize-html": "^2.16.0",
     "eslint": "^9.39.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
