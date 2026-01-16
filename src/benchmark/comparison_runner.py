@@ -208,11 +208,22 @@ class LiveBenchmarkDisplay:
     def set_evaluator(self, name: str) -> None:
         """Set current evaluator being tested."""
         self.stats.current_evaluator = name
+        if name not in self.stats.evaluator_results:
+            self.stats.evaluator_results[name] = {
+                "accuracy": 0.0,
+                "f1": 0.0,
+                "p50": 0.0,
+                "p95": 0.0,
+                "status": "running",
+            }
+        else:
+            self.stats.evaluator_results[name]["status"] = "running"
         self._update()
     
     def complete_evaluator(self, name: str, metrics: dict[str, Any]) -> None:
         """Mark an evaluator as complete with its metrics."""
         self.stats.completed_evaluators += 1
+        metrics["status"] = "complete"
         self.stats.evaluator_results[name] = metrics
         self._update()
     
@@ -327,8 +338,10 @@ class LiveBenchmarkDisplay:
             f1 = metrics.get("f1", 0) * 100
             p50 = metrics.get("p50", 0)
             p95 = metrics.get("p95", 0)
+            status = metrics.get("status", "running")
             
             acc_style = "green" if acc >= 80 else ("yellow" if acc >= 60 else "red")
+            status_label = "[green]✓[/green]" if status == "complete" else "[yellow]…[/yellow]"
             
             table.add_row(
                 name,
@@ -336,7 +349,7 @@ class LiveBenchmarkDisplay:
                 f"{f1:.1f}%",
                 f"{p50:.0f}ms",
                 f"{p95:.0f}ms",
-                "[green]✓[/green]",
+                status_label,
             )
         
         return Panel(table, title="[dim]Completed Evaluators[/dim]", border_style="dim", box=ROUNDED)
