@@ -57,17 +57,26 @@ export class ClinicalTrialsSource extends BaseSource {
   async search(query: string, limit = 5): Promise<SearchResult[]> {
     // Extract NCT ID if present (e.g. NCT04368728) to improve search precision
     const nctMatch = query.match(/NCT\d{8}/i);
-    const searchTerm = nctMatch ? nctMatch[0] : query;
+    const cleaned = (nctMatch ? nctMatch[0] : query)
+      .replace(/["'`]/g, "")
+      .replace(/[^\w\s-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
 
-    const response = await httpClient.get<ClinicalTrialsResponse>(`${this.baseUrl}/studies`, {
-      params: {
-        "query.term": searchTerm,
-        pageSize: limit,
-        // Removed sort: "@relevance" as it causes issues with v2 API
-      },
-    });
+    if (!cleaned || cleaned.length < 3) {
+      return [];
+    }
 
-    return (response.data.studies || []).map((study) => {
+    try {
+      const response = await httpClient.get<ClinicalTrialsResponse>(`${this.baseUrl}/studies`, {
+        params: {
+          "query.term": cleaned,
+          pageSize: limit,
+          // Removed sort: "@relevance" as it causes issues with v2 API
+        },
+      });
+
+      return (response.data.studies || []).map((study) => {
       const protocol = study.protocolSection || {};
       const id = protocol.identificationModule || {};
       const status = protocol.statusModule || {};
@@ -89,7 +98,7 @@ export class ClinicalTrialsSource extends BaseSource {
         .filter(Boolean)
         .join("\n");
 
-      return {
+        return {
         source: this.name,
         title,
         content,
@@ -100,8 +109,12 @@ export class ClinicalTrialsSource extends BaseSource {
           phases: status.phases,
           startDate: status.startDateStruct?.date,
         },
-      };
-    });
+        };
+      });
+    } catch (error) {
+      console.warn("ClinicalTrials search failed", error);
+      return [];
+    }
   }
 
   async getStudy(nctId: string): Promise<SearchResult | null> {
