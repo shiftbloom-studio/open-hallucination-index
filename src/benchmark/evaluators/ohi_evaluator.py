@@ -53,6 +53,7 @@ class OHIEvaluator(BaseEvaluator):
             self.name = name_override
         self.timeout = config.timeout_seconds
         self._target_sources = target_sources_override or 10
+        self.max_concurrency = max(1, config.ohi_concurrency)
         
         # Persistent HTTP client
         self._client: httpx.AsyncClient | None = None
@@ -62,7 +63,10 @@ class OHIEvaluator(BaseEvaluator):
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout),
-                limits=httpx.Limits(max_connections=20),
+                limits=httpx.Limits(
+                    max_connections=self.max_concurrency,
+                    max_keepalive_connections=self.max_concurrency,
+                ),
             )
         return self._client
     

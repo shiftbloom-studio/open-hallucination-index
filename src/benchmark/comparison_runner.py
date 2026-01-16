@@ -416,6 +416,14 @@ class ComparisonBenchmarkRunner:
         except Exception as e:
             logger.warning(f"Failed to clear cache: {e}")
             return 0
+
+    def _effective_concurrency(self, evaluator: BaseEvaluator) -> int:
+        """Determine evaluator-specific concurrency cap."""
+        configured = self.config.concurrency
+        max_concurrency = getattr(evaluator, "max_concurrency", None)
+        if isinstance(max_concurrency, int) and max_concurrency > 0:
+            return max(1, min(configured, max_concurrency))
+        return max(1, configured)
     
     def _set_cache_enabled(self, enabled: bool) -> bool:
         """
@@ -530,7 +538,7 @@ class ComparisonBenchmarkRunner:
         )
         
         with LiveBenchmarkDisplay(self.console, stats) as display:
-            for eval_name, evaluator in self._evaluators.items():
+            for _eval_name, evaluator in self._evaluators.items():
                 display.set_evaluator(evaluator.name)
                 
                 metrics = await self._benchmark_evaluator_live(evaluator, display, stats)
@@ -624,8 +632,8 @@ class ComparisonBenchmarkRunner:
         2. Warm cache: Cache populated from previous run
         """
         self.console.print(Panel(
-            f"[bold yellow]Cache Testing Mode[/bold yellow]\n"
-            f"Testing with cold vs warm cache",
+            "[bold yellow]Cache Testing Mode[/bold yellow]\n"
+            "Testing with cold vs warm cache",
             border_style="yellow",
         ))
         
@@ -636,7 +644,7 @@ class ComparisonBenchmarkRunner:
         )
         
         with LiveBenchmarkDisplay(self.console, stats) as display:
-            for eval_name, evaluator in self._evaluators.items():
+            for _eval_name, evaluator in self._evaluators.items():
                 # Test 1: Cold cache (cleared before run)
                 display.set_evaluator(f"{evaluator.name} (Cold)")
                 
@@ -785,7 +793,7 @@ class ComparisonBenchmarkRunner:
         )
         
         # Process in batches
-        batch_size = self.config.concurrency
+        batch_size = self._effective_concurrency(evaluator)
         for i in range(0, len(dataset.cases), batch_size):
             batch = dataset.cases[i:i + batch_size]
             claims = [case.text for case in batch]
@@ -961,7 +969,7 @@ class ComparisonBenchmarkRunner:
             )
             
             # Process in batches
-            batch_size = self.config.concurrency
+            batch_size = self._effective_concurrency(evaluator)
             for i in range(0, len(dataset.cases), batch_size):
                 batch = dataset.cases[i:i + batch_size]
                 claims = [case.text for case in batch]
@@ -1154,8 +1162,8 @@ class ComparisonBenchmarkRunner:
         
         # Save JSON report
         json_path = self.output_dir / f"{self.run_id}_report.json"
-        with open(json_path, "w") as f:
-            json_module.dump(report.to_dict(), f, indent=2)
+        json_payload = json_module.dumps(report.to_dict(), indent=2)
+        await asyncio.to_thread(json_path.write_text, json_payload, encoding="utf-8")
         
         self.console.print(f"[dim]Saved report: {json_path}[/dim]")
         

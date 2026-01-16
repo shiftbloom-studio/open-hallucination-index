@@ -120,6 +120,7 @@ asyncio.run(run_benchmark())
 | `BENCHMARK_DATASET` | Path to CSV dataset | `src/benchmark/benchmark_dataset.csv` |
 | `BENCHMARK_OUTPUT_DIR` | Output directory | `benchmark_results` |
 | `BENCHMARK_CONCURRENCY` | Parallel requests | `3` |
+| `OHI_CONCURRENCY` | OHI-specific parallel requests (comparison benchmark) | `2` |
 | `BENCHMARK_THRESHOLD` | Decision threshold | `0.7` |
 | `BENCHMARK_WARMUP` | Warmup request count | `5` |
 | `BENCHMARK_TIMEOUT` | Request timeout (seconds) | `120` |
@@ -194,6 +195,7 @@ Each report includes:
 
 - **Warmup**: Use `BENCHMARK_WARMUP` to stabilize LLM latency before measurement.
 - **Concurrency**: Keep `BENCHMARK_CONCURRENCY` below the API worker count for reproducible latency.
+- **OHI load**: Use `OHI_CONCURRENCY` to cap OHI in-flight requests when the GPU is saturated.
 - **Timeouts**: If MCP sources are slow, increase `BENCHMARK_TIMEOUT` to avoid biased failures.
 - **Reproducibility**: Fix strategy list, thresholds, and dataset versions.
 - **CI**: Use `--dry-run` for configuration validation without load.

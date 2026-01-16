@@ -158,7 +158,10 @@ class HybridVerificationOracle(VerificationOracle):
 
             elif active_strategy == VerificationStrategy.MCP_ENHANCED:
                 # MCP Enhanced: Query MCP sources first, then fallback to local
-                all_evidence = await self._mcp_enhanced_evidence(claim)
+                all_evidence = await self._mcp_enhanced_evidence(
+                    claim,
+                    target_sources=target_sources,
+                )
 
             elif active_strategy == VerificationStrategy.ADAPTIVE:
                 # ADAPTIVE: Use AdaptiveEvidenceCollector for intelligent tiered collection
@@ -381,7 +384,12 @@ class HybridVerificationOracle(VerificationOracle):
             except Exception as e:
                 logger.debug(f"Failed to persist MCP evidence: {e}")
 
-    async def _mcp_enhanced_evidence(self, claim: Claim) -> list[Evidence]:
+    async def _mcp_enhanced_evidence(
+        self,
+        claim: Claim,
+        *,
+        target_sources: int | None = None,
+    ) -> list[Evidence]:
         """
         MCP-enhanced evidence gathering with fallback.
 
@@ -393,11 +401,35 @@ class HybridVerificationOracle(VerificationOracle):
         tasks = []
         task_names = []
 
+        # Select MCP sources (optionally capped)
+        mcp_sources = [s for s in self._mcp_sources if s.is_available]
+        if self._mcp_selector is not None:
+            if target_sources is not None:
+                selection = await self._mcp_selector.select(
+                    claim,
+                    max_sources_override=target_sources,
+                )
+                if len(selection.selected_sources) < target_sources:
+                    selection = await self._mcp_selector.select(
+                        claim,
+                        allow_all_relevant=True,
+                    )
+            else:
+                selection = await self._mcp_selector.select(
+                    claim,
+                    allow_all_relevant=True,
+                )
+
+            mcp_sources = self._mcp_selector.get_sources_for_selection(selection)
+            if target_sources is not None and len(mcp_sources) > target_sources:
+                mcp_sources = mcp_sources[:target_sources]
+        elif target_sources is not None:
+            mcp_sources = mcp_sources[:target_sources]
+
         # Queue MCP sources
-        for source in self._mcp_sources:
-            if source.is_available:
-                tasks.append(source.find_evidence(claim))
-                task_names.append(f"mcp:{source.source_name}")
+        for source in mcp_sources:
+            tasks.append(source.find_evidence(claim))
+            task_names.append(f"mcp:{source.source_name}")
 
         # Queue local stores (run in parallel with MCP)
         if self._graph_store is not None:
