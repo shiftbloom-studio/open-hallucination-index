@@ -8,6 +8,8 @@ This is our primary system - expected to outperform baselines.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import time
 
 import httpx
@@ -21,6 +23,8 @@ from benchmark.evaluators.base import (
     FActScoreResult,
     VerificationVerdict,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OHIEvaluator(BaseEvaluator):
@@ -52,22 +56,55 @@ class OHIEvaluator(BaseEvaluator):
             self.name = name_override
         self.timeout = config.timeout_seconds
         self._target_sources = target_sources_override or 10
-        self.max_concurrency = max(1, config.ohi_concurrency)
+        # Increase connection pool to handle concurrent requests
+        self.max_concurrency = max(10, config.concurrency * 2)
+        self.max_retries = 3  # Retry failed requests
+        self.retry_delay = 0.5  # Initial retry delay in seconds
+        
+        # Log API key status
+        if config.ohi_api_key:
+            logger.info(f"{self.name}: API key configured (length: {len(config.ohi_api_key)})")
+        else:
+            logger.warning(f"{self.name}: No API key configured - ensure API_API_KEY env var is set")
         
         # Persistent HTTP client
         self._client: httpx.AsyncClient | None = None
+        self._client_lock = asyncio.Lock()  # Ensure thread-safe client access
     
     async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
-        if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(self.timeout),
-                limits=httpx.Limits(
-                    max_connections=self.max_concurrency,
-                    max_keepalive_connections=self.max_concurrency,
-                ),
-            )
-        return self._client
+        """Get or create HTTP client with proper connection pooling."""
+        async with self._client_lock:
+            if self._client is None or self._client.is_closed:
+                logger.info(
+                    f"{self.name}: Creating HTTP client (max_connections={self.max_concurrency}, "
+                    f"timeout={self.timeout}s, base_url={self.base_url})"
+                )
+                self._client = httpx.AsyncClient(
+                    timeout=httpx.Timeout(
+                        connect=10.0,  # Connection timeout
+                        read=self.timeout,  # Read timeout
+                        write=30.0,  # Write timeout
+                        pool=5.0,  # Pool acquisition timeout
+                    ),
+                    limits=httpx.Limits(
+                        max_connections=self.max_concurrency,
+                        max_keepalive_connections=self.max_concurrency // 2,
+                        keepalive_expiry=30.0,  # Keep connections alive for 30s
+                    ),
+                    # Follow redirects
+                    follow_redirects=True,
+                    # Retry on connection errors
+                    transport=httpx.AsyncHTTPTransport(retries=1),
+                )
+            return self._client
+    
+    async def close(self) -> None:
+        """Close the HTTP client and free resources."""
+        async with self._client_lock:
+            if self._client and not self._client.is_closed:
+                logger.info(f"{self.name}: Closing HTTP client")
+                await self._client.aclose()
+                self._client = None
     
     async def health_check(self) -> bool:
         """Check if OHI API is healthy."""
@@ -78,9 +115,63 @@ class OHIEvaluator(BaseEvaluator):
         except Exception:
             return False
     
+    async def _make_request(
+        self,
+        payload: dict,
+        headers: dict,
+        attempt: int = 1,
+    ) -> httpx.Response:
+        """
+        Make HTTP request with retry logic.
+        
+        Args:
+            payload: Request payload
+            headers: Request headers
+            attempt: Current retry attempt (1-indexed)
+            
+        Returns:
+            httpx.Response object
+            
+        Raises:
+            httpx.HTTPError: If all retries fail
+        """
+        client = await self._get_client()
+        
+        try:
+            response = await client.post(
+                self.verify_url,
+                json=payload,
+                headers=headers,
+            )
+            return response
+            
+        except (httpx.ConnectError, httpx.PoolTimeout, httpx.ConnectTimeout) as e:
+            if attempt >= self.max_retries:
+                logger.error(
+                    f"{self.name}: Connection failed after {attempt} attempts: {type(e).__name__}: {e}"
+                )
+                raise
+            
+            # Exponential backoff
+            delay = self.retry_delay * (2 ** (attempt - 1))
+            logger.warning(
+                f"{self.name}: Connection error (attempt {attempt}/{self.max_retries}), "
+                f"retrying in {delay:.1f}s: {type(e).__name__}: {e}"
+            )
+            await asyncio.sleep(delay)
+            return await self._make_request(payload, headers, attempt + 1)
+        
+        except httpx.TimeoutException as e:
+            logger.error(f"{self.name}: Request timeout: {e}")
+            raise
+        
+        except Exception as e:
+            logger.error(f"{self.name}: Unexpected error: {type(e).__name__}: {e}")
+            raise
+
     async def verify(self, claim: str) -> EvaluatorResult:
         """
-        Verify a claim using OHI API.
+        Verify a claim using OHI API with retry logic.
         
         Args:
             claim: The claim text to verify.
@@ -91,8 +182,6 @@ class OHIEvaluator(BaseEvaluator):
         start_time = time.perf_counter()
         
         try:
-            client = await self._get_client()
-            
             payload = {
                 "text": claim,
                 "strategy": self.strategy,
@@ -101,23 +190,31 @@ class OHIEvaluator(BaseEvaluator):
                 "use_cache": False,  # Disable cache for accurate benchmarking
             }
             
+            headers = {}
             if self.config.ohi_api_key:
-                headers = {"X-API-Key": self.config.ohi_api_key}
+                headers["X-API-Key"] = self.config.ohi_api_key
             else:
-                headers = {}
+                logger.debug(f"{self.name}: Making request without API key")
             
             # Disable pre-checks for benchmarking
             headers["X-Benchmark-Mode"] = "true"
             
-            response = await client.post(
-                self.verify_url,
-                json=payload,
-                headers=headers,
-            )
+            response = await self._make_request(payload, headers)
             
             latency_ms = (time.perf_counter() - start_time) * 1000
             
             if response.status_code != 200:
+                # Log response details for debugging
+                try:
+                    error_detail = response.text[:500]  # First 500 chars
+                except Exception:
+                    error_detail = "<unable to read response>"
+                
+                logger.error(
+                    f"{self.name}: API error - Status {response.status_code}, "
+                    f"URL: {self.verify_url}, Detail: {error_detail}"
+                )
+                
                 # Treat filter rejections as non-error unverifiable for benchmarks
                 if response.status_code in {403, 422}:
                     return EvaluatorResult(
@@ -128,6 +225,17 @@ class OHIEvaluator(BaseEvaluator):
                         evaluator=self.name,
                         metadata={"api_status": response.status_code},
                     )
+                
+                # 401 indicates authentication failure
+                if response.status_code == 401:
+                    return EvaluatorResult(
+                        claim=claim,
+                        verdict=VerificationVerdict.UNVERIFIABLE,
+                        trust_score=0.0,
+                        latency_ms=latency_ms,
+                        evaluator=self.name,
+                        error="Authentication failed (401) - check API_API_KEY environment variable",
+                    )
 
                 return EvaluatorResult(
                     claim=claim,
@@ -135,7 +243,7 @@ class OHIEvaluator(BaseEvaluator):
                     trust_score=0.0,
                     latency_ms=latency_ms,
                     evaluator=self.name,
-                    error=f"API error: {response.status_code}",
+                    error=f"API error {response.status_code}: {error_detail[:100]}",
                 )
             
             data = response.json()
@@ -193,25 +301,45 @@ class OHIEvaluator(BaseEvaluator):
                 },
             )
             
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as e:
             latency_ms = (time.perf_counter() - start_time) * 1000
+            logger.error(
+                f"{self.name}: Request timeout after {latency_ms:.0f}ms: {e}"
+            )
             return EvaluatorResult(
                 claim=claim,
                 verdict=VerificationVerdict.UNVERIFIABLE,
                 trust_score=0.0,
                 latency_ms=latency_ms,
                 evaluator=self.name,
-                error="Request timeout",
+                error=f"Request timeout after {latency_ms:.0f}ms",
+            )
+        except (httpx.ConnectError, httpx.PoolTimeout, httpx.NetworkError) as e:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            logger.error(
+                f"{self.name}: Connection error: {type(e).__name__}: {e}"
+            )
+            return EvaluatorResult(
+                claim=claim,
+                verdict=VerificationVerdict.UNVERIFIABLE,
+                trust_score=0.0,
+                latency_ms=latency_ms,
+                evaluator=self.name,
+                error=f"Connection error: {type(e).__name__}",
             )
         except Exception as e:
             latency_ms = (time.perf_counter() - start_time) * 1000
+            logger.error(
+                f"{self.name}: Unexpected error: {type(e).__name__}: {e}",
+                exc_info=True,  # Include stack trace
+            )
             return EvaluatorResult(
                 claim=claim,
                 verdict=VerificationVerdict.UNVERIFIABLE,
                 trust_score=0.0,
                 latency_ms=latency_ms,
                 evaluator=self.name,
-                error=str(e),
+                error=f"{type(e).__name__}: {str(e)[:200]}",
             )
     
     async def decompose_and_verify(self, text: str) -> FActScoreResult:
@@ -224,8 +352,6 @@ class OHIEvaluator(BaseEvaluator):
         start_time = time.perf_counter()
         
         try:
-            client = await self._get_client()
-            
             # First, get claim decomposition
             payload = {
                 "text": text,
@@ -242,11 +368,7 @@ class OHIEvaluator(BaseEvaluator):
             # Disable pre-checks for benchmarking
             headers["X-Benchmark-Mode"] = "true"
             
-            response = await client.post(
-                self.verify_url,
-                json=payload,
-                headers=headers,
-            )
+            response = await self._make_request(payload, headers)
             
             latency_ms = (time.perf_counter() - start_time) * 1000
             
@@ -311,9 +433,3 @@ class OHIEvaluator(BaseEvaluator):
                 evaluator=self.name,
                 error=str(e),
             )
-    
-    async def close(self) -> None:
-        """Close HTTP client."""
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
-            self._client = None

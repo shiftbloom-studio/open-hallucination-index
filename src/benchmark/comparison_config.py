@@ -278,8 +278,9 @@ class ComparisonBenchmarkConfig:
     chart_format: Literal["png", "svg", "pdf"] = "png"
     
     # Execution Parameters
-    concurrency: int = 5
-    ohi_concurrency: int = 2
+    # Reduced concurrency to prevent connection pool exhaustion and API overload
+    concurrency: int = 3  # Lower default to prevent overwhelming local API
+    ohi_concurrency: int = 3  # Match main concurrency for OHI
     timeout_seconds: float = 120.0
     warmup_requests: int = 5
     hallucination_max_samples: int = 60

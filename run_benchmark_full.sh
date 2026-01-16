@@ -68,12 +68,12 @@ docker exec -t \
     ${CONTAINER} python -m benchmark.comparison_benchmark \
     --evaluators ohi_local,ohi_max,graph_rag,vector_rag \
     --metrics hallucination,truthfulqa,factscore,latency \
-    --truthfulqa-max 50 \
-    --factscore-max 50 \
-    --hallucination-max 50 \
+    --truthfulqa-max 15 \
+    --factscore-max 15 \
+    --hallucination-max 15 \
     --output-dir "${OUTPUT_DIR}" \
     --chart-dpi 200 \
-    --concurrency 4 \
+    --concurrency 1 \
     --verbose
 
 echo ""
