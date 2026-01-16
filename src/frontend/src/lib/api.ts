@@ -1,7 +1,10 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { z } from "zod";
-
 // --- Types tailored to Python Pydantic Models ---
+
+interface ApiError {
+  status?: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  detail?: any;
+}
 
 // From ref/requests.py
 export interface VerifyTextRequest {
@@ -107,6 +110,10 @@ export interface BatchVerifyResponse {
 
 // --- API Client ---
 
+const HEALTH_LIVE_PATH = "/health/live";
+const VERIFY_TEXT_PATH = "/api/v1/verify";
+const VERIFY_BATCH_PATH = "/api/v1/verify/batch";
+
 export class ApiClient {
   constructor(private baseUrl: string = "/api/ohi") {
     // Ensure no trailing slash
@@ -120,7 +127,7 @@ export class ApiClient {
   }
 
   async getHealth(): Promise<HealthStatus> {
-    const res = await fetch(this.getUrl("/health/live"), {
+    const res = await fetch(this.getUrl(HEALTH_LIVE_PATH), {
       method: "GET",
       headers: { "Content-Type": "application/json" },
     });
@@ -129,7 +136,7 @@ export class ApiClient {
   }
 
   async verifyText(request: VerifyTextRequest): Promise<VerifyTextResponse> {
-    const res = await fetch(this.getUrl("/api/v1/verify"), {
+    const res = await fetch(this.getUrl(VERIFY_TEXT_PATH), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
@@ -139,24 +146,33 @@ export class ApiClient {
       let errorDetail = null;
       
       try {
-        const errorData = await res.json();
-        if (errorData.detail) {
-          errorDetail = errorData.detail;
-          errorMessage = errorData.detail;
-        } else if (errorData.message) {
-          errorDetail = errorData.message;
-          errorMessage = errorData.message;
+        // Read the response text first
+        const responseText = await res.text();
+        
+        // Try to parse as JSON
+        try {
+          const errorData = JSON.parse(responseText);
+          if (errorData.detail) {
+            errorDetail = errorData.detail;
+            errorMessage = errorData.detail;
+          } else if (errorData.message) {
+            errorDetail = errorData.message;
+            errorMessage = errorData.message;
+          }
+        } catch {
+          // If not JSON, use the text directly
+          if (responseText) {
+            errorMessage = `Verification failed: ${res.status} ${responseText}`;
+          } else {
+            errorMessage = `Verification failed: ${res.status} ${res.statusText}`;
+          }
         }
       } catch {
-        // If JSON parsing fails, try text
-        const errorText = await res.text();
-        if (errorText) {
-          errorMessage = errorText;
-        }
+        // If we can't read the response, use statusText
+        errorMessage = `Verification failed: ${res.status} ${res.statusText}`;
       }
       
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const error: any = new Error(errorMessage);
+      const error: Error & ApiError = new Error(errorMessage);
       error.status = res.status;
       error.detail = errorDetail;
       throw error;
@@ -165,13 +181,47 @@ export class ApiClient {
   }
 
   async verifyBatch(request: BatchVerifyRequest): Promise<BatchVerifyResponse> {
-    const res = await fetch(this.getUrl("/api/v1/verify/batch"), {
+    const res = await fetch(this.getUrl(VERIFY_BATCH_PATH), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
-    if (!res.ok)
-      throw new Error(`Batch verification failed: ${res.statusText}`);
+    if (!res.ok) {
+      let errorMessage = `Batch verification failed: ${res.status}`;
+      let errorDetail = null;
+
+      try {
+        // Read the response text first
+        const responseText = await res.text();
+        
+        // Try to parse as JSON
+        try {
+          const errorData = JSON.parse(responseText);
+          if (errorData.detail) {
+            errorDetail = errorData.detail;
+            errorMessage = errorData.detail;
+          } else if (errorData.message) {
+            errorDetail = errorData.message;
+            errorMessage = errorData.message;
+          }
+        } catch {
+          // If not JSON, use the text directly
+          if (responseText) {
+            errorMessage = `Batch verification failed: ${res.status} ${responseText}`;
+          } else {
+            errorMessage = `Batch verification failed: ${res.status} ${res.statusText}`;
+          }
+        }
+      } catch {
+        // If we can't read the response, use statusText
+        errorMessage = `Batch verification failed: ${res.status} ${res.statusText}`;
+      }
+
+      const error: Error & ApiError = new Error(errorMessage);
+      error.status = res.status;
+      error.detail = errorDetail;
+      throw error;
+    }
     return res.json();
   }
 }
