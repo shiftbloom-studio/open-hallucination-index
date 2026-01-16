@@ -105,14 +105,14 @@ class TestNeo4jConnectionHandling:
         """Test handling of connection errors."""
         with patch("adapters.neo4j.GraphDatabase.driver") as mock_driver_fn:
             mock_driver = MagicMock()
-            mock_driver.session.side_effect = Exception("Connection failed")
+            mock_driver.session.side_effect = RuntimeError("Connection failed")
             mock_driver_fn.return_value = mock_driver
 
             store = Neo4jGraphAdapter(mock_settings)
             store._driver = mock_driver
 
             # Should handle error gracefully
-            with pytest.raises(Exception):
+            with pytest.raises(RuntimeError):
                 await store.find_evidence("test claim")
 
     def test_verify_connectivity(self, neo4j_store: Neo4jGraphAdapter):

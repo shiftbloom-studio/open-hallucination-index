@@ -1,7 +1,7 @@
 """Unit tests for Qdrant vector store adapter."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -114,9 +114,9 @@ class TestQdrantErrorHandling:
         self, qdrant_store: QdrantVectorAdapter
     ):
         """Test handling of search errors."""
-        qdrant_store.client.search.side_effect = Exception("Search failed")
+        qdrant_store.client.search.side_effect = RuntimeError("Search failed")
         
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError):
             await qdrant_store.find_evidence("test claim")
 
     @pytest.mark.asyncio
@@ -124,7 +124,7 @@ class TestQdrantErrorHandling:
         self, qdrant_store: QdrantVectorAdapter
     ):
         """Test handling of embedding errors."""
-        qdrant_store.model.encode.side_effect = Exception("Embedding failed")
+        qdrant_store.model.encode.side_effect = RuntimeError("Embedding failed")
         
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError):
             await qdrant_store._generate_embedding("test text")

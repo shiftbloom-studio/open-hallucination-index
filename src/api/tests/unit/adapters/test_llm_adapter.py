@@ -49,12 +49,14 @@ def mock_openai_client():
 @pytest.fixture
 def llm_adapter(mock_settings, mock_openai_client):
     """LLM adapter with mocked client."""
-    with patch("adapters.openai.AsyncOpenAI", return_value=mock_openai_client):
-        with patch("adapters.openai.httpx.AsyncClient"):
-            with patch("adapters.openai.httpx.AsyncHTTPTransport"):
-                adapter = OpenAILLMAdapter(mock_settings)
-                adapter._client = mock_openai_client
-                return adapter
+    with (
+        patch("adapters.openai.AsyncOpenAI", return_value=mock_openai_client),
+        patch("adapters.openai.httpx.AsyncClient"),
+        patch("adapters.openai.httpx.AsyncHTTPTransport"),
+    ):
+        adapter = OpenAILLMAdapter(mock_settings)
+        adapter._client = mock_openai_client
+        return adapter
 
 
 class TestOpenAILLMAdapter:
