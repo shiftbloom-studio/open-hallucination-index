@@ -139,6 +139,7 @@ class BenchmarkWorker(QThread):
     log_message = Signal(str)
     evaluator_completed = Signal(str, dict)
     verification_recorded = Signal(dict)
+    report_updated = Signal(object)  # ComparisonReport object
     finished = Signal(dict)
     failed = Signal(str)
 
@@ -186,6 +187,9 @@ class BenchmarkWorker(QThread):
                 "cache_testing": config.cache_testing,
             },
         )
+        
+        # Emit initial report
+        self.report_updated.emit(report)
 
         stats = LiveStats(
             total_evaluators=self._total_evaluators(config, evaluators),
@@ -284,6 +288,8 @@ class BenchmarkWorker(QThread):
             )
             report.add_evaluator(metrics)
             display.complete_evaluator(evaluator.name, self._summary_payload(metrics))
+            # Emit partial report after each evaluator completes
+            self.report_updated.emit(report)
 
     async def _run_strategy_comparison(
         self,
@@ -306,6 +312,8 @@ class BenchmarkWorker(QThread):
                 )
                 report.add_evaluator(metrics)
                 display.complete_evaluator(evaluator.name, self._summary_payload(metrics))
+                # Emit partial report after each non-OHI evaluator in strategy mode
+                self.report_updated.emit(report)
 
         if "ohi" in evaluators:
             from benchmark.evaluators import OHIEvaluator
@@ -334,6 +342,8 @@ class BenchmarkWorker(QThread):
                             f"OHI ({strategy})",
                             self._summary_payload(metrics),
                         )
+                        # Emit partial report after each strategy completes
+                        self.report_updated.emit(report)
                 finally:
                     await strategy_evaluator.close()
 
@@ -362,6 +372,8 @@ class BenchmarkWorker(QThread):
                 f"{evaluator.name} (Cold)",
                 self._summary_payload(metrics_cold),
             )
+            # Emit partial report after cold run
+            self.report_updated.emit(report)
 
             display.set_evaluator(f"{evaluator.name} (Warm)")
             metrics_warm = await benchmark_single_evaluator(
@@ -378,6 +390,8 @@ class BenchmarkWorker(QThread):
                 f"{evaluator.name} (Warm)",
                 self._summary_payload(metrics_warm),
             )
+            # Emit partial report after warm run
+            self.report_updated.emit(report)
 
     async def _generate_outputs(
         self,
@@ -438,6 +452,8 @@ class BenchmarkWindow(QMainWindow):
         self._evaluator_summaries: dict[str, dict[str, float]] = {}
         self._evaluator_meta: dict[str, dict[str, float]] = {}
         self._tree_index: dict[tuple[str, str, str], QTreeWidgetItem] = {}
+        self._current_report: ComparisonReport | None = None
+        self._current_config: ComparisonBenchmarkConfig | None = None
 
         self._build_ui()
         self._apply_dark_theme()
@@ -549,8 +565,11 @@ class BenchmarkWindow(QMainWindow):
         self.start_btn = QPushButton("Run Benchmark")
         self.stop_btn = QPushButton("Stop")
         self.stop_btn.setEnabled(False)
+        self.export_btn = QPushButton("Export Current State")
+        self.export_btn.setEnabled(False)
         button_row.addWidget(self.start_btn)
         button_row.addWidget(self.stop_btn)
+        button_row.addWidget(self.export_btn)
         layout.addLayout(button_row)
 
         self.status_label = QLabel("Idle")
@@ -559,6 +578,7 @@ class BenchmarkWindow(QMainWindow):
 
         self.start_btn.clicked.connect(self._start_benchmark)
         self.stop_btn.clicked.connect(self._stop_benchmark)
+        self.export_btn.clicked.connect(self._export_current_state)
 
         return panel
 
@@ -729,17 +749,25 @@ class BenchmarkWindow(QMainWindow):
         if self.dataset_path.text().strip():
             overrides["hallucination_dataset"] = Path(self.dataset_path.text().strip())
 
+        # Store config for export
+        self._current_config = ComparisonBenchmarkConfig.from_env()
+        for key, value in overrides.items():
+            if hasattr(self._current_config, key):
+                setattr(self._current_config, key, value)
+        
         self._worker = BenchmarkWorker(overrides)
         self._worker.stats_updated.connect(self._on_stats_update)
         self._worker.log_message.connect(self._append_log)
         self._worker.evaluator_completed.connect(self._on_evaluator_done)
         self._worker.verification_recorded.connect(self._on_verification_recorded)
+        self._worker.report_updated.connect(self._on_report_updated)
         self._worker.finished.connect(self._on_finished)
         self._worker.failed.connect(self._on_failed)
 
         self.status_label.setText("Running...")
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
+        self.export_btn.setEnabled(True)
         self._worker.start()
 
     def _stop_benchmark(self) -> None:
@@ -752,6 +780,7 @@ class BenchmarkWindow(QMainWindow):
         self.status_label.setText("Failed")
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        self.export_btn.setEnabled(False)
         self._append_log(message)
 
     def _on_finished(self, report: dict) -> None:
@@ -764,11 +793,16 @@ class BenchmarkWindow(QMainWindow):
             self._append_log("Benchmark completed.")
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        self.export_btn.setEnabled(False)
         self._refresh_reports_list()
 
     def _append_log(self, message: str) -> None:
         ts = time.strftime("%H:%M:%S")
         self.log_output.append(f"[{ts}] {message}")
+    
+    def _on_report_updated(self, report: ComparisonReport) -> None:
+        """Store the latest partial report for export."""
+        self._current_report = report
 
     def _on_stats_update(self, stats: dict) -> None:
         now = stats.get("timestamp", time.time())
@@ -1049,6 +1083,46 @@ class BenchmarkWindow(QMainWindow):
         self.ax_scatter.grid(True, alpha=0.2)
 
         self.insights_canvas.draw_idle()
+    
+    def _export_current_state(self) -> None:
+        """Export the current benchmark state to files."""
+        if not self._current_report:
+            self._append_log("No report data available to export.")
+            return
+        
+        try:
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            filename = f"partial_{timestamp}"
+            
+            config = self._current_config or ComparisonBenchmarkConfig.from_env()
+            output_dir = config.output_dir
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Export JSON
+            json_path = output_dir / f"{filename}_report.json"
+            json_payload = self._current_report.to_dict()
+            json_payload["status"] = "partial"
+            json_payload["note"] = "This is a partial report from an incomplete benchmark run"
+            json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
+            self._append_log(f"✓ Exported JSON: {json_path.name}")
+            
+            # Export charts if we have any evaluator data
+            if self._current_report.evaluators:
+                charts_reporter = ChartsReporter(output_dir, dpi=config.chart_dpi)
+                try:
+                    chart_files = charts_reporter.generate_comparison_charts(
+                        self._current_report,
+                        prefix=f"{filename}_"
+                    )
+                    self._append_log(f"✓ Exported {len(chart_files)} charts")
+                except Exception as chart_error:
+                    self._append_log(f"⚠ Chart generation failed: {chart_error}")
+            
+            self._append_log(f"✓ Current state exported to: {output_dir}")
+            self._refresh_reports_list()
+            
+        except Exception as exc:
+            self._append_log(f"✗ Export failed: {type(exc).__name__}: {exc}")
 
 
 def main() -> None:

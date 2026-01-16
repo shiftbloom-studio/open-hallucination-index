@@ -149,7 +149,7 @@ Environment Variables:
     parser.add_argument(
         "--hallucination-max",
         type=int,
-        default=60,
+        default=250,
         help="Maximum hallucination samples (HuggingFace dataset)",
     )
 
@@ -179,7 +179,7 @@ Environment Variables:
     parser.add_argument(
         "--concurrency", "-c",
         type=int,
-        default=5,
+        default=4,
         help="Number of concurrent requests",
     )
 
@@ -193,7 +193,7 @@ Environment Variables:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=120.0,
+        default=240.0,
         help="Request timeout in seconds",
     )
 
@@ -201,7 +201,7 @@ Environment Variables:
     parser.add_argument(
         "--truthfulqa-max",
         type=int,
-        default=60,
+        default=250,
         help="Maximum TruthfulQA samples",
     )
 
@@ -216,7 +216,7 @@ Environment Variables:
     parser.add_argument(
         "--factscore-max",
         type=int,
-        default=60,
+        default=250,
         help="Maximum FActScore samples",
     )
 
