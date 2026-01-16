@@ -7,6 +7,7 @@
 
 import { BaseSource, SearchResult } from "./base.js";
 import { httpClient } from "../utils/http-client.js";
+import sanitizeHtml from "sanitize-html";
 
 interface MediaWikiSearchResponse {
   query?: {
@@ -97,6 +98,10 @@ export class MediaWikiSource extends BaseSource {
   }
 
   private stripHtml(html: string): string {
-    return html.replace(/<[^>]*>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+    // Use a robust HTML sanitizer to remove all tags and safely handle entities.
+    return sanitizeHtml(html, {
+      allowedTags: [],
+      allowedAttributes: {},
+    });
   }
 }
