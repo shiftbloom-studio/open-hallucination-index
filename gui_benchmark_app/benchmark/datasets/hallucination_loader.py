@@ -203,6 +203,10 @@ class HallucinationLoader:
                 # Use the first available split
                 dataset = dataset_dict[list(dataset_dict.keys())[0]]
         
+        # Shuffle dataset to ensure balanced sampling of factual/hallucinations
+        # Many datasets have all factual cases first, hallucinations later
+        dataset = dataset.shuffle(seed=42)
+        
         cases: list[HallucinationCase] = []
         
         for i, entry in enumerate(dataset):
@@ -392,6 +396,155 @@ class HallucinationLoader:
         
         return HallucinationDataset(cases=cases, source_path="combined")
     
+    def _generate_hallucination(self, factual_case: HallucinationCase, new_id: int) -> HallucinationCase:
+        """
+        Generate a hallucinated version of a factual claim using simple transformations.
+        
+        Strategies:
+        - Negation: Add "not", "never", or negate the statement
+        - Entity swap: Replace key entities with incorrect ones
+        - Date/number modification: Change dates or numbers to wrong values
+        - Contradiction: Reverse the meaning
+        
+        Args:
+            factual_case: A factual case to transform
+            new_id: ID for the new hallucinated case
+            
+        Returns:
+            New HallucinationCase marked as hallucination
+        """
+        import random
+        import re
+        
+        text = factual_case.text
+        hallucination_type = "synthetic"
+        
+        # Strategy 1: Simple negation (40% chance)
+        if random.random() < 0.4:
+            if " is " in text.lower():
+                text = text.replace(" is ", " is not ", 1)
+                hallucination_type = "negation"
+            elif " was " in text.lower():
+                text = text.replace(" was ", " was not ", 1)
+                hallucination_type = "negation"
+            elif " has " in text.lower():
+                text = text.replace(" has ", " does not have ", 1)
+                hallucination_type = "negation"
+            elif " can " in text.lower():
+                text = text.replace(" can ", " cannot ", 1)
+                hallucination_type = "negation"
+        
+        # Strategy 2: Number/date modification (30% chance)
+        elif random.random() < 0.7:  # 0.3/0.6 = 0.5
+            # Find and modify years
+            years = re.findall(r'\b(19|20)\d{2}\b', text)
+            if years:
+                old_year = years[0]
+                new_year = str(int(old_year) + random.choice([-50, -20, -10, 10, 20, 50]))
+                text = text.replace(old_year, new_year, 1)
+                hallucination_type = "date_error"
+            else:
+                # Find and modify numbers
+                numbers = re.findall(r'\b\d+\b', text)
+                if numbers:
+                    old_num = numbers[0]
+                    new_num = str(int(old_num) + random.choice([-100, -10, -5, 5, 10, 100]))
+                    text = text.replace(old_num, new_num, 1)
+                    hallucination_type = "numeric_error"
+        
+        # Strategy 3: Entity swapping (30% chance)
+        else:
+            # Common entity replacements
+            replacements = [
+                ("United States", "Canada"),
+                ("Canada", "United States"),
+                ("England", "France"),
+                ("France", "Germany"),
+                ("Europe", "Asia"),
+                ("Asia", "Europe"),
+                ("first", "last"),
+                ("last", "first"),
+                ("largest", "smallest"),
+                ("smallest", "largest"),
+                ("north", "south"),
+                ("south", "north"),
+                ("east", "west"),
+                ("west", "east"),
+            ]
+            
+            for old_entity, new_entity in replacements:
+                if old_entity in text:
+                    text = text.replace(old_entity, new_entity, 1)
+                    hallucination_type = "entity_swap"
+                    break
+        
+        return HallucinationCase(
+            id=new_id,
+            text=text,
+            label=False,  # It's a hallucination
+            domain=factual_case.domain,
+            difficulty=factual_case.difficulty,
+            notes=f"Synthetic hallucination from case {factual_case.id}",
+            hallucination_type=hallucination_type,
+            source=f"{factual_case.source}_synthetic",
+        )
+    
+    def _ensure_hallucination_ratio(
+        self,
+        dataset: HallucinationDataset,
+        min_hallucination_ratio: float = 0.4,
+    ) -> HallucinationDataset:
+        """
+        Ensure dataset has at least min_hallucination_ratio hallucinations.
+        
+        If the ratio is too low, generates synthetic hallucinations from factual cases.
+        
+        Args:
+            dataset: Original dataset
+            min_hallucination_ratio: Minimum proportion of hallucinations (0.0-1.0)
+            
+        Returns:
+            Augmented dataset with sufficient hallucinations
+        """
+        import random
+        
+        current_hall_ratio = dataset.hallucination_count / dataset.total if dataset.total > 0 else 0
+        
+        if current_hall_ratio >= min_hallucination_ratio:
+            return dataset
+        
+        print(f"⚠ Dataset has only {current_hall_ratio:.1%} hallucinations (target: {min_hallucination_ratio:.0%})")
+        print("  Generating synthetic hallucinations...")
+        
+        # Calculate how many hallucinations we need
+        target_hall_count = int(dataset.total * min_hallucination_ratio / (1 - min_hallucination_ratio))
+        needed = target_hall_count - dataset.hallucination_count
+        
+        # Get factual cases to transform
+        factual_cases = [c for c in dataset.cases if c.is_factual]
+        if not factual_cases:
+            print("  ⚠ No factual cases available to generate hallucinations from")
+            return dataset
+        
+        # Sample factual cases to transform
+        random.seed(42)
+        cases_to_transform = random.sample(factual_cases, min(needed, len(factual_cases)))
+        
+        # Generate hallucinations
+        new_cases = list(dataset.cases)
+        next_id = max(c.id for c in dataset.cases) + 1
+        
+        for factual_case in cases_to_transform:
+            hallucinated = self._generate_hallucination(factual_case, next_id)
+            new_cases.append(hallucinated)
+            next_id += 1
+        
+        augmented = HallucinationDataset(cases=new_cases, source_path=f"{dataset.source_path}_augmented")
+        print(f"  ✓ Generated {len(cases_to_transform)} synthetic hallucinations")
+        print(f"  ✓ New total: {augmented.total} ({augmented.factual_count} factual, {augmented.hallucination_count} hallucinations)")
+        
+        return augmented
+    
     def load_complete_benchmark_datasets(
         self,
         csv_path: Path | str | None = None,
@@ -470,6 +623,9 @@ class HallucinationLoader:
         dataset = HallucinationDataset(cases=all_cases, source_path="complete_benchmark")
         print(f"\n✓ Total: {dataset.total} cases ({dataset.factual_count} factual, {dataset.hallucination_count} hallucinations)")
         print(f"  Domains: {', '.join(sorted(dataset.domains))}")
+        
+        # Ensure at least 40% hallucinations
+        dataset = self._ensure_hallucination_ratio(dataset, min_hallucination_ratio=0.4)
         
         return dataset
 

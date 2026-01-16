@@ -274,7 +274,7 @@ class ComparisonBenchmarkConfig:
     # COMPLETE Mode - Research-grade comprehensive evaluation
     # If True, loads all available datasets and performs exhaustive testing
     complete_mode: bool = False
-    complete_samples_per_dataset: int = 200  # Balanced sampling per dataset
+    complete_samples_per_dataset: int = 250  # Increased to ensure hallucinations are included (shuffled datasets)
     complete_min_verifications: int = 800  # Minimum total verifications in complete mode
     complete_statistical_significance: bool = True  # Compute p-values and confidence intervals
     
