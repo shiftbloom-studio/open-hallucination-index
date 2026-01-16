@@ -761,12 +761,19 @@ class ComparisonBenchmarkRunner:
                 dataset = loader.load_combined(
                     csv_path=self.config.hallucination_dataset,
                     include_huggingface=False,
+                    hf_max_samples=self.config.hallucination_max_samples,
                 )
-            else:
+            elif self.config.hallucination_dataset and self.config.hallucination_dataset.exists():
                 dataset = loader.load_csv()
+            else:
+                dataset = loader.load_from_huggingface(
+                    max_samples=self.config.hallucination_max_samples
+                )
         except FileNotFoundError:
             # Try loading from HuggingFace only
-            dataset = loader.load_from_huggingface(max_samples=200)
+            dataset = loader.load_from_huggingface(
+                max_samples=self.config.hallucination_max_samples
+            )
         
         metrics = HallucinationMetrics(total=dataset.total)
         latencies: list[float] = []
@@ -852,7 +859,11 @@ class ComparisonBenchmarkRunner:
             
             # Update live display
             display.advance(1, latency_ms=result.latency_ms)
-            display.add_result(correct=correct, error=result.error is not None)
+            is_error = result.error is not None
+            if is_error:
+                logger.error(f"TruthfulQA Error (Claim: {claim_text[:50]}...): {result.error}")
+            
+            display.add_result(correct=correct, error=is_error)
         
         return metrics, latencies
     
@@ -919,11 +930,17 @@ class ComparisonBenchmarkRunner:
                     csv_path=self.config.hallucination_dataset,
                     include_huggingface=False,
                 )
-            else:
+            elif self.config.hallucination_dataset and self.config.hallucination_dataset.exists():
                 dataset = loader.load_csv()
+            else:
+                dataset = loader.load_from_huggingface(
+                    max_samples=self.config.hallucination_max_samples
+                )
         except FileNotFoundError:
             # Try loading from HuggingFace only
-            dataset = loader.load_from_huggingface(max_samples=200)
+            dataset = loader.load_from_huggingface(
+                max_samples=self.config.hallucination_max_samples
+            )
         
         metrics = HallucinationMetrics(total=dataset.total)
         latencies: list[float] = []

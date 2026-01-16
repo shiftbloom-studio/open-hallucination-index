@@ -641,7 +641,7 @@ Only output valid JSON, no other text."""
                 ]
                 response = await self._llm_provider.complete(
                     messages=messages,
-                    max_tokens=512,
+                    max_tokens=1024,
                     temperature=0.1,  # Low temperature for consistent classification
                     json_mode=True,
                 )
@@ -686,9 +686,14 @@ Only output valid JSON, no other text."""
         """Parse the LLM classification response."""
         try:
             # Handle cases where LLM might wrap JSON in markdown code blocks
-            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", response)
+            # Allow for unclosed code blocks (truncation) or standard blocks
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)(?:```|$)", response, re.IGNORECASE)
             if json_match:
-                response = json_match.group(1)
+                # check if the captured group looks like JSON (starts with { or [)
+                # otherwise we might have matched some preamble text
+                candidate = json_match.group(1).strip()
+                if candidate.startswith("{") or candidate.startswith("["):
+                    response = candidate
 
             response = response.strip()
 

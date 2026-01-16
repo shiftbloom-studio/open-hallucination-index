@@ -192,12 +192,15 @@ class HallucinationLoader:
                 break
             
             # Handle aporia-ai format
-            if "hallucination" in entry:
+            if "is_hallucination" in entry or "hallucination" in entry:
                 answer = entry.get("answer", "")
-                label_str = entry.get("hallucination", "").lower()
-                
-                # "faithful" = factual (True), "hallucination" = false
-                label = label_str == "faithful"
+                if "is_hallucination" in entry:
+                    # Boolean field: True means hallucination
+                    label = not bool(entry.get("is_hallucination"))
+                else:
+                    label_str = str(entry.get("hallucination", "")).lower()
+                    # "faithful" = factual (True), "hallucination" = false
+                    label = label_str == "faithful"
                 
                 if not answer.strip():
                     continue
