@@ -22,7 +22,7 @@ flowchart TD
   C --> D[OHI API Calls]
   D --> E[Result Collector]
   E --> F[Metrics + Statistical Tests]
-  F --> G[Reporters: Markdown/JSON/CSV/HTML]
+  F --> G["Reporters - Markdown JSON CSV HTML"]
   G --> H[benchmark_results/]
 ```
 
@@ -32,10 +32,10 @@ flowchart TD
 flowchart LR
   A[Raw Predictions] --> B[Confusion Matrix]
   A --> C[Probability Scores]
-  C --> D[Calibration: Brier/ECE/MCE]
-  C --> E[ROC/PR Curves]
+  C --> D["Calibration - Brier ECE MCE"]
+  C --> E["ROC and PR Curves"]
   A --> F[Latency Stats]
-  B --> G[Accuracy/Precision/Recall/F1/MCC]
+  B --> G["Accuracy Precision Recall F1 MCC"]
   D --> H[Confidence Intervals]
   E --> H
   G --> H

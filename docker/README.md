@@ -22,7 +22,7 @@ flowchart LR
     subgraph Core
         API[OHI API]
         MCP[OHI MCP Server]
-        LLM[vLLM (OpenAI-compatible)]
+        LLM["vLLM - OpenAI compatible"]
     end
 
     subgraph Data
@@ -43,7 +43,7 @@ flowchart LR
     API --> REDIS
     API --> MCP
     API --> LLM
-    MCP -->|External Sources| EXT[(Wikipedia, PubMed, OpenAlex, Context7, OSV...)]
+    MCP -->|External Sources| EXT["External Sources - Wikipedia, PubMed, OpenAlex, Context7, OSV"]
     NGINX --> FE
     NGINX --> API
     CF --> NGINX
