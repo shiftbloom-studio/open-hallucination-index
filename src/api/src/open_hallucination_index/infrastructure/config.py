@@ -214,6 +214,28 @@ class VerificationSettings(BaseSettings):
         description="Allow slow MCP tasks to complete in background for caching",
     )
 
+    # === Evidence Classification Settings ===
+    classification_temperature: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=2.0,
+        description="LLM temperature for evidence classification (0.1=conservative, 0.3-0.5=balanced)",
+    )
+    enable_two_pass_classification: bool = Field(
+        default=False,
+        description="Enable two-pass classification to reduce false NEUTRAL classifications",
+    )
+    enable_confidence_scoring: bool = Field(
+        default=False,
+        description="Use granular confidence-weighted classifications (5-level scale)",
+    )
+    classification_batch_size: int = Field(
+        default=6,
+        ge=1,
+        le=20,
+        description="Number of evidence items to classify in a single LLM call",
+    )
+
 
 class MCPSettings(BaseSettings):
     """Configuration for MCP knowledge sources (Wikipedia, Context7, OHI)."""

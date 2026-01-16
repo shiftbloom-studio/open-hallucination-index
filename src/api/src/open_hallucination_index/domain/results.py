@@ -16,6 +16,27 @@ from pydantic import BaseModel, Field
 from open_hallucination_index.domain.entities import Claim, Evidence
 
 
+class EvidenceClassification(StrEnum):
+    """Granular evidence classification with confidence levels."""
+
+    STRONG_SUPPORT = auto()  # 0.9 - Evidence directly confirms claim
+    WEAK_SUPPORT = auto()  # 0.7 - Evidence provides contextual support
+    NEUTRAL = auto()  # 0.5 - Evidence is unrelated or ambiguous
+    WEAK_REFUTE = auto()  # 0.3 - Evidence suggests claim might be false
+    STRONG_REFUTE = auto()  # 0.1 - Evidence directly contradicts claim
+
+    def to_confidence(self) -> float:
+        """Convert classification to confidence score."""
+        mapping = {
+            EvidenceClassification.STRONG_SUPPORT: 0.9,
+            EvidenceClassification.WEAK_SUPPORT: 0.7,
+            EvidenceClassification.NEUTRAL: 0.5,
+            EvidenceClassification.WEAK_REFUTE: 0.3,
+            EvidenceClassification.STRONG_REFUTE: 0.1,
+        }
+        return mapping[self]
+
+
 class VerificationStatus(StrEnum):
     """Outcome of verifying a single claim."""
 
