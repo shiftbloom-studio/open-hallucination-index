@@ -19,7 +19,15 @@ RUN apt-get update \
 
 COPY src/api/pyproject.toml /app/pyproject.toml
 COPY README.md /README.md
-COPY src/api/src /app/src
+# Copy all Python modules directly
+COPY src/api/__init__.py /app/__init__.py
+COPY src/api/models /app/models
+COPY src/api/interfaces /app/interfaces
+COPY src/api/pipeline /app/pipeline
+COPY src/api/adapters /app/adapters
+COPY src/api/server /app/server
+COPY src/api/config /app/config
+COPY src/api/services /app/services
 
 # Install PyTorch CPU-only first, then build wheel using uv
 RUN --mount=type=cache,target=/root/.cache/uv \

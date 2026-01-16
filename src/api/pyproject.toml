@@ -51,15 +51,15 @@ dev = [
 ]
 
 [project.scripts]
-ohi-server = "open_hallucination_index.infrastructure.entrypoint:main"
+ohi-server = "config.entrypoint:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/open_hallucination_index"]
+packages = ["models", "interfaces", "pipeline", "adapters", "server", "config", "services"]
 
 [tool.ruff]
 target-version = "py314"
 line-length = 100
-src = ["src", "tests"]
+src = [".", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
@@ -74,7 +74,13 @@ plugins = ["pydantic.mypy"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = """
-    --cov=src/open_hallucination_index
+    --cov=models
+    --cov=interfaces
+    --cov=pipeline
+    --cov=adapters
+    --cov=server
+    --cov=config
+    --cov=services
     --cov-report=xml
     --cov-report=term-missing
     --cov-fail-under=70
