@@ -119,7 +119,8 @@ class TestNeo4jConnectionHandling:
         """Test connectivity verification."""
         mock_session = neo4j_store._driver.session.return_value.__enter__.return_value
         mock_session.run.return_value = MagicMock()
-        
-        # Should not raise exception with mocked driver
+
+        # Mock a specific return value and ensure the call succeeds
+        neo4j_store._driver.verify_connectivity.return_value = "ok"
         result = neo4j_store._driver.verify_connectivity()
-        assert result is not None or result is None  # Mock can return anything
+        assert result == "ok"
