@@ -92,6 +92,11 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
         """Set the embedding function after initialization."""
         self._embedding_func = func
 
+    @property
+    def client(self) -> AsyncQdrantClient | None:
+        """Get the Qdrant client instance."""
+        return self._client
+
     async def connect(self) -> None:
         """Establish connection to Qdrant."""
         try:
@@ -414,6 +419,32 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             filter_metadata=filter_metadata if filter_metadata else None,
         )
 
+        return await self.search_similar(query)
+
+    async def find_evidence(
+        self,
+        text: str,
+        limit: int = 5,
+        min_similarity: float = 0.5,
+    ) -> list[Evidence]:
+        """
+        Find evidence for a text query.
+        
+        Simplified interface that accepts plain text instead of Claim object.
+        
+        Args:
+            text: The text to find evidence for.
+            limit: Maximum number of results.
+            min_similarity: Minimum similarity threshold.
+            
+        Returns:
+            List of semantically similar evidence.
+        """
+        query = VectorQuery(
+            text=text,
+            top_k=limit,
+            min_similarity=min_similarity,
+        )
         return await self.search_similar(query)
 
     async def embed_text(self, text: str) -> list[float]:
