@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   ChevronDown, 
@@ -20,6 +19,7 @@ import {
 } from "lucide-react";
 import { CitationTrace, Evidence, EvidenceSource } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Badge } from "../ui/badge";
 
 interface CitationTraceViewerProps {
   trace: CitationTrace;
