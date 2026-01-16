@@ -123,6 +123,9 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
 
       setVerificationResult(result);
       toast.success(`Verification complete! ${deductResult.tokensDeducted} token(s) used.`);
+      // Leere die Input-Felder nach erfolgreicher Verifikation
+      setText("");
+      setContext("");
     } catch (error) {
       console.error("Verification failed:", error);
       toast.error("Verification failed. Please check if the OHI API is running.");
@@ -271,12 +274,12 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
             <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Verifying claims against {targetSources} sources...</span>
-                  <span>{progress}%</span>
+                  <span>{Math.round(progress)}%</span>
                </div>
                <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-primary transition-all duration-500 ease-in-out" 
-                    style={{ width: `${progress}%` }}
+                    style={{ width: `${Math.round(progress)}%` }}
                   />
                </div>
                <p className="text-xs text-center text-muted-foreground animate-pulse">
