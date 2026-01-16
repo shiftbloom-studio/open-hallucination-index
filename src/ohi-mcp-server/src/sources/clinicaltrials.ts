@@ -67,10 +67,19 @@ export class ClinicalTrialsSource extends BaseSource {
       return [];
     }
 
+    const safeTerm = nctMatch
+      ? cleaned
+      : cleaned
+          .split(" ")
+          .filter(Boolean)
+          .slice(0, 8)
+          .join(" ")
+          .slice(0, 80);
+
     try {
       const response = await httpClient.get<ClinicalTrialsResponse>(`${this.baseUrl}/studies`, {
         params: {
-          "query.term": cleaned,
+          "query.term": safeTerm,
           pageSize: limit,
           // Removed sort: "@relevance" as it causes issues with v2 API
         },
@@ -112,6 +121,9 @@ export class ClinicalTrialsSource extends BaseSource {
         };
       });
     } catch (error) {
+      if (error instanceof Error && error.message.includes("HTTP 400")) {
+        return [];
+      }
       console.warn("ClinicalTrials search failed", error);
       return [];
     }

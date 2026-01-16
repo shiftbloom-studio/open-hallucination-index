@@ -68,7 +68,7 @@ docker exec ${CONTAINER} python -m benchmark.comparison_benchmark \
     --hallucination-max 20 \
     --output-dir "${OUTPUT_DIR}" \
     --chart-dpi 200 \
-    --concurrency 1 \
+    --concurrency 4 \
     --verbose
 
 echo ""

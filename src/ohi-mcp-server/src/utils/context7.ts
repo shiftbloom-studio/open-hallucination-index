@@ -142,7 +142,10 @@ export async function resolveLibraryId(
     }
 
     return formatResolveResponse(response.data, libraryName);
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("HTTP 429")) {
+      return "Context7 rate limited (HTTP 429). Try again later or set CONTEXT7_API_KEY.";
+    }
     const fallback = await httpClient.get<string | ResolveLibraryResponse>(
       `${baseUrl}/resolve-library-id`,
       { headers, params: { query, libraryName } }
@@ -167,21 +170,28 @@ export async function queryDocs(
   const baseUrl = getBaseUrl();
   const headers = getAuthHeaders();
 
-  const response = await httpClient.get<string | Context7ContextResponse>(
-    `${baseUrl}/api/v2/context`,
-    {
-      headers,
-      params: {
-        libraryId,
-        query,
-        type: "txt",
-      },
+  try {
+    const response = await httpClient.get<string | Context7ContextResponse>(
+      `${baseUrl}/api/v2/context`,
+      {
+        headers,
+        params: {
+          libraryId,
+          query,
+          type: "txt",
+        },
+      }
+    );
+
+    if (typeof response.data === "string") {
+      return response.data.trim();
     }
-  );
 
-  if (typeof response.data === "string") {
-    return response.data.trim();
+    return formatContextResponse(response.data);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("HTTP 429")) {
+      return "Context7 rate limited (HTTP 429). Try again later or set CONTEXT7_API_KEY.";
+    }
+    throw error;
   }
-
-  return formatContextResponse(response.data);
 }

@@ -113,6 +113,7 @@ services:
   # 5. OHI MCP Server - Unified Knowledge Sources
   ohi-mcp-server:
     env_file:
+      - ./.env
       - ../../.env
     build:
       context: ../..
@@ -145,6 +146,7 @@ services:
   # 7. Open Hallucination Index API
   ohi-api:
     env_file:
+      - ./.env
       - ../../.env
     build:
       context: ../..
