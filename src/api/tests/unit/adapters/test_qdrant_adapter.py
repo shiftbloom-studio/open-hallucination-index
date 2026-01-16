@@ -28,7 +28,12 @@ def mock_settings():
 def mock_qdrant_client():
     """Mock Qdrant client."""
     client = MagicMock()
-    client.search = MagicMock(return_value=[])
+    # Mock query_points instead of search (actual API method)
+    client.query_points = MagicMock()
+    # Create a mock response with points attribute
+    mock_response = MagicMock()
+    mock_response.points = []
+    client.query_points.return_value = mock_response
     return client
 
 
@@ -79,26 +84,33 @@ class TestQdrantVectorAdapter:
         # Mock Qdrant search result
         mock_scored_point = MagicMock()
         mock_scored_point.score = 0.92
+        mock_scored_point.id = "test_id_1"
         mock_scored_point.payload = {
             "text": "Python is a high-level programming language",
             "title": "Python (programming language)",
             "url": "https://en.wikipedia.org/wiki/Python",
         }
         
-        qdrant_store.client.search.return_value = [mock_scored_point]
+        # Mock the response structure
+        mock_response = MagicMock()
+        mock_response.points = [mock_scored_point]
+        qdrant_store.client.query_points.return_value = mock_response
         
         evidence = await qdrant_store.find_evidence(claim, limit=5)
         
         assert len(evidence) > 0
         assert isinstance(evidence[0], Evidence)
-        assert evidence[0].score >= 0.0
+        assert evidence[0].similarity_score >= 0.0
 
     @pytest.mark.asyncio
     async def test_find_evidence_empty(self, qdrant_store: QdrantVectorAdapter):
         """Test search with no results."""
         claim = "Nonexistent information"
         
-        qdrant_store.client.search.return_value = []
+        # Mock empty response
+        mock_response = MagicMock()
+        mock_response.points = []
+        qdrant_store.client.query_points.return_value = mock_response
         
         evidence = await qdrant_store.find_evidence(claim, limit=5)
         
@@ -109,16 +121,22 @@ class TestQdrantVectorAdapter:
         """Test embedding generation via public interface."""
         text = "Test text for embedding"
 
-        # Ensure the client search does not interfere with embedding checks
-        qdrant_store.client.search.return_value = []
+        # Mock empty response
+        mock_response = MagicMock()
+        mock_response.points = []
+        qdrant_store.client.query_points.return_value = mock_response
+
+        # Mock the embedding function to track calls
+        mock_embedding = MagicMock(return_value=[0.1] * 384)
+        qdrant_store._embedding_func = mock_embedding
 
         # Call the public method that should internally generate embeddings
         evidence = await qdrant_store.find_evidence(text, limit=1)
 
         assert evidence is not None
         assert isinstance(evidence, list)
-        qdrant_store.model.encode.assert_called_once()
-        qdrant_store.model.encode.assert_called_with([text])
+        # Verify embedding function was called
+        mock_embedding.assert_called_once_with(text)
 
 
 class TestQdrantErrorHandling:
@@ -129,7 +147,7 @@ class TestQdrantErrorHandling:
         self, qdrant_store: QdrantVectorAdapter
     ):
         """Test handling of search errors."""
-        qdrant_store.client.search.side_effect = RuntimeError("Search failed")
+        qdrant_store.client.query_points.side_effect = RuntimeError("Search failed")
         
         with pytest.raises(RuntimeError):
             await qdrant_store.find_evidence("test claim")
@@ -139,7 +157,11 @@ class TestQdrantErrorHandling:
         self, qdrant_store: QdrantVectorAdapter
     ):
         """Test handling of embedding errors."""
-        qdrant_store.model.encode.side_effect = RuntimeError("Embedding failed")
+        # Mock the embedding function to raise an error
+        async def failing_embed(text: str) -> list[float]:
+            raise RuntimeError("Embedding failed")
+        
+        qdrant_store._embedding_func = failing_embed
         
         with pytest.raises(RuntimeError):
             await qdrant_store.find_evidence("test text")
