@@ -4,7 +4,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-import numpy as np
 
 from adapters.qdrant import QdrantVectorAdapter
 from config.settings import QdrantSettings
