@@ -60,7 +60,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Running Full Comparison Benchmark..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-docker exec ${CONTAINER} python -m benchmark.comparison_benchmark \
+docker exec -e BENCHMARK_TIMEOUT=180.0 ${CONTAINER} python -m benchmark.comparison_benchmark \
     --evaluators ohi_local,ohi_max,graph_rag,vector_rag \
     --metrics hallucination,truthfulqa,factscore,latency \
     --truthfulqa-max 40 \
@@ -68,7 +68,7 @@ docker exec ${CONTAINER} python -m benchmark.comparison_benchmark \
     --hallucination-max 50 \
     --output-dir "${OUTPUT_DIR}" \
     --chart-dpi 200 \
-    --concurrency 4 \
+    --concurrency 1 \
     --verbose
 
 echo ""
