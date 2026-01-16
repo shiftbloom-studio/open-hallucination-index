@@ -230,4 +230,7 @@ class TruthfulQALoader:
             categories=categories,
         )
         
-        return dataset.get_all_claims()
+        claims = dataset.get_all_claims()
+        if max_samples is not None:
+            return claims[:max_samples]
+        return claims
