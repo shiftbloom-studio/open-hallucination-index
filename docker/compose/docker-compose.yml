@@ -90,9 +90,8 @@ services:
     # Optimized for RTX 4090 (24GB VRAM)
     command: >
       --model Qwen/Qwen2.5-14B-Instruct-AWQ
-      --quantization compressed-tensors
       --dtype half
-      --gpu-memory-utilization 0.90
+      --gpu-memory-utilization 0.80
       --enforce-eager
       --trust-remote-code
       --tensor-parallel-size 1
