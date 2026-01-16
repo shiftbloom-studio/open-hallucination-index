@@ -63,10 +63,10 @@ def get_evaluator(name: str, config, fair_mode: bool = True):
     if name == "graph_rag":
         return GraphRAGEvaluator(config)
 
-    if name == "ohi_latency":
+    if name in {"ohi_local", "ohi_latency"}:
         return OHIEvaluator(
             config,
-            name_override="OHI-Latency",
+            name_override="OHI-Local",
             strategy_override="mcp_enhanced",
             target_sources_override=6,
         )
@@ -86,7 +86,7 @@ def get_evaluator(name: str, config, fair_mode: bool = True):
     
     if name not in evaluators:
         raise ValueError(
-            f"Unknown evaluator: {name}. Available: ohi, ohi_latency, ohi_max, gpt4, vector_rag, graph_rag"
+            f"Unknown evaluator: {name}. Available: ohi, ohi_local, ohi_latency, ohi_max, gpt4, vector_rag, graph_rag"
         )
     
     return evaluators[name](config)

@@ -29,6 +29,7 @@ from typing import Literal
 EvaluatorType = Literal[
     "ohi",
     "ohi_latency",
+    "ohi_local",
     "ohi_max",
     "gpt4",
     "vector_rag",
@@ -215,7 +216,7 @@ class ComparisonBenchmarkConfig:
     
     # Which evaluators to run
     evaluators: list[EvaluatorType] = field(
-        default_factory=lambda: ["ohi_latency", "ohi_max", "graph_rag", "vector_rag", "gpt4"]
+        default_factory=lambda: ["ohi_local", "ohi_max", "graph_rag", "vector_rag", "gpt4"]
     )
     
     # Which metrics to compute
@@ -286,7 +287,7 @@ class ComparisonBenchmarkConfig:
         """Load full configuration from environment."""
         evaluators_str = os.getenv(
             "BENCHMARK_EVALUATORS",
-            "ohi_latency,ohi_max,graph_rag,vector_rag,gpt4",
+            "ohi_local,ohi_max,graph_rag,vector_rag,gpt4",
         )
         metrics_str = os.getenv("BENCHMARK_METRICS", "hallucination,truthfulqa,factscore,latency")
         
@@ -380,5 +381,9 @@ class ComparisonBenchmarkConfig:
         
         if "gpt4" in active and not self.openai.is_configured:
             active.remove("gpt4")
+
+        if "ohi_local" not in active and "ohi_latency" in active:
+            active.remove("ohi_latency")
+            active.append("ohi_local")
         
         return active
