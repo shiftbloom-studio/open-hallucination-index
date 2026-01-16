@@ -54,6 +54,11 @@ def qdrant_store(mock_settings, mock_qdrant_client, mock_embedding_func):
     with patch("adapters.qdrant.QdrantClient", return_value=mock_qdrant_client):
         store = QdrantVectorAdapter(mock_settings, embedding_func=mock_embedding_func)
         store._client = mock_qdrant_client
+
+        # Ensure the model and its encode method are properly mocked for tests
+        store.model = MagicMock()
+        store.model.encode = MagicMock()
+
         return store
 
 
@@ -137,4 +142,4 @@ class TestQdrantErrorHandling:
         qdrant_store.model.encode.side_effect = RuntimeError("Embedding failed")
         
         with pytest.raises(RuntimeError):
-            await qdrant_store._generate_embedding("test text")
+            await qdrant_store.find_evidence("test text")
