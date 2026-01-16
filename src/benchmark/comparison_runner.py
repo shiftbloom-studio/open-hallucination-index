@@ -929,6 +929,7 @@ class ComparisonBenchmarkRunner:
                 dataset = loader.load_combined(
                     csv_path=self.config.hallucination_dataset,
                     include_huggingface=False,
+                    hf_max_samples=self.config.hallucination_max_samples,
                 )
             elif self.config.hallucination_dataset and self.config.hallucination_dataset.exists():
                 dataset = loader.load_csv()
