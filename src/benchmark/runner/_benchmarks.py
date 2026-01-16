@@ -243,7 +243,9 @@ async def run_hallucination_benchmark(
             has_error = result.error is not None
             if has_error:
                 logger.error(
-                    f\"Hallucination benchmark error for claim '{case.text[:50]}...': {result.error}\"\n                )\n            display.add_result(correct=is_correct, error=has_error)
+                    f"Hallucination benchmark error for claim '{case.text[:50]}...': {result.error}"
+                )
+            display.add_result(correct=is_correct, error=has_error)
     
     return metrics, latencies
 
