@@ -414,22 +414,14 @@ class HybridVerificationOracle(VerificationOracle):
         # Select MCP sources (optionally capped)
         mcp_sources = [s for s in self._mcp_sources if s.is_available]
         if self._mcp_selector is not None:
-            if target_sources is not None:
-                selection = await self._mcp_selector.select(
-                    claim,
-                    max_sources_override=target_sources,
-                )
-                if len(selection.selected_sources) < target_sources:
-                    selection = await self._mcp_selector.select(
-                        claim,
-                        allow_all_relevant=True,
-                    )
-            else:
-                selection = await self._mcp_selector.select(
-                    claim,
-                    allow_all_relevant=True,
-                )
-
+            # Single selection call - let selector handle source limits internally
+            allow_all = target_sources is None
+            selection = await self._mcp_selector.select(
+                claim,
+                max_sources_override=target_sources,
+                allow_all_relevant=allow_all,
+            )
+            
             mcp_sources = self._mcp_selector.get_sources_for_selection(selection)
             if target_sources is not None and len(mcp_sources) > target_sources:
                 mcp_sources = mcp_sources[:target_sources]
@@ -509,22 +501,14 @@ class HybridVerificationOracle(VerificationOracle):
             # Get MCP sources to query based on claim domain
             mcp_sources = None
             if self._mcp_selector is not None:
-                if target_sources is not None:
-                    selection = await self._mcp_selector.select(
-                        claim,
-                        max_sources_override=target_sources,
-                    )
-                    if len(selection.selected_sources) < target_sources:
-                        selection = await self._mcp_selector.select(
-                            claim,
-                            allow_all_relevant=True,
-                        )
-                else:
-                    selection = await self._mcp_selector.select(
-                        claim,
-                        allow_all_relevant=True,
-                    )
-
+                # Single selection call - let selector handle source limits internally
+                allow_all = target_sources is None
+                selection = await self._mcp_selector.select(
+                    claim,
+                    max_sources_override=target_sources,
+                    allow_all_relevant=allow_all,
+                )
+                
                 mcp_sources = self._mcp_selector.get_sources_for_selection(selection)
                 if max_mcp_allowed and len(mcp_sources) > max_mcp_allowed:
                     mcp_sources = mcp_sources[:max_mcp_allowed]
