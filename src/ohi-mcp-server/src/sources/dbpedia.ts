@@ -19,10 +19,25 @@ interface SparqlResults {
 
 export class DBpediaSource extends BaseSource {
   name = "dbpedia";
+  private readonly xmlTagRegexCache: Record<string, RegExp> = {};
   description = "DBpedia structured data via SPARQL";
 
   constructor() {
     super("https://dbpedia.org");
+  }
+
+  /**
+   * Escape a string so it is safe to embed inside a double-quoted SPARQL literal.
+   * This is a defensive layer on top of sanitizeForSparql and should not change
+   * the logical content of the value, only its representation.
+   */
+  private escapeForSparqlLiteral(value: string): string {
+    return value
+      .replace(/\\/g, "\\\\")   // escape backslash
+      .replace(/"/g, '\\"')     // escape double quote
+      .replace(/\r/g, "\\r")    // escape carriage return
+      .replace(/\n/g, "\\n")    // escape newline
+      .replace(/\t/g, "\\t");   // escape tab
   }
 
   async healthCheck(): Promise<boolean> {
@@ -49,7 +64,7 @@ export class DBpediaSource extends BaseSource {
         ?resource dbo:abstract ?abstract .
         FILTER(LANG(?label) = 'en')
         FILTER(LANG(?abstract) = 'en')
-        FILTER(CONTAINS(LCASE(?label), LCASE("${sanitized}")))
+        FILTER(CONTAINS(LCASE(?label), LCASE("${this.escapeForSparqlLiteral(sanitized)}")))
       }
       LIMIT ${limit}
     `);
@@ -69,7 +84,7 @@ export class DBpediaSource extends BaseSource {
             ?resource dbo:abstract ?abstract .
             FILTER(LANG(?label) = 'en')
             FILTER(LANG(?abstract) = 'en')
-            FILTER(CONTAINS(LCASE(?label), LCASE("${this.sanitizeForSparql(fallback)}")))
+            FILTER(CONTAINS(LCASE(?label), LCASE("${this.escapeForSparqlLiteral(this.sanitizeForSparql(fallback))}")))
           }
           LIMIT ${limit}
         `);
@@ -97,13 +112,26 @@ export class DBpediaSource extends BaseSource {
   }
 
   async getResource(resourceUri: string): Promise<SearchResult | null> {
+    // Validate and normalize the resource URI to mitigate SPARQL injection risks.
+    let validatedResourceUri: string;
+    try {
+      const url = new URL(resourceUri);
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        return null;
+      }
+      validatedResourceUri = url.toString();
+    } catch {
+      // If the URI is not a valid HTTP(S) URL, do not execute the SPARQL query.
+      return null;
+    }
+
     const sparql = this.compactSparql(`
       PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
       PREFIX dbo: <http://dbpedia.org/ontology/>
       
       SELECT ?label ?abstract WHERE {
-        <${resourceUri}> rdfs:label ?label .
-        <${resourceUri}> dbo:abstract ?abstract .
+        <${validatedResourceUri}> rdfs:label ?label .
+        <${validatedResourceUri}> dbo:abstract ?abstract .
         FILTER(LANG(?label) = 'en')
         FILTER(LANG(?abstract) = 'en')
       }
@@ -121,9 +149,9 @@ export class DBpediaSource extends BaseSource {
     const binding: SparqlBinding = bindings[0];
     return {
       source: this.name,
-      title: binding.label?.value || resourceUri,
+      title: binding.label?.value || validatedResourceUri,
       content: binding.abstract?.value || "",
-      url: resourceUri,
+      url: validatedResourceUri,
     };
   }
 
@@ -153,7 +181,7 @@ export class DBpediaSource extends BaseSource {
 
   private sanitizeForSparql(text: string): string {
     return this.sanitizeQuery(text)
-      .replace(/[\\']/g, "\\$&")
+      .replace(/["\\']/g, "\\$&")
       .slice(0, 100);
   }
 
@@ -190,8 +218,20 @@ export class DBpediaSource extends BaseSource {
     }
   }
 
+  private getXmlTagRegex(tag: string): RegExp {
+    const cached = this.xmlTagRegexCache[tag];
+    if (cached) {
+      return cached;
+    }
+    // Escape any RegExp metacharacters in the tag name to avoid malformed patterns.
+    const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`<${escapedTag}>([\\s\\S]*?)<\\/${escapedTag}>`);
+    this.xmlTagRegexCache[tag] = regex;
+    return regex;
+  }
+
   private extractXmlTag(xml: string, tag: string): string | undefined {
-    const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
+    const match = xml.match(this.getXmlTagRegex(tag));
     if (!match?.[1]) return undefined;
     return match[1]
       .replace(/&quot;/g, '"')
