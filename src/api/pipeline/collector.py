@@ -289,6 +289,7 @@ class AdaptiveEvidenceCollector:
         self,
         claim: Claim,
         mcp_sources: list[MCPKnowledgeSource] | None = None,
+        target_evidence_count: int | None = None,
     ) -> CollectionResult:
         """
         Collect evidence for a claim using adaptive tiered approach.
@@ -296,6 +297,7 @@ class AdaptiveEvidenceCollector:
         Args:
             claim: The claim to find evidence for.
             mcp_sources: Optional MCP sources (uses selector if not provided).
+            target_evidence_count: Optional target number of evidence items to find.
 
         Returns:
             CollectionResult with evidence and metrics.
@@ -319,9 +321,15 @@ class AdaptiveEvidenceCollector:
             f"latency={tier1_latency:.1f}ms"
         )
 
+        effective_min_evidence = (
+            target_evidence_count
+            if target_evidence_count is not None
+            else self._min_evidence
+        )
+
         # Check if local evidence is sufficient
         if accumulator.is_sufficient(
-            self._min_evidence,
+            effective_min_evidence,
             self._min_weighted_value,
             self._high_confidence,
         ):
@@ -332,7 +340,9 @@ class AdaptiveEvidenceCollector:
 
         # === TIER 2: MCP sources (selected based on claim) ===
         tier2_start = time.perf_counter()
-        tier2_evidence, pending_count = await self._collect_mcp(claim, mcp_sources, accumulator)
+        tier2_evidence, pending_count = await self._collect_mcp(
+            claim, mcp_sources, accumulator, min_evidence=effective_min_evidence
+        )
         tier2_latency = (time.perf_counter() - tier2_start) * 1000
         tier_latencies["mcp"] = tier2_latency
 
@@ -410,12 +420,14 @@ class AdaptiveEvidenceCollector:
         claim: Claim,
         mcp_sources: list[MCPKnowledgeSource] | None,
         accumulator: AccumulatorState,
+        min_evidence: int | None = None,
     ) -> tuple[list[Evidence], int]:
         """
         Collect evidence from MCP sources with early exit.
 
         Returns (evidence_list, pending_background_tasks_count).
         """
+        effective_min = min_evidence if min_evidence is not None else self._min_evidence
         logger.debug(f"Entering _collect_mcp, mcp_sources count: {len(mcp_sources) if mcp_sources else 'None'}")
         # Get MCP sources to query
         if mcp_sources:
@@ -487,7 +499,7 @@ class AdaptiveEvidenceCollector:
 
             # Check if we have sufficient evidence
             if accumulator.is_sufficient(
-                self._min_evidence,
+                effective_min,
                 self._min_weighted_value,
                 self._high_confidence,
             ):
