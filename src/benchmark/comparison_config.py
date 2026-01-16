@@ -3,9 +3,13 @@ Comparison Benchmark Configuration
 ===================================
 
 Extended configuration for multi-system benchmark comparison:
-- OHI API (our system - expected winner)
+- OHI API (our system - expected winner) with three tiers:
+  - ohi_local: Only local sources (Neo4j, Qdrant) - fastest
+  - ohi: Default tier - local first, MCP fallback if insufficient
+  - ohi_max: All sources for maximum evidence coverage
 - GPT-4 (OpenAI - slower, higher hallucination rate)
 - VectorRAG (simple baseline - fastest but least accurate)
+- GraphRAG (graph-only baseline)
 
 Metrics compared:
 - Hallucination detection (HuggingFace datasets)
@@ -27,13 +31,12 @@ from typing import Literal
 # =============================================================================
 
 EvaluatorType = Literal[
-    "ohi",
-    "ohi_latency",
-    "ohi_local",
-    "ohi_max",
-    "gpt4",
-    "vector_rag",
-    "graph_rag",
+    "ohi",           # Default tier: local first, MCP fallback
+    "ohi_local",     # Local-only: Neo4j + Qdrant (fastest)
+    "ohi_max",       # Maximum evidence: all sources
+    "gpt4",          # OpenAI GPT-4 baseline
+    "vector_rag",    # Vector-only baseline
+    "graph_rag",     # Graph-only baseline
 ]
 MetricType = Literal["hallucination", "truthfulqa", "factscore", "latency"]
 
@@ -204,10 +207,14 @@ class ComparisonBenchmarkConfig:
     """
     Master configuration for multi-system benchmark comparison.
     
-    Compares three systems:
-    1. OHI (Open Hallucination Index) - our hybrid verification system
+    Compares multiple systems:
+    1. OHI (Open Hallucination Index) - three tiers:
+       - ohi_local: Local sources only (fastest)
+       - ohi: Default tier with MCP fallback
+       - ohi_max: All sources for maximum coverage
     2. GPT-4 - direct LLM-based verification (baseline)
     3. VectorRAG - simple vector similarity (baseline)
+    4. GraphRAG - graph-only baseline
     
     Across four metrics:
     1. Hallucination Detection - accuracy on hallucination datasets
@@ -220,9 +227,9 @@ class ComparisonBenchmarkConfig:
     - Cache testing: Run with/without Redis cache to measure impact
     """
     
-    # Which evaluators to run
+    # Which evaluators to run (default includes all OHI tiers + baselines)
     evaluators: list[EvaluatorType] = field(
-        default_factory=lambda: ["ohi_local", "ohi_max", "graph_rag", "vector_rag", "gpt4"]
+        default_factory=lambda: ["ohi_local", "ohi", "ohi_max", "graph_rag", "vector_rag"]
     )
     
     # Which metrics to compute
@@ -294,7 +301,7 @@ class ComparisonBenchmarkConfig:
         """Load full configuration from environment."""
         evaluators_str = os.getenv(
             "BENCHMARK_EVALUATORS",
-            "ohi_local,ohi_max,graph_rag,vector_rag,gpt4",
+            "ohi_local,ohi,ohi_max,graph_rag,vector_rag",
         )
         metrics_str = os.getenv("BENCHMARK_METRICS", "hallucination,truthfulqa,factscore,latency")
         
@@ -389,9 +396,5 @@ class ComparisonBenchmarkConfig:
         
         if "gpt4" in active and not self.openai.is_configured:
             active.remove("gpt4")
-
-        if "ohi_local" not in active and "ohi_latency" in active:
-            active.remove("ohi_latency")
-            active.append("ohi_local")
         
         return active

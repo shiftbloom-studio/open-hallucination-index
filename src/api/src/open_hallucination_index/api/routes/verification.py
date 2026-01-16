@@ -30,7 +30,7 @@ from open_hallucination_index.infrastructure.dependencies import (
 )
 from open_hallucination_index.ports.llm_provider import LLMProvider
 from open_hallucination_index.ports.mcp_source import reset_mcp_call_cache, set_mcp_call_cache
-from open_hallucination_index.ports.verification_oracle import VerificationStrategy
+from open_hallucination_index.ports.verification_oracle import EvidenceTier, VerificationStrategy
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -99,6 +99,15 @@ class VerifyTextRequest(BaseModel):
     ) = Field(
         default=None,
         description="Verification strategy. Defaults to configured strategy if not specified.",
+    )
+    tier: Literal["local", "default", "max"] | None = Field(
+        default=None,
+        description=(
+            "Evidence collection tier. "
+            "'local': Only local sources (Neo4j, Qdrant) - fastest, no MCP. "
+            "'default': Local first, MCP fallback if insufficient evidence. "
+            "'max': Query all sources for maximum evidence coverage."
+        ),
     )
     use_cache: bool = Field(
         default=True,
@@ -249,10 +258,14 @@ async def verify_text(
             "text_length": len(input_text),
             "has_context": bool(request.context),
             "strategy": strategy.value if strategy else "default",
+            "tier": request.tier or "default",
             "use_cache": request.use_cache,
             "target_sources": request.target_sources,
         },
     )
+
+    # Map tier string to enum
+    tier = EvidenceTier(request.tier) if request.tier else EvidenceTier.DEFAULT
 
     token = set_mcp_call_cache()
     try:
@@ -263,6 +276,7 @@ async def verify_text(
             context=request.context,
             target_sources=request.target_sources,
             skip_decomposition=request.skip_decomposition,
+            tier=tier,
         )
     except Exception as e:
         audit_logger.warning(f"[OUTPUT] ID: {request_seq} - RESULT: ERROR - SOURCES: 0")

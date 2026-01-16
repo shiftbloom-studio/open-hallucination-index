@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from open_hallucination_index.ports.knowledge_tracker import KnowledgeTracker
     from open_hallucination_index.ports.scorer import Scorer
     from open_hallucination_index.ports.verification_oracle import (
+        EvidenceTier,
         VerificationOracle,
         VerificationStrategy,
     )
@@ -85,6 +86,7 @@ class VerifyTextUseCase:
         context: str | None = None,
         target_sources: int | None = None,
         skip_decomposition: bool = False,
+        tier: EvidenceTier | None = None,
     ) -> VerificationResult:
         """
         Execute the full verification pipeline.
@@ -94,6 +96,9 @@ class VerifyTextUseCase:
             strategy: Optional verification strategy override.
             use_cache: Whether to check/update cache.
             context: Optional context for claim decomposition.
+            target_sources: Optional limit on number of sources to query.
+            skip_decomposition: Skip LLM decomposition, treat as single claim.
+            tier: Evidence collection tier (local, default, max).
 
         Returns:
             Complete verification result with trust score and traces.
@@ -162,16 +167,23 @@ class VerifyTextUseCase:
                 claims_to_verify.append(claim)
 
         if claims_to_verify:
+            # Import EvidenceTier at runtime to avoid circular imports
+            from open_hallucination_index.ports.verification_oracle import EvidenceTier
+            
+            effective_tier = tier if tier is not None else EvidenceTier.DEFAULT
+            
             if strategy:
                 verification_results = await self._oracle.verify_claims(
                     claims_to_verify,
                     strategy,
                     target_sources=target_sources,
+                    tier=effective_tier,
                 )
             else:
                 verification_results = await self._oracle.verify_claims(
                     claims_to_verify,
                     target_sources=target_sources,
+                    tier=effective_tier,
                 )
 
             for claim, (status, trace) in zip(claims_to_verify, verification_results, strict=True):

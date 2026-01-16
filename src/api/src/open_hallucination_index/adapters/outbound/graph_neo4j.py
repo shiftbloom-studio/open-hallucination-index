@@ -371,19 +371,29 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
             logger.debug(f"Entity search failed: {e}")
 
     async def _find_paths(self, subject: str, obj: str, max_hops: int) -> list[Evidence]:
-        """Find paths between two entities up to max_hops."""
+        """Find paths between two entities up to max_hops.
+        
+        Uses a two-step approach: first find matching start/end nodes,
+        then find paths between them (avoids shortestPath restrictions).
+        """
         if self._driver is None:
             return []
 
+        # Use variable-length path matching instead of shortestPath
+        # This avoids Neo4j's restrictions on shortestPath with unbounded patterns
         query = f"""
-            MATCH path = shortestPath(
-                (s)-[*1..{max_hops}]-(o)
-            )
+            MATCH (s)
             WHERE toLower(s.name) CONTAINS toLower($subject)
-              AND toLower(o.name) CONTAINS toLower($obj)
+            WITH s LIMIT 5
+            MATCH (o)
+            WHERE toLower(o.name) CONTAINS toLower($obj)
+            WITH s, o LIMIT 10
+            MATCH path = (s)-[*1..{max_hops}]-(o)
+            WITH path, length(path) AS pathLen
+            ORDER BY pathLen
+            LIMIT 3
             RETURN [n IN nodes(path) | n.name] AS nodes,
                    [r IN relationships(path) | type(r)] AS relations
-            LIMIT 3
         """
 
         try:

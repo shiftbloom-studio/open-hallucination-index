@@ -20,6 +20,7 @@ from open_hallucination_index.domain.results import (
     VerificationStatus,
 )
 from open_hallucination_index.ports.verification_oracle import (
+    EvidenceTier,
     VerificationOracle,
     VerificationStrategy,
 )
@@ -121,6 +122,7 @@ class HybridVerificationOracle(VerificationOracle):
         strategy: VerificationStrategy | None = None,
         *,
         target_sources: int | None = None,
+        tier: EvidenceTier = EvidenceTier.DEFAULT,
     ) -> tuple[VerificationStatus, CitationTrace]:
         """
         Verify a single claim against knowledge sources.
@@ -128,6 +130,8 @@ class HybridVerificationOracle(VerificationOracle):
         Args:
             claim: The claim to verify.
             strategy: Verification strategy to use (or default).
+            target_sources: Optional limit on number of sources to query.
+            tier: Evidence collection tier (local, default, max).
 
         Returns:
             Tuple of (verification status, citation trace with evidence).
@@ -168,16 +172,24 @@ class HybridVerificationOracle(VerificationOracle):
 
             elif active_strategy == VerificationStrategy.MCP_ENHANCED:
                 # MCP Enhanced: Query MCP sources first, then fallback to local
-                all_evidence = await self._mcp_enhanced_evidence(
-                    claim,
-                    target_sources=target_sources,
-                )
+                # Respect tier parameter - skip MCP for LOCAL tier
+                if tier == EvidenceTier.LOCAL:
+                    # LOCAL tier: only graph + vector
+                    all_evidence = await self._hybrid_evidence(claim)
+                else:
+                    all_evidence = await self._mcp_enhanced_evidence(
+                        claim,
+                        target_sources=target_sources,
+                        tier=tier,
+                    )
 
             elif active_strategy == VerificationStrategy.ADAPTIVE:
                 # ADAPTIVE: Use AdaptiveEvidenceCollector for intelligent tiered collection
+                # Respect tier parameter for source selection
                 all_evidence = await self._adaptive_evidence(
                     claim,
                     target_sources=target_sources,
+                    tier=tier,
                 )
 
         except Exception as e:
@@ -232,6 +244,7 @@ class HybridVerificationOracle(VerificationOracle):
         strategy: VerificationStrategy | None = None,
         *,
         target_sources: int | None = None,
+        tier: EvidenceTier = EvidenceTier.DEFAULT,
     ) -> list[tuple[VerificationStatus, CitationTrace]]:
         """
         Verify multiple claims (parallelized).
@@ -239,6 +252,8 @@ class HybridVerificationOracle(VerificationOracle):
         Args:
             claims: List of claims to verify.
             strategy: Verification strategy to use.
+            target_sources: Optional limit on number of sources to query.
+            tier: Evidence collection tier (local, default, max).
 
         Returns:
             List of (status, trace) tuples, one per claim.
@@ -248,7 +263,8 @@ class HybridVerificationOracle(VerificationOracle):
 
         # Verify all claims in parallel
         tasks = [
-            self.verify_claim(claim, strategy, target_sources=target_sources) for claim in claims
+            self.verify_claim(claim, strategy, target_sources=target_sources, tier=tier)
+            for claim in claims
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -353,6 +369,23 @@ class HybridVerificationOracle(VerificationOracle):
             logger.warning(f"Vector evidence lookup failed: {e}")
             return []
 
+    async def _hybrid_evidence(self, claim: Claim) -> list[Evidence]:
+        """Gather evidence from both graph and vector stores in parallel (local only)."""
+        graph_task = self._graph_evidence(claim)
+        vector_task = self._vector_evidence(claim)
+        
+        graph_ev, vector_ev = await asyncio.gather(
+            graph_task, vector_task, return_exceptions=True
+        )
+        
+        all_evidence: list[Evidence] = []
+        if not isinstance(graph_ev, BaseException):
+            all_evidence.extend(graph_ev)
+        if not isinstance(vector_ev, BaseException):
+            all_evidence.extend(vector_ev)
+        
+        return all_evidence
+
     async def _mcp_evidence(self, claim: Claim) -> list[Evidence]:
         """Gather evidence from all MCP sources."""
         if not self._mcp_sources:
@@ -399,6 +432,7 @@ class HybridVerificationOracle(VerificationOracle):
         claim: Claim,
         *,
         target_sources: int | None = None,
+        tier: EvidenceTier = EvidenceTier.DEFAULT,
     ) -> list[Evidence]:
         """
         MCP-enhanced evidence gathering with fallback.
@@ -406,40 +440,51 @@ class HybridVerificationOracle(VerificationOracle):
         1. Query ALL sources (MCP + local) in parallel for speed
         2. Persist MCP evidence to graph for future lookups
         3. Combine and deduplicate evidence
+        
+        Tier behavior:
+        - LOCAL: Skip MCP, only query graph + vector
+        - DEFAULT: Normal behavior with early-exit check
+        - MAX: Query all MCP sources (no source limits)
         """
         all_evidence: list[Evidence] = []
         tasks = []
         task_names = []
 
-        # Select MCP sources (optionally capped)
-        mcp_sources = [s for s in self._mcp_sources if s.is_available]
-        if self._mcp_selector is not None:
-            # Single selection call - let selector handle source limits internally
-            allow_all = target_sources is None
-            selection = await self._mcp_selector.select(
-                claim,
-                max_sources_override=target_sources,
-                allow_all_relevant=allow_all,
-            )
-            
-            mcp_sources = self._mcp_selector.get_sources_for_selection(selection)
-            if target_sources is not None and len(mcp_sources) > target_sources:
-                mcp_sources = mcp_sources[:target_sources]
-        elif target_sources is not None:
-            mcp_sources = mcp_sources[:target_sources]
-
-        # Queue MCP sources
-        for source in mcp_sources:
-            tasks.append(source.find_evidence(claim))
-            task_names.append(f"mcp:{source.source_name}")
-
-        # Queue local stores (run in parallel with MCP)
+        # Queue local stores first (always run)
         if self._graph_store is not None:
             tasks.append(self._graph_evidence(claim))
             task_names.append("graph")
         if self._vector_store is not None:
             tasks.append(self._vector_evidence(claim))
             task_names.append("vector")
+
+        # LOCAL tier: skip MCP sources entirely
+        if tier != EvidenceTier.LOCAL:
+            # Select MCP sources based on tier
+            mcp_sources = [s for s in self._mcp_sources if s.is_available]
+            
+            if tier == EvidenceTier.MAX:
+                # MAX tier: use ALL available MCP sources
+                pass  # Keep all mcp_sources
+            elif self._mcp_selector is not None:
+                # DEFAULT tier: use intelligent selection with limits
+                allow_all = target_sources is None
+                selection = await self._mcp_selector.select(
+                    claim,
+                    max_sources_override=target_sources,
+                    allow_all_relevant=allow_all,
+                )
+                
+                mcp_sources = self._mcp_selector.get_sources_for_selection(selection)
+                if target_sources is not None and len(mcp_sources) > target_sources:
+                    mcp_sources = mcp_sources[:target_sources]
+            elif target_sources is not None:
+                mcp_sources = mcp_sources[:target_sources]
+
+            # Queue MCP sources
+            for source in mcp_sources:
+                tasks.append(source.find_evidence(claim))
+                task_names.append(f"mcp:{source.source_name}")
 
         if not tasks:
             return []
@@ -474,6 +519,7 @@ class HybridVerificationOracle(VerificationOracle):
         claim: Claim,
         *,
         target_sources: int | None = None,
+        tier: EvidenceTier = EvidenceTier.DEFAULT,
     ) -> list[Evidence]:
         """
         Adaptive evidence gathering with intelligent tiered collection.
@@ -484,18 +530,37 @@ class HybridVerificationOracle(VerificationOracle):
         3. Quality-weighted accumulation
         4. Background completion for cache warming
 
+        Tier behavior:
+        - LOCAL: Only run Tier 1 (local sources), skip MCP entirely
+        - DEFAULT: Normal adaptive behavior (local first, MCP if insufficient)
+        - MAX: Query all MCP sources without early-exit
+
         Falls back to MCP_ENHANCED if collector not configured.
         """
+        # LOCAL tier: skip adaptive collector, just use local sources
+        if tier == EvidenceTier.LOCAL:
+            logger.debug("LOCAL tier: using only local sources (Neo4j + Qdrant)")
+            return await self._hybrid_evidence(claim)
+        
         if self._evidence_collector is None:
             # Fallback to MCP_ENHANCED if no collector configured
             logger.debug("No evidence collector configured, falling back to MCP_ENHANCED")
-            return await self._mcp_enhanced_evidence(claim)
+            return await self._mcp_enhanced_evidence(claim, tier=tier)
 
         try:
-            total_source_cap = 20
+            total_source_cap = 20 if tier != EvidenceTier.MAX else 100
             local_sources_count = int(self._graph_store is not None) + int(
                 self._vector_store is not None
             )
+            max_mcp_allowed = max(total_source_cap - local_sources_count, 0)
+
+            # Get MCP sources to query based on claim domain and tier
+            mcp_sources = None
+            if tier == EvidenceTier.MAX:
+                # MAX tier: use ALL available MCP sources
+                mcp_sources = [s for s in self._mcp_sources if s.is_available]
+                logger.debug(f"MAX tier: using all {len(mcp_sources)} available MCP sources")
+            elif self._mcp_selector is not None:
             max_mcp_allowed = max(total_source_cap - local_sources_count, 0)
 
             # Get MCP sources to query based on claim domain
@@ -554,7 +619,7 @@ class HybridVerificationOracle(VerificationOracle):
                 "Adaptive evidence collection failed: %s, falling back to MCP_ENHANCED",
                 e,
             )
-            return await self._mcp_enhanced_evidence(claim)
+            return await self._mcp_enhanced_evidence(claim, tier=tier)
 
     async def _persist_evidence_to_vector(self, evidence_list: list[Evidence]) -> None:
         """Persist evidence to vector store for semantic fallback."""

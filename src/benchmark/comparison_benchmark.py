@@ -123,10 +123,10 @@ Environment Variables:
     parser.add_argument(
         "--evaluators", "-e",
         type=str,
-        default="ohi_local,ohi_max,graph_rag,vector_rag,gpt4",
+        default="ohi_local,ohi,ohi_max,graph_rag,vector_rag",
         help=(
             "Comma-separated list of evaluators "
-            "(ohi, ohi_local, ohi_latency, ohi_max, gpt4, vector_rag, graph_rag)"
+            "(ohi, ohi_local, ohi_max, gpt4, vector_rag, graph_rag)"
         ),
     )
 
@@ -415,7 +415,8 @@ async def run_benchmark(args: argparse.Namespace) -> int:
         return 0
 
     except Exception as e:
-        console.print(f"\n[red]Error: {e}[/red]")
+        from rich.text import Text
+        console.print(Text.from_markup("\n[red]Error: [/red]") + str(e), style="red")
         if args.verbose:
             console.print_exception()
         return 1
@@ -433,7 +434,8 @@ async def generate_charts_only(args: argparse.Namespace) -> int:
         return 1
 
     if not args.report.exists():
-        console.print(f"[red]Error: Report not found: {args.report}[/red]")
+        from rich.text import Text
+        console.print(Text.from_markup("[red]Error: Report not found: [/red]") + str(args.report), style="red")
         return 1
 
     try:
@@ -485,7 +487,8 @@ async def generate_charts_only(args: argparse.Namespace) -> int:
         return 0
 
     except Exception as e:
-        console.print(f"[red]Error generating charts: {e}[/red]")
+        from rich.text import Text
+        console.print(Text.from_markup("[red]Error generating charts: [/red]") + str(e), style="red")
         if args.verbose:
             console.print_exception()
         return 1

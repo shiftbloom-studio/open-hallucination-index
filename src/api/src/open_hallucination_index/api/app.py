@@ -76,17 +76,17 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Request Timeout Middleware (60s global hard limit)
+    # Request Timeout Middleware (240s global hard limit)
     @app.middleware("http")
     async def timeout_middleware(request: Request, call_next):
         try:
-            return await asyncio.wait_for(call_next(request), timeout=60.0)
+            return await asyncio.wait_for(call_next(request), timeout=240.0)
         except asyncio.TimeoutError:
             return ORJSONResponse(
                 status_code=504,
                 content={
                     "detail": "Request timed out",
-                    "message": "Operation took longer than 60 seconds",
+                    "message": "Operation took longer than 240 seconds",
                 },
             )
 

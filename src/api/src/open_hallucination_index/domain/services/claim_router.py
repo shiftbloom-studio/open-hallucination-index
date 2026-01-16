@@ -153,6 +153,8 @@ class ClaimRouter:
             ClaimDomain.ECONOMIC: [re.compile(p, re.IGNORECASE) for p in ECONOMIC_PATTERNS],
             ClaimDomain.SECURITY: [re.compile(p, re.IGNORECASE) for p in SECURITY_PATTERNS],
         }
+        # Cache for routing decisions to prevent duplicate LLM calls
+        self._routing_cache: dict[str, RoutingDecision] = {}
 
         # Source definitions with expected latencies
         self._source_definitions = self._build_source_definitions()
@@ -294,11 +296,28 @@ class ClaimRouter:
         Returns:
             RoutingDecision with domain, entities, and source recommendations.
         """
+        # Check cache first to prevent duplicate LLM calls
+        cache_key = claim.text[:200]  # Use first 200 chars as key
+        if cache_key in self._routing_cache:
+            logger.debug(f"Using cached routing for claim '{claim.text[:50]}...'")
+            return self._routing_cache[cache_key]
+
         if self._llm_provider:
-            return await self._route_with_llm(claim)
-        
-        # Fallback to regex-based routing
-        return self._route_with_regex(claim)
+            decision = await self._route_with_llm(claim)
+        else:
+            # Fallback to regex-based routing
+            decision = self._route_with_regex(claim)
+
+        # Cache the decision
+        self._routing_cache[cache_key] = decision
+        # Limit cache size
+        if len(self._routing_cache) > 100:
+            # Remove oldest entries
+            keys = list(self._routing_cache.keys())[:50]
+            for key in keys:
+                del self._routing_cache[key]
+
+        return decision
 
     def _route_with_regex(self, claim: Claim) -> RoutingDecision:
         """Route claim using regex patterns (fallback)."""

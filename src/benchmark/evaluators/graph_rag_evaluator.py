@@ -140,15 +140,11 @@ class GraphRAGEvaluator(BaseEvaluator):
         WHERE ANY(term IN $terms WHERE (
             (n.name IS NOT NULL AND toLower(n.name) CONTAINS term) OR
             (n.title IS NOT NULL AND toLower(n.title) CONTAINS term) OR
-            (n.text IS NOT NULL AND toLower(n.text) CONTAINS term) OR
-            (n.content IS NOT NULL AND toLower(n.content) CONTAINS term) OR
             (n.first_paragraph IS NOT NULL AND toLower(n.first_paragraph) CONTAINS term)
         ))
         WITH n, [term IN $terms WHERE (
             (n.name IS NOT NULL AND toLower(n.name) CONTAINS term) OR
             (n.title IS NOT NULL AND toLower(n.title) CONTAINS term) OR
-            (n.text IS NOT NULL AND toLower(n.text) CONTAINS term) OR
-            (n.content IS NOT NULL AND toLower(n.content) CONTAINS term) OR
             (n.first_paragraph IS NOT NULL AND toLower(n.first_paragraph) CONTAINS term)
         )] AS matched_terms
         WITH n, matched_terms

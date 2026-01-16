@@ -32,7 +32,7 @@ class LLMSettings(BaseSettings):
         default="TheBloke/openinstruct-mistral-7B-AWQ",
         description="Model name/ID to use",
     )
-    timeout_seconds: float = Field(default=60.0, ge=1.0)
+    timeout_seconds: float = Field(default=240.0, ge=1.0)
     max_retries: int = Field(default=3, ge=0)
     # OpenAI API key for embeddings (separate from vLLM)
     openai_api_key: SecretStr = Field(

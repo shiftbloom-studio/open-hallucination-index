@@ -89,19 +89,18 @@ services:
       - ~/.cache/huggingface:/root/.cache/huggingface
       # WSL2 NVIDIA driver libs (provides libcuda.so)
       - /usr/lib/wsl:/usr/lib/wsl:ro
-    # Qwen/Qwen2.5-14B-Instruct-AWQ
+    # solidrust/Mistral-7B-Instruct-v0.3-AWQ
     # Optimized for RTX 4090 (24GB VRAM)
     # --enforce-eager: Disables CUDA graph capturing entirely (prevents OOM from graph overhead)
     # --gpu-memory-utilization 0.70: Leave more headroom for PyTorch allocations
     # --max-num-seqs 4: Reduce concurrent sequences to lower memory pressure
     command: >
-      --model Qwen/Qwen2.5-14B-Instruct-AWQ
+      --model solidrust/Mistral-7B-Instruct-v0.3-AWQ
       --gpu-memory-utilization 0.70
-      --max-num-seqs 4
+      --max-num-seqs 8
       --max-model-len 4096
       --enable-prefix-caching
       --disable-log-requests
-      --enforce-eager
     networks:
       - ohi-net
     # vLLM takes 30-60s to load models - health check ensures API waits
@@ -157,7 +156,9 @@ services:
       dockerfile: docker/api/Dockerfile
     image: open-hallucination-index:local
     container_name: ohi-api
-    # Internal only - nginx handles external traffic
+    # Expose to host for direct local access + nginx for proxied traffic
+    ports:
+      - "127.0.0.1:8080:8080" # localhost only for dev
     expose:
       - "8080"
     environment:
@@ -168,7 +169,7 @@ services:
 
       # Use in-network service names
       LLM_BASE_URL: "http://vllm:8000/v1"
-      LLM_MODEL: "Qwen/Qwen2.5-14B-Instruct-AWQ"
+      LLM_MODEL: "solidrust/Mistral-7B-Instruct-v0.3-AWQ"
       LLM_API_KEY: "${LLM_API_KEY:-no-key-required}"
       
       # Local embeddings (no OpenAI API needed)
@@ -210,8 +211,8 @@ services:
       VERIFY_MIN_EVIDENCE_COUNT: "2"
       VERIFY_MIN_WEIGHTED_VALUE: "1.5"
       VERIFY_SIMILARITY_THRESHOLD: "0.5"
-      # MCP source selection
-      VERIFY_MAX_MCP_SOURCES_PER_CLAIM: "6"
+      # MCP source selection - reduced for stability
+      VERIFY_MAX_MCP_SOURCES_PER_CLAIM: "3"
       
       NVIDIA_VISIBLE_DEVICES: "all"
       NVIDIA_DRIVER_CAPABILITIES: "compute,utility"

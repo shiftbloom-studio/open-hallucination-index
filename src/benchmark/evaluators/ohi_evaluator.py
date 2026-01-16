@@ -33,9 +33,14 @@ class OHIEvaluator(BaseEvaluator):
     
     Uses the full OHI pipeline:
     - Hybrid graph + vector search
-    - MCP knowledge sources
+    - MCP knowledge sources (based on tier)
     - Claim decomposition
     - Evidence aggregation
+    
+    Tiers:
+    - local: Only local sources (Neo4j + Qdrant) - fastest
+    - default: Local first, MCP fallback if insufficient
+    - max: All sources for maximum evidence coverage
     """
     
     name = "OHI"
@@ -47,17 +52,19 @@ class OHIEvaluator(BaseEvaluator):
         name_override: str | None = None,
         strategy_override: str | None = None,
         target_sources_override: int | None = None,
+        tier: str = "default",  # local, default, or max
     ) -> None:
         self.config = config
         self.base_url = config.ohi_api_base_url
         self.verify_url = config.ohi_verify_url
         self.strategy = strategy_override or config.ohi_strategy
+        self.tier = tier
         if name_override:
             self.name = name_override
         self.timeout = config.timeout_seconds
-        self._target_sources = target_sources_override or 10
-        # Increase connection pool to handle concurrent requests
-        self.max_concurrency = max(10, config.concurrency * 2)
+        self._target_sources = target_sources_override or 5  # Reduced for stability
+        # Keep connection pool small for stability
+        self.max_concurrency = min(5, config.concurrency)
         self.max_retries = 3  # Retry failed requests
         self.retry_delay = 0.5  # Initial retry delay in seconds
         
@@ -185,9 +192,11 @@ class OHIEvaluator(BaseEvaluator):
             payload = {
                 "text": claim,
                 "strategy": self.strategy,
+                "tier": self.tier,  # Evidence collection tier (local, default, max)
                 "return_evidence": True,
                 "target_sources": self._target_sources,
                 "use_cache": False,  # Disable cache for accurate benchmarking
+                "skip_decomposition": True,  # Treat input as single claim, no decomposition
             }
             
             headers = {}

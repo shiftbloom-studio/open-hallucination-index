@@ -42,6 +42,23 @@ fi
 echo "Output directory: ${OUTPUT_DIR}"
 echo ""
 
+# Clear all caches before benchmark
+echo "Clearing caches..."
+docker exec ${CONTAINER} python -c "
+import redis
+import os
+r = redis.Redis(
+    host=os.getenv('REDIS_HOST', 'redis'),
+    port=int(os.getenv('REDIS_PORT', '6379')),
+    password=os.getenv('REDIS_PASSWORD'),
+    decode_responses=True
+)
+keys_before = r.dbsize()
+r.flushdb()
+print(f'  ✓ Redis cache cleared ({keys_before} keys removed)')
+"
+echo ""
+
 # Check evaluator availability
 echo "Checking evaluator availability..."
 docker exec ${CONTAINER} python -c "
@@ -64,7 +81,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 docker exec -t \
     -e TERM=xterm-256color \
     -e FORCE_COLOR=1 \
-    -e BENCHMARK_TIMEOUT=180.0 \
+    -e BENCHMARK_TIMEOUT=240.0 \
     ${CONTAINER} python -m benchmark.comparison_benchmark \
     --evaluators ohi_local,ohi_max,graph_rag,vector_rag \
     --metrics hallucination,truthfulqa,factscore,latency \
@@ -73,7 +90,7 @@ docker exec -t \
     --hallucination-max 15 \
     --output-dir "${OUTPUT_DIR}" \
     --chart-dpi 200 \
-    --concurrency 2 \
+    --concurrency 1 \
     --verbose
 
 echo ""

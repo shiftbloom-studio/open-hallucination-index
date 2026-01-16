@@ -28,6 +28,20 @@ class VerificationStrategy(StrEnum):
     ADAPTIVE = auto()  # Intelligent tiered collection with early-exit
 
 
+class EvidenceTier(StrEnum):
+    """
+    Evidence collection tier controlling which sources are queried.
+    
+    - LOCAL: Only local sources (Neo4j, Qdrant, Redis) - fastest, no MCP
+    - DEFAULT: Prefer local sources, fallback to MCP if insufficient evidence
+    - MAX: Query all available sources (local + all MCP) for maximum evidence
+    """
+    
+    LOCAL = "local"  # Only LLM + Neo4j + Qdrant + Redis (no MCP)
+    DEFAULT = "default"  # Local first, MCP fallback if insufficient
+    MAX = "max"  # All sources: local + all MCP servers
+
+
 class VerificationOracle(ABC):
     """
     Port for verifying claims against knowledge sources.
@@ -49,6 +63,7 @@ class VerificationOracle(ABC):
         strategy: VerificationStrategy = VerificationStrategy.HYBRID,
         *,
         target_sources: int | None = None,
+        tier: EvidenceTier = EvidenceTier.DEFAULT,
     ) -> tuple[VerificationStatus, CitationTrace]:
         """
         Verify a single claim against knowledge sources.
@@ -56,6 +71,8 @@ class VerificationOracle(ABC):
         Args:
             claim: The claim to verify.
             strategy: Verification strategy to use.
+            target_sources: Optional limit on number of sources to query.
+            tier: Evidence collection tier (local, default, max).
 
         Returns:
             Tuple of (verification status, citation trace with evidence).
@@ -72,6 +89,7 @@ class VerificationOracle(ABC):
         strategy: VerificationStrategy = VerificationStrategy.HYBRID,
         *,
         target_sources: int | None = None,
+        tier: EvidenceTier = EvidenceTier.DEFAULT,
     ) -> list[tuple[VerificationStatus, CitationTrace]]:
         """
         Verify multiple claims (may parallelize internally).
@@ -79,6 +97,8 @@ class VerificationOracle(ABC):
         Args:
             claims: List of claims to verify.
             strategy: Verification strategy to use.
+            target_sources: Optional limit on number of sources to query.
+            tier: Evidence collection tier (local, default, max).
 
         Returns:
             List of (status, trace) tuples, one per claim.

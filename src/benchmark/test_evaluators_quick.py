@@ -105,7 +105,7 @@ TEST_CLAIMS = [
 
 
 async def test_ohi_local():
-    """Test OHI-Local evaluator (optimized for latency with MCP-enhanced strategy)."""
+    """Test OHI-Local evaluator (local sources only: Neo4j + Qdrant, no MCP)."""
     return await _generic_evaluator_test(
         name="OHI-Local",
         evaluator_key="ohi_local",
@@ -114,8 +114,18 @@ async def test_ohi_local():
     )
 
 
+async def test_ohi_default():
+    """Test OHI evaluator (default tier: local first, MCP fallback)."""
+    return await _generic_evaluator_test(
+        name="OHI",
+        evaluator_key="ohi",
+        num_claims=3,
+        color="cyan",
+    )
+
+
 async def test_ohi_max():
-    """Test OHI-Max evaluator (maximum accuracy with adaptive strategy)."""
+    """Test OHI-Max evaluator (maximum coverage: all local + all MCP sources)."""
     return await _generic_evaluator_test(
         name="OHI-Max",
         evaluator_key="ohi_max",
@@ -293,14 +303,15 @@ async def main() -> int:
     """Run all evaluator tests."""
     console.print(Panel(
         "[bold]OHI Benchmark - Evaluator Quick Test[/bold]\n\n"
-        "Testing OHI-Local, OHI-Max, GraphRAG, VectorRAG evaluators...",
+        "Testing OHI-Local, OHI (default), OHI-Max, GraphRAG, VectorRAG evaluators...",
         border_style="cyan",
     ))
     
     all_results: dict[str, list | int | None] = {}
     
-    # Test each evaluator
+    # Test each evaluator (OHI tiers: local, default, max)
     all_results["OHI-Local"] = await test_ohi_local()
+    all_results["OHI"] = await test_ohi_default()
     all_results["OHI-Max"] = await test_ohi_max()
     all_results["GraphRAG"] = await test_graph_rag()
     all_results["VectorRAG"] = await test_vector_rag()

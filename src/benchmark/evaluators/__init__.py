@@ -43,11 +43,16 @@ def get_evaluator(name: str, config):
     Factory function to create evaluator by name.
     
     Args:
-        name: Evaluator name ("ohi", "gpt4", "vector_rag", "graph_rag")
+        name: Evaluator name (ohi, ohi_local, ohi_max, gpt4, vector_rag, graph_rag)
         config: ComparisonBenchmarkConfig instance
         
     Returns:
         Evaluator instance
+        
+    OHI Tiers:
+        - ohi_local: Only local sources (Neo4j + Qdrant) - tier="local"
+        - ohi: Default tier with MCP fallback - tier="default"
+        - ohi_max: All sources for maximum coverage - tier="max"
     """
     if name == "vector_rag":
         return VectorRAGEvaluator(config)
@@ -55,12 +60,13 @@ def get_evaluator(name: str, config):
     if name == "graph_rag":
         return GraphRAGEvaluator(config)
 
-    if name in {"ohi_local", "ohi_latency"}:
+    if name == "ohi_local":
         return OHIEvaluator(
             config,
             name_override="OHI-Local",
-            strategy_override="mcp_enhanced",
-            target_sources_override=6,
+            strategy_override="adaptive",
+            tier="local",  # Only local sources (no MCP)
+            target_sources_override=5,
         )
 
     if name == "ohi_max":
@@ -68,17 +74,22 @@ def get_evaluator(name: str, config):
             config,
             name_override="OHI-Max",
             strategy_override="adaptive",
-            target_sources_override=18,
+            tier="max",  # All sources including all MCP
+            target_sources_override=None,  # No limit
         )
     
-    evaluators = {
-        "ohi": OHIEvaluator,
-        "gpt4": GPT4Evaluator,
-    }
-    
-    if name not in evaluators:
-        raise ValueError(
-            f"Unknown evaluator: {name}. Available: ohi, ohi_local, ohi_latency, ohi_max, gpt4, vector_rag, graph_rag"
+    if name == "ohi":
+        return OHIEvaluator(
+            config,
+            name_override="OHI",
+            strategy_override="adaptive",
+            tier="default",  # Local first, MCP fallback
+            target_sources_override=8,
         )
     
-    return evaluators[name](config)
+    if name == "gpt4":
+        return GPT4Evaluator(config)
+    
+    raise ValueError(
+        f"Unknown evaluator: {name}. Available: ohi, ohi_local, ohi_max, gpt4, vector_rag, graph_rag"
+    )
