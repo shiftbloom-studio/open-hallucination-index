@@ -74,8 +74,6 @@ Compares cold vs warm cache performance to measure caching impact.
 - **Multi-Dataset Coverage**: Automatically loads and combines multiple HuggingFace datasets:
   - `aporia-ai/rag_hallucinations`
   - `SridharKumarKannam/neural-bridge-rag-hallucination`
-  - `Jerry999/rag-hallucination`
-  - `muntasir2179/rag-hallucination-combined-dataset-v1`
   - `neural-bridge/rag-hallucination-dataset-1000`
   - `cemuluoglakci/hallucination_evaluation`
 

@@ -337,7 +337,7 @@ export default function PricingPage() {
         <div className="max-w-4xl mx-auto text-center p-12 rounded-2xl bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20">
           <h2 className="text-3xl font-bold text-white mb-4">Still have questions?</h2>
           <p className="text-neutral-300 mb-8">
-            Our team is here to help. Get in touch and we'll respond within 24 hours.
+            Our team is here to help. Get in touch and we&apos;ll respond within 24 hours.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button

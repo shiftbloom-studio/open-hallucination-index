@@ -155,6 +155,7 @@ export class ApiClient {
         }
       }
       
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const error: any = new Error(errorMessage);
       error.status = res.status;
       error.detail = errorDetail;

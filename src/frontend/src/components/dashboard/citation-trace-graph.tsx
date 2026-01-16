@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef } from "react";
 import { CitationTrace } from "@/lib/api";
-import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
-import { Card } from "@/components/ui/card";
 import { Loader2, Zap } from "lucide-react";
 import * as THREE from "three";
 
@@ -46,7 +44,7 @@ interface GraphLink {
 }
 
 export default function CitationTraceGraph({ trace, claimText }: CitationTraceGraphProps) {
-  const { theme } = useTheme();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const graphRef = useRef<any>(null);
 
   // Transform trace data into graph data
@@ -66,7 +64,7 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
     });
 
     // Supporting Evidence
-    trace.supporting_evidence.forEach((ev, idx) => {
+    trace.supporting_evidence.forEach((ev) => {
       nodes.push({
         id: ev.id,
         label: ev.source,
@@ -87,7 +85,7 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
     });
 
     // Refuting Evidence
-    trace.refuting_evidence.forEach((ev, idx) => {
+    trace.refuting_evidence.forEach((ev) => {
       nodes.push({
         id: ev.id,
         label: ev.source,
@@ -138,7 +136,7 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
         linkDirectionalParticleColor="particleColor"
         
         // Node Object Customization (Glowing Spheres)
-        nodeThreeObject={(node: any) => {
+        nodeThreeObject={(node: GraphNode) => {
             const group = new THREE.Group();
             
             // Core Sphere
@@ -167,7 +165,7 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
         }}
 
         // Tooltip Customization
-        nodeLabel={(node: any) => {
+        nodeLabel={(node: GraphNode) => {
             return `
                 <div style="
                     background: rgba(15, 23, 42, 0.9); 

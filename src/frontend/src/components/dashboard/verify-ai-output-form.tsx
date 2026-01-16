@@ -113,7 +113,6 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
       onTokensUpdated(deductResult.tokensRemaining);
 
       // Now verify with OHI API
-      let verificationFailed = false;
       try {
         const client = createApiClient();
         const result = await client.verifyText({
@@ -129,25 +128,26 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
         // Leere die Input-Felder nach erfolgreicher Verifikation
         setText("");
         setContext("");
-      } catch (error: any) {
-        verificationFailed = true;
+      } catch (error: unknown) {
         console.error("Verification failed:", error);
         
         // Extract error message
         let errorMessage = "Verification failed";
-        if (error.message) {
-          errorMessage = error.message;
+        const errorWithStatus = error as { status?: number; message?: string };
+        
+        if (errorWithStatus.message) {
+          errorMessage = errorWithStatus.message;
         } else if (typeof error === "string") {
           errorMessage = error;
         }
         
         // Handle 422 validation errors specifically
-        if (error.status === 422) {
+        if (errorWithStatus.status === 422) {
           toast.error(errorMessage, {
             duration: 6000,
             description: "Your tokens have been refunded.",
           });
-        } else if (error.status === 500) {
+        } else if (errorWithStatus.status === 500) {
           toast.error("Server error occurred", {
             duration: 5000,
             description: errorMessage,
@@ -185,7 +185,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
     } finally {
       setIsVerifying(false);
     }
-  }, [text, context, tokensNeeded, userTokens, hasEnoughTokens, onTokensUpdated, targetSources, returnEvidence]);
+  }, [text, context, tokensNeeded, userTokens, hasEnoughTokens, onTokensUpdated, targetSources, returnEvidence, analysisMode]);
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
