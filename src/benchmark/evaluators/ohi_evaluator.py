@@ -135,16 +135,21 @@ class OHIEvaluator(BaseEvaluator):
             else:
                 verdict = VerificationVerdict.REFUTED
             
-            # Extract evidence
+            # Extract evidence from trace
             evidence: list[EvidenceItem] = []
             for claim_data in claims_data:
-                for ev in claim_data.get("evidence", []):
-                    evidence.append(EvidenceItem(
-                        text=ev.get("text", "")[:500],
-                        source=ev.get("source", "unknown"),
-                        similarity_score=ev.get("similarity_score", 0.0),
-                        metadata=ev.get("metadata", {}),
-                    ))
+                trace = claim_data.get("trace") or {}
+                supporting = trace.get("supporting_evidence", []) or []
+                refuting = trace.get("refuting_evidence", []) or []
+                for ev in [*supporting, *refuting]:
+                    evidence.append(
+                        EvidenceItem(
+                            text=(ev.get("content") or ev.get("text") or "")[:500],
+                            source=ev.get("source", "unknown"),
+                            similarity_score=ev.get("similarity_score", 0.0),
+                            metadata=ev.get("structured_data", ev.get("metadata", {})),
+                        )
+                    )
             
             return EvaluatorResult(
                 claim=claim,
@@ -231,19 +236,23 @@ class OHIEvaluator(BaseEvaluator):
             atomic_facts: list[AtomicFact] = []
             for i, claim_data in enumerate(claims_data):
                 claim_text = claim_data.get("text", "")
-                claim_verdict = claim_data.get("verdict", "unverifiable")
-                
-                # Map OHI verdict to verified boolean
-                verified = claim_verdict.lower() == "supported"
-                
-                # Extract evidence
+                claim_status = claim_data.get("status", "unverifiable")
+
+                # Map OHI status to verified boolean
+                verified = str(claim_status).lower() == "supported"
+
+                # Extract evidence from trace
+                trace = claim_data.get("trace") or {}
+                supporting = trace.get("supporting_evidence", []) or []
+                refuting = trace.get("refuting_evidence", []) or []
                 evidence = [
                     EvidenceItem(
-                        text=ev.get("text", "")[:300],
-                        source=ev.get("source", ""),
+                        text=(ev.get("content") or ev.get("text") or "")[:500],
+                        source=ev.get("source", "unknown"),
                         similarity_score=ev.get("similarity_score", 0.0),
+                        metadata=ev.get("structured_data", ev.get("metadata", {})),
                     )
-                    for ev in claim_data.get("evidence", [])[:3]
+                    for ev in [*supporting, *refuting]
                 ]
                 
                 atomic_facts.append(AtomicFact(
