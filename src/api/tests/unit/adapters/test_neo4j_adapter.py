@@ -115,11 +115,11 @@ class TestNeo4jConnectionHandling:
             with pytest.raises(RuntimeError):
                 await store.find_evidence("test claim")
 
-    def test_verify_connectivity(self, neo4j_store: Neo4jGraphAdapter):
-        """Test connectivity verification."""
-        mock_session = neo4j_store._driver.session.return_value.__enter__.return_value
-        mock_session.run.return_value = MagicMock()
+    @pytest.mark.asyncio
+    async def test_health_check(self, neo4j_store: Neo4jGraphAdapter):
+        """Test health check returns True when driver is connected."""
+        # Mock verify_connectivity to succeed
+        neo4j_store._driver.verify_connectivity.return_value = None
         
-        # Should not raise exception with mocked driver
-        result = neo4j_store._driver.verify_connectivity()
-        assert result is not None or result is None  # Mock can return anything
+        result = await neo4j_store.health_check()
+        assert result is True
