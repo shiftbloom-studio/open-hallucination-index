@@ -657,7 +657,7 @@ class HybridVerificationOracle(VerificationOracle):
         deduped = self._dedupe_evidence(evidence)
 
         # Process evidence in smaller batches to avoid token limits
-        batch_size = 3
+        batch_size = 6
         for i in range(0, len(deduped), batch_size):
             batch: list[Evidence] = deduped[i : i + batch_size]
 

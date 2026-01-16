@@ -114,6 +114,10 @@ class VerifyTextRequest(BaseModel):
         default=False,
         description="Skip LLM claim decomposition and treat input text as a single claim.",
     )
+    return_evidence: bool = Field(
+        default=True,
+        description="Whether to include full evidence traces in the response. Set to False for smaller responses.",
+    )
 
 
 class ClaimSummary(BaseModel):
@@ -308,7 +312,7 @@ async def verify_text(
             status=cv.status,
             confidence=cv.trace.confidence,
             reasoning=cv.trace.reasoning,
-            trace=cv.trace,
+            trace=cv.trace if request.return_evidence else None,
         )
         for cv in result.claim_verifications
     ]

@@ -4,6 +4,65 @@ from __future__ import annotations
 import pytest
 
 
+class TestGetEvaluatorFactory:
+    """Test the get_evaluator factory function."""
+
+    def test_factory_import(self):
+        """Test that factory can be imported."""
+        from benchmark.evaluators import get_evaluator
+
+        assert get_evaluator is not None
+
+    def test_factory_ohi_local(self):
+        """Test OHI-Local evaluator creation."""
+        from benchmark.comparison_config import ComparisonBenchmarkConfig
+        from benchmark.evaluators import get_evaluator
+
+        config = ComparisonBenchmarkConfig.from_env()
+        evaluator = get_evaluator("ohi_local", config)
+        assert evaluator is not None
+        assert evaluator.name == "OHI-Local"
+
+    def test_factory_ohi_max(self):
+        """Test OHI-Max evaluator creation."""
+        from benchmark.comparison_config import ComparisonBenchmarkConfig
+        from benchmark.evaluators import get_evaluator
+
+        config = ComparisonBenchmarkConfig.from_env()
+        evaluator = get_evaluator("ohi_max", config)
+        assert evaluator is not None
+        assert evaluator.name == "OHI-Max"
+
+    def test_factory_graph_rag(self):
+        """Test GraphRAG evaluator creation."""
+        from benchmark.comparison_config import ComparisonBenchmarkConfig
+        from benchmark.evaluators import get_evaluator
+
+        config = ComparisonBenchmarkConfig.from_env()
+        evaluator = get_evaluator("graph_rag", config)
+        assert evaluator is not None
+        assert evaluator.name == "GraphRAG"
+
+    def test_factory_vector_rag(self):
+        """Test VectorRAG evaluator creation."""
+        from benchmark.comparison_config import ComparisonBenchmarkConfig
+        from benchmark.evaluators import get_evaluator
+
+        config = ComparisonBenchmarkConfig.from_env()
+        evaluator = get_evaluator("vector_rag", config)
+        assert evaluator is not None
+        assert evaluator.name == "VectorRAG"
+
+    def test_factory_unknown_raises(self):
+        """Test that unknown evaluator raises error."""
+        from benchmark.comparison_config import ComparisonBenchmarkConfig
+        from benchmark.evaluators import get_evaluator
+
+        config = ComparisonBenchmarkConfig.from_env()
+        with pytest.raises(ValueError, match="Unknown evaluator"):
+            get_evaluator("unknown_evaluator", config)
+
+
 class TestOHIEvaluator:
     """Test OHI evaluator functionality."""
 
@@ -30,8 +89,9 @@ class TestOHIEvaluator:
     async def test_evaluate_basic(self, sample_verification_response):
         """Test basic evaluation."""
         try:
-            from benchmark.evaluators.ohi_evaluator import OHIEvaluator
             from unittest.mock import AsyncMock
+
+            from benchmark.evaluators.ohi_evaluator import OHIEvaluator
 
             evaluator = OHIEvaluator(api_url="http://localhost:8080")
             evaluator.client = AsyncMock()
@@ -43,6 +103,58 @@ class TestOHIEvaluator:
             assert result is not None
         except ImportError:
             pytest.skip("OHI evaluator not available")
+
+
+class TestGraphRAGEvaluator:
+    """Test GraphRAG evaluator functionality."""
+
+    def test_evaluator_import(self):
+        """Test that evaluator can be imported."""
+        try:
+            from benchmark.evaluators.graph_rag_evaluator import GraphRAGEvaluator
+
+            assert GraphRAGEvaluator is not None
+        except ImportError:
+            pytest.skip("GraphRAG evaluator not available")
+
+    def test_evaluator_initialization(self):
+        """Test evaluator initialization with config."""
+        try:
+            from benchmark.comparison_config import ComparisonBenchmarkConfig
+            from benchmark.evaluators.graph_rag_evaluator import GraphRAGEvaluator
+
+            config = ComparisonBenchmarkConfig.from_env()
+            evaluator = GraphRAGEvaluator(config)
+            assert evaluator is not None
+            assert evaluator.name == "GraphRAG"
+        except ImportError:
+            pytest.skip("GraphRAG evaluator not available")
+
+
+class TestVectorRAGEvaluator:
+    """Test VectorRAG evaluator functionality."""
+
+    def test_evaluator_import(self):
+        """Test that evaluator can be imported."""
+        try:
+            from benchmark.evaluators.vector_rag_evaluator import VectorRAGEvaluator
+
+            assert VectorRAGEvaluator is not None
+        except ImportError:
+            pytest.skip("VectorRAG evaluator not available")
+
+    def test_evaluator_initialization(self):
+        """Test evaluator initialization with config."""
+        try:
+            from benchmark.comparison_config import ComparisonBenchmarkConfig
+            from benchmark.evaluators.vector_rag_evaluator import VectorRAGEvaluator
+
+            config = ComparisonBenchmarkConfig.from_env()
+            evaluator = VectorRAGEvaluator(config)
+            assert evaluator is not None
+            assert evaluator.name == "VectorRAG"
+        except ImportError:
+            pytest.skip("VectorRAG evaluator not available")
 
 
 class TestMetricsCalculation:

@@ -1,9 +1,9 @@
 #!/bin/bash
 # =============================================================================
-# OHI Benchmark - Quick Test
+# OHI Benchmark - Quick Evaluator Test
 # =============================================================================
-# Quick functionality test to verify evaluators are working.
-# Runs minimal samples to check system health.
+# Tests all evaluators: OHI-Local, OHI-Max, GraphRAG, VectorRAG
+# Runs minimal samples (3 claims each) to verify system health.
 #
 # Usage: ./run_benchmark_test.sh
 # =============================================================================
@@ -15,7 +15,8 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 OUTPUT_DIR="/app/benchmark_results/test_${TIMESTAMP}"
 
 echo "╔═══════════════════════════════════════════════════════════════════════╗"
-echo "║ OHI Benchmark - Quick Test                                             ║"
+echo "║ OHI Benchmark - Evaluator Quick Test                                   ║"
+echo "║ Testing: OHI-Local, OHI-Max, GraphRAG, VectorRAG                       ║"
 echo "╚═══════════════════════════════════════════════════════════════════════╝"
 echo ""
 
