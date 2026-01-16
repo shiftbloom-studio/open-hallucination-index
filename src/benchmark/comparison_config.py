@@ -236,11 +236,6 @@ class ComparisonBenchmarkConfig:
     graph_rag: GraphRAGConfig = field(default_factory=GraphRAGConfig.from_env)
     truthfulqa: TruthfulQAConfig = field(default_factory=TruthfulQAConfig.from_env)
     factscore: FActScoreConfig = field(default_factory=FActScoreConfig.from_env)
-
-    # VectorRAG mode
-    # False = use Qdrant vector database (default)
-    # True = use public Wikipedia API (fair mode)
-    vector_rag_fair_mode: bool = False
     
     # OHI API Configuration
     ohi_api_host: str = "localhost"
@@ -319,7 +314,6 @@ class ComparisonBenchmarkConfig:
             vector_rag=VectorRAGConfig.from_env(),
             truthfulqa=TruthfulQAConfig.from_env(),
             factscore=FActScoreConfig.from_env(),
-            vector_rag_fair_mode=os.getenv("VECTOR_RAG_FAIR_MODE", "false").lower() == "true",
             ohi_api_host=os.getenv("OHI_API_HOST", "localhost"),
             ohi_api_port=os.getenv("OHI_API_PORT", "8080"),
             ohi_api_key=os.getenv("API_API_KEY"),  # Matches .env naming

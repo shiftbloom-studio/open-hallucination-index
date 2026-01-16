@@ -30,7 +30,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 from benchmark.comparison_config import ComparisonBenchmarkConfig
-from benchmark.comparison_runner import ComparisonBenchmarkRunner, run_comparison_benchmark
+from benchmark.runner import ComparisonBenchmarkRunner, run_comparison_benchmark
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -370,7 +370,6 @@ async def run_benchmark(args: argparse.Namespace) -> int:
                     evaluator = get_evaluator(
                         eval_name,
                         config,
-                        fair_mode=config.vector_rag_fair_mode,
                     )
                     is_healthy = await evaluator.health_check()
                     status = "[green]✓ Available[/green]" if is_healthy else "[yellow]⚠ Unavailable[/yellow]"

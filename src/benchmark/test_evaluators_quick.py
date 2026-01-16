@@ -82,23 +82,23 @@ async def test_ohi_evaluator():
 
 
 async def test_vector_rag_evaluator():
-    """Test VectorRAG evaluator (Fair mode - uses public Wikipedia API)."""
-    console.print("\n[bold cyan]Testing VectorRAG Evaluator (Fair Mode - Wikipedia API)[/bold cyan]")
+    """Test VectorRAG evaluator (uses Qdrant)."""
+    console.print("\n[bold cyan]Testing VectorRAG Evaluator (Qdrant)[/bold cyan]")
     
     try:
         from benchmark.comparison_config import ComparisonBenchmarkConfig
-        from benchmark.evaluators import FairVectorRAGEvaluator
+        from benchmark.evaluators import VectorRAGEvaluator
         
         config = ComparisonBenchmarkConfig.from_env()
         
-        evaluator = FairVectorRAGEvaluator(config)
+        evaluator = VectorRAGEvaluator(config)
         
         # Health check
         is_healthy = await evaluator.health_check()
         console.print(f"  Health check: {'✅ Passed' if is_healthy else '❌ Failed'}")
         
         if not is_healthy:
-            console.print("  [yellow]Wikipedia API not available, skipping tests[/yellow]")
+            console.print("  [yellow]Qdrant not available, skipping tests[/yellow]")
             await evaluator.close()
             return None
         
