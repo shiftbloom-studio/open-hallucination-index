@@ -33,12 +33,17 @@ def mock_qdrant_client():
 
 
 @pytest.fixture
-def mock_embedding_func():
+def mock_embedding_func(mock_settings):
     """Mock embedding function."""
     import numpy as np
 
     async def embed(texts: list[str]) -> list[list[float]]:
-        return [np.random.rand(384).astype("float32").tolist() for _ in texts]
+        return [
+            np.random.rand(mock_settings.vector_size)
+            .astype("float32")
+            .tolist()
+            for _ in texts
+        ]
 
     return embed
 
@@ -96,14 +101,19 @@ class TestQdrantVectorAdapter:
 
     @pytest.mark.asyncio
     async def test_embedding_generation(self, qdrant_store: QdrantVectorAdapter):
-        """Test embedding generation."""
+        """Test embedding generation via public interface."""
         text = "Test text for embedding"
-        
-        embedding = await qdrant_store._generate_embedding(text)
-        
-        assert embedding is not None
-        assert len(embedding.shape) == 1  # 1D vector
+
+        # Ensure the client search does not interfere with embedding checks
+        qdrant_store.client.search.return_value = []
+
+        # Call the public method that should internally generate embeddings
+        evidence = await qdrant_store.find_evidence(text, limit=1)
+
+        assert evidence is not None
+        assert isinstance(evidence, list)
         qdrant_store.model.encode.assert_called_once()
+        qdrant_store.model.encode.assert_called_with([text])
 
 
 class TestQdrantErrorHandling:
