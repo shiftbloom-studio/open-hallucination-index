@@ -38,24 +38,24 @@ Next.js 16 App Router application for the Open Hallucination Index. This UI focu
 
 ```mermaid
 flowchart TD
-	U[User] --> A[Next.js App Router]
-	A --> B[Auth + Session (Supabase)]
-	A --> C[React Query / Server Actions]
-	C --> D[API Proxy (/api/ohi/*)]
-	D --> E[OHI API]
-	E --> F[Verification Results]
-	F --> G[UI Rendering + Charts]
-	G --> U
+  U[User] --> A[Next.js App Router]
+  A --> B["Auth and Session - Supabase"]
+  A --> C["React Query and Server Actions"]
+  C --> D["API Proxy - /api/ohi/*"]
+  D --> E[OHI API]
+  E --> F[Verification Results]
+  F --> G[UI Rendering + Charts]
+  G --> U
 ```
 
 ### Page composition model
 
 ```mermaid
 flowchart LR
-	A[Server Component] --> B[Data Fetch]
-	B --> C[Layout + Shell]
-	C --> D[Client Islands]
-	D --> E[User Interaction]
+  A[Server Component] --> B[Data Fetch]
+  B --> C["Layout and Shell"]
+  C --> D[Client Islands]
+  D --> E[User Interaction]
 ```
 
 ---
