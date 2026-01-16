@@ -272,6 +272,7 @@ class ComparisonBenchmarkConfig:
     
     # Execution Parameters
     concurrency: int = 5
+    ohi_concurrency: int = 2
     timeout_seconds: float = 120.0
     warmup_requests: int = 3
     hallucination_max_samples: int = 60
@@ -327,6 +328,7 @@ class ComparisonBenchmarkConfig:
             ),
             chart_dpi=int(os.getenv("CHART_DPI", "200")),
             concurrency=int(os.getenv("BENCHMARK_CONCURRENCY", "5")),
+            ohi_concurrency=int(os.getenv("OHI_CONCURRENCY", "2")),
             timeout_seconds=float(os.getenv("BENCHMARK_TIMEOUT", "120.0")),
             hallucination_max_samples=int(os.getenv("BENCHMARK_HALLUCINATION_MAX", "60")),
         )
