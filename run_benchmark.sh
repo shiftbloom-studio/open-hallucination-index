@@ -29,7 +29,11 @@ fi
 echo "Output directory: ${OUTPUT_DIR}"
 echo ""
 
-docker exec ${CONTAINER} python -m benchmark.comparison_benchmark \
+# Use -t for pseudo-TTY and FORCE_COLOR for Rich compatibility
+docker exec -t \
+    -e TERM=xterm-256color \
+    -e FORCE_COLOR=1 \
+    ${CONTAINER} python -m benchmark.comparison_benchmark \
     --evaluators ohi,vector_rag \
     --metrics hallucination,truthfulqa,latency \
     --truthfulqa-max 50 \
