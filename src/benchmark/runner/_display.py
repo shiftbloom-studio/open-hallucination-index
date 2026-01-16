@@ -169,11 +169,11 @@ class LiveBenchmarkDisplay:
         - Safe to call from async contexts
     """
     
-    # Background refresh rate (Hz) - lower for Docker/Git Bash stability
-    REFRESH_RATE: float = 2.0
+    # Background refresh rate (Hz) - very low to prevent jitter
+    REFRESH_RATE: float = 1.0
     
-    # Minimum interval between manual updates (seconds)
-    UPDATE_THROTTLE: float = 0.25
+    # Minimum interval between manual updates (seconds) - higher to reduce flicker
+    UPDATE_THROTTLE: float = 1.0
     
     def __init__(self, console: Console, stats: LiveStats) -> None:
         """
@@ -216,19 +216,21 @@ class LiveBenchmarkDisplay:
     
     def __enter__(self) -> LiveBenchmarkDisplay:
         """Start the live display context."""
-        # Use lower refresh rate for Docker/Git Bash
-        refresh_rate = 2.0 if (self._caps["docker"] or self._caps["gitbash"]) else 4.0
+        # Use very low refresh rate to minimize jitter in Docker/Git Bash
+        # We rely on manual _update() calls for responsiveness
+        refresh_rate = 1.0
         
         self._live = Live(
             self._render(),
             console=self.console,
             refresh_per_second=refresh_rate,
-            auto_refresh=True,
+            auto_refresh=False,  # Disable auto-refresh to prevent jitter
             transient=False,
-            vertical_overflow="visible",
+            vertical_overflow="ellipsis",  # Prevent height changes
             # Don't redirect in Docker - causes issues
             redirect_stdout=False,
             redirect_stderr=False,
+            screen=False,  # Don't use alternate screen
         )
         self._live.__enter__()
         return self
@@ -330,8 +332,8 @@ class LiveBenchmarkDisplay:
         self._update()
     
     def force_refresh(self) -> None:
-        """Force an immediate display refresh (use sparingly)."""
-        self._update(force=True)
+        """Request a display refresh (still respects minimum throttle to prevent jitter)."""
+        self._update(force=False)  # Use normal throttling to prevent jitter
     
     # ========================================================================
     # Internal Methods

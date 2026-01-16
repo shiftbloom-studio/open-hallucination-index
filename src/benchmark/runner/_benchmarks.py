@@ -209,7 +209,7 @@ async def run_hallucination_benchmark(
     while pending:
         done, pending = await asyncio.wait(
             pending,
-            timeout=0.5,
+            timeout=2.0,  # Increased to reduce display jitter
             return_when=asyncio.FIRST_COMPLETED,
         )
         
@@ -315,7 +315,7 @@ async def run_truthfulqa_benchmark(
     while pending:
         done, pending = await asyncio.wait(
             pending,
-            timeout=0.5,
+            timeout=2.0,  # Increased to reduce display jitter
             return_when=asyncio.FIRST_COMPLETED,
         )
         
@@ -409,7 +409,7 @@ async def run_factscore_benchmark(
     while pending:
         done, pending = await asyncio.wait(
             pending,
-            timeout=0.5,
+            timeout=2.0,  # Increased to reduce display jitter
             return_when=asyncio.FIRST_COMPLETED,
         )
         
