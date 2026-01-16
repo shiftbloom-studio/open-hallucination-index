@@ -8,9 +8,12 @@
 import { BaseSource, SearchResult } from "./base.js";
 import { httpClient } from "../utils/http-client.js";
 
+type SparqlBinding = Record<string, { value: string }>;
+type SparqlBindings = SparqlBinding[];
+
 interface SparqlResults {
   results?: {
-    bindings?: Array<Record<string, { value: string }>>;
+    bindings?: SparqlBindings;
   };
 }
 
@@ -84,7 +87,7 @@ export class DBpediaSource extends BaseSource {
       }
     }
 
-    return bindings.map((binding) => ({
+    return bindings.map((binding: SparqlBinding) => ({
       source: this.name,
       title: binding.label?.value || "",
       content: (binding.abstract?.value || "").slice(0, 1500),
@@ -115,7 +118,7 @@ export class DBpediaSource extends BaseSource {
     const bindings = response.data.results?.bindings || [];
     if (bindings.length === 0) return null;
 
-    const binding = bindings[0];
+    const binding: SparqlBinding = bindings[0];
     return {
       source: this.name,
       title: binding.label?.value || resourceUri,
@@ -124,7 +127,7 @@ export class DBpediaSource extends BaseSource {
     };
   }
 
-  private async fetchBindings(body: string): Promise<SparqlResults["results"]["bindings"]> {
+  private async fetchBindings(body: string): Promise<SparqlBindings> {
     try {
       const response = await httpClient.post<SparqlResults>(`${this.baseUrl}/sparql`, body, {
         headers: {
