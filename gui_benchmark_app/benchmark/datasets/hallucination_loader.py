@@ -166,6 +166,11 @@ class HallucinationLoader:
         
         Supports:
         - aporia-ai/rag_hallucinations (context, question, answer, hallucination)
+        - SridharKumarKannam/neural-bridge-rag-hallucination
+        - Jerry999/rag-hallucination  
+        - muntasir2179/rag-hallucination-combined-dataset-v1
+        - neural-bridge/rag-hallucination-dataset-1000
+        - cemuluoglakci/hallucination_evaluation
         
         Args:
             dataset_name: HuggingFace dataset identifier
@@ -183,7 +188,22 @@ class HallucinationLoader:
                 "Install with: pip install datasets"
             ) from e
         
-        dataset = load_dataset(dataset_name, split=split)
+        # Try loading the dataset with different splits if the requested split doesn't exist
+        try:
+            dataset = load_dataset(dataset_name, split=split)
+        except (ValueError, KeyError):
+            # Try alternative splits
+            for alt_split in ["train", "test", "validation"]:
+                try:
+                    dataset = load_dataset(dataset_name, split=alt_split)
+                    break
+                except (ValueError, KeyError):
+                    continue
+            else:
+                # Load without specifying split
+                dataset_dict = load_dataset(dataset_name)
+                # Use the first available split
+                dataset = dataset_dict[list(dataset_dict.keys())[0]]
         
         cases: list[HallucinationCase] = []
         
@@ -191,33 +211,110 @@ class HallucinationLoader:
             if max_samples and i >= max_samples:
                 break
             
-            # Handle aporia-ai format
-            if "is_hallucination" in entry or "hallucination" in entry:
-                answer = entry.get("answer", "")
-                if "is_hallucination" in entry:
-                    # Boolean field: True means hallucination
-                    label = not bool(entry.get("is_hallucination"))
-                else:
-                    label_str = str(entry.get("hallucination", "")).lower()
-                    # "faithful" = factual (True), "hallucination" = false
-                    label = label_str == "faithful"
-                
-                if not answer.strip():
-                    continue
-                
-                case = HallucinationCase(
-                    id=i + 1,
-                    text=answer.strip(),
-                    label=label,
-                    domain=self._classify_domain(answer, entry.get("context", "")),
-                    difficulty=self._estimate_difficulty(answer),
-                    notes=f"Q: {entry.get('question', '')[:80]}",
-                    hallucination_type="rag_hallucination" if not label else None,
-                    source=dataset_name,
-                )
+            case = self._transform_entry_to_case(entry, i + 1, dataset_name)
+            if case:
                 cases.append(case)
         
         return HallucinationDataset(cases=cases, source_path=dataset_name)
+    
+    def _transform_entry_to_case(
+        self,
+        entry: dict,
+        case_id: int,
+        dataset_name: str,
+    ) -> HallucinationCase | None:
+        """
+        Transform a HuggingFace dataset entry to HallucinationCase.
+        
+        Handles multiple dataset formats with intelligent field mapping.
+        """
+        text = ""
+        label = True  # Default to factual
+        context = ""
+        question = ""
+        hallucination_type = None
+        
+        # Extract text content (try multiple field names)
+        for field in ["answer", "text", "claim", "statement", "response", "output"]:
+            if field in entry and entry[field]:
+                text = str(entry[field]).strip()
+                break
+        
+        # Extract context if available
+        for field in ["context", "document", "passage", "source"]:
+            if field in entry and entry[field]:
+                context = str(entry[field]).strip()
+                break
+        
+        # Extract question if available
+        for field in ["question", "query", "input", "prompt"]:
+            if field in entry and entry[field]:
+                question = str(entry[field]).strip()
+                break
+        
+        # Determine label (hallucination vs factual)
+        # Try multiple label field names and formats
+        if "is_hallucination" in entry:
+            # Boolean: True = hallucination, so label (factual) = not is_hallucination
+            label = not bool(entry["is_hallucination"])
+        elif "hallucination" in entry:
+            val = str(entry["hallucination"]).lower().strip()
+            # Handle different string formats
+            if val in ("true", "1", "yes", "hallucination"):
+                label = False  # It's a hallucination
+            elif val in ("false", "0", "no", "faithful", "factual"):
+                label = True  # It's factual
+            else:
+                # Try to interpret as boolean
+                label = val != "hallucination"
+        elif "label" in entry:
+            val = str(entry["label"]).lower().strip()
+            # Different datasets use different conventions
+            if val in ("hallucination", "false", "0", "no"):
+                label = False
+            elif val in ("factual", "true", "1", "yes", "faithful"):
+                label = True
+            else:
+                # Try numeric interpretation
+                try:
+                    label = bool(int(val))
+                except (ValueError, TypeError):
+                    label = True
+        elif "is_factual" in entry:
+            label = bool(entry["is_factual"])
+        elif "is_correct" in entry:
+            label = bool(entry["is_correct"])
+        elif "hallucinated" in entry:
+            label = not bool(entry["hallucinated"])
+        
+        # Skip if no text content
+        if not text:
+            return None
+        
+        # Determine hallucination type if it's a hallucination
+        if not label:
+            hallucination_type = entry.get("hallucination_type") or entry.get("error_type") or "rag_hallucination"
+        
+        # Build notes with available metadata
+        notes_parts = []
+        if question:
+            notes_parts.append(f"Q: {question[:80]}")
+        if "category" in entry:
+            notes_parts.append(f"Category: {entry['category']}")
+        if "source" in entry and isinstance(entry["source"], str):
+            notes_parts.append(f"Src: {entry['source'][:40]}")
+        notes = " | ".join(notes_parts) if notes_parts else ""
+        
+        return HallucinationCase(
+            id=case_id,
+            text=text,
+            label=label,
+            domain=self._classify_domain(text, context),
+            difficulty=self._estimate_difficulty(text),
+            notes=notes,
+            hallucination_type=hallucination_type,
+            source=dataset_name,
+        )
     
     def _classify_domain(self, text: str, context: str = "") -> str:
         """Classify text into a domain based on keywords."""
@@ -296,3 +393,89 @@ class HallucinationLoader:
                 pass  # HuggingFace not available, continue with CSV only
         
         return HallucinationDataset(cases=cases, source_path="combined")
+    
+    def load_complete_benchmark_datasets(
+        self,
+        csv_path: Path | str | None = None,
+        samples_per_dataset: int = 200,
+    ) -> HallucinationDataset:
+        """
+        Load comprehensive benchmark datasets for COMPLETE mode.
+        
+        Loads from multiple sources for research-grade evaluation:
+        - Local CSV dataset
+        - aporia-ai/rag_hallucinations
+        - SridharKumarKannam/neural-bridge-rag-hallucination
+        - Jerry999/rag-hallucination
+        - muntasir2179/rag-hallucination-combined-dataset-v1
+        - neural-bridge/rag-hallucination-dataset-1000
+        - cemuluoglakci/hallucination_evaluation
+        
+        Args:
+            csv_path: Path to local CSV dataset
+            samples_per_dataset: Max samples per HuggingFace dataset (balanced sampling)
+            
+        Returns:
+            Combined HallucinationDataset from all sources
+        """
+        all_cases: list[HallucinationCase] = []
+        next_id = 1
+        
+        # Load local CSV first
+        if csv_path:
+            try:
+                csv_dataset = self.load_csv(csv_path)
+                all_cases.extend(csv_dataset.cases)
+                next_id = len(all_cases) + 1
+            except Exception as e:
+                print(f"Warning: Could not load CSV dataset: {e}")
+        elif self.dataset_path and self.dataset_path.exists():
+            try:
+                csv_dataset = self.load_csv()
+                all_cases.extend(csv_dataset.cases)
+                next_id = len(all_cases) + 1
+            except Exception as e:
+                print(f"Warning: Could not load CSV dataset: {e}")
+        
+        # List of HuggingFace datasets to load
+        hf_datasets = [
+            "aporia-ai/rag_hallucinations",
+            "SridharKumarKannam/neural-bridge-rag-hallucination",
+            "Jerry999/rag-hallucination",
+            "muntasir2179/rag-hallucination-combined-dataset-v1",
+            "neural-bridge/rag-hallucination-dataset-1000",
+            "cemuluoglakci/hallucination_evaluation",
+        ]
+        
+        for dataset_name in hf_datasets:
+            try:
+                print(f"Loading {dataset_name}...")
+                hf_dataset = self.load_from_huggingface(
+                    dataset_name=dataset_name,
+                    max_samples=samples_per_dataset,
+                )
+                
+                # Renumber IDs to avoid conflicts
+                for case in hf_dataset.cases:
+                    all_cases.append(HallucinationCase(
+                        id=next_id,
+                        text=case.text,
+                        label=case.label,
+                        domain=case.domain,
+                        difficulty=case.difficulty,
+                        notes=case.notes,
+                        hallucination_type=case.hallucination_type,
+                        source=case.source,
+                    ))
+                    next_id += 1
+                
+                print(f"  ✓ Loaded {len(hf_dataset.cases)} cases from {dataset_name}")
+            except Exception as e:
+                print(f"  ⚠ Could not load {dataset_name}: {type(e).__name__}: {e}")
+        
+        dataset = HallucinationDataset(cases=all_cases, source_path="complete_benchmark")
+        print(f"\n✓ Total: {dataset.total} cases ({dataset.factual_count} factual, {dataset.hallucination_count} hallucinations)")
+        print(f"  Domains: {', '.join(sorted(dataset.domains))}")
+        
+        return dataset
+

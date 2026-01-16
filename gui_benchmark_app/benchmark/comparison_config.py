@@ -271,6 +271,13 @@ class ComparisonBenchmarkConfig:
     redis_port: int = 6379
     redis_password: str | None = None
     
+    # COMPLETE Mode - Research-grade comprehensive evaluation
+    # If True, loads all available datasets and performs exhaustive testing
+    complete_mode: bool = False
+    complete_samples_per_dataset: int = 200  # Balanced sampling per dataset
+    complete_min_verifications: int = 800  # Minimum total verifications in complete mode
+    complete_statistical_significance: bool = True  # Compute p-values and confidence intervals
+    
     # Dataset paths
     hallucination_dataset: Path | None = field(
         default_factory=lambda: Path("benchmark/benchmark_dataset.csv")

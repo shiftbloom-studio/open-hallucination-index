@@ -276,9 +276,9 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
                   <span>Verifying claims against {targetSources} sources...</span>
                   <span>{Math.round(progress)}%</span>
                </div>
-               <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+               <div className="relative h-2 w-full bg-slate-800 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-primary transition-all duration-500 ease-in-out" 
+                    className="absolute inset-y-0 left-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300 ease-out rounded-full" 
                     style={{ width: `${Math.round(progress)}%` }}
                   />
                </div>
