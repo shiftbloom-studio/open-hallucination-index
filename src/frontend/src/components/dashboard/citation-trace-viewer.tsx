@@ -20,6 +20,7 @@ import {
 import { CitationTrace, Evidence, EvidenceSource } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Badge } from "../ui/badge";
+import CitationTraceGraph from "./citation-trace-graph";
 
 interface CitationTraceViewerProps {
   trace: CitationTrace;
@@ -141,6 +142,7 @@ function EvidenceCard({ evidence, type }: { evidence: Evidence; type: "supportin
 
 export default function CitationTraceViewer({ trace, claimText }: CitationTraceViewerProps) {
   const [showEvidence, setShowEvidence] = useState(true);
+  const [viewMode, setViewMode] = useState<"list" | "3d">("list");
   
   const totalEvidence = trace.supporting_evidence.length + trace.refuting_evidence.length;
   
@@ -157,30 +159,50 @@ export default function CitationTraceViewer({ trace, claimText }: CitationTraceV
               Strategy: {trace.verification_strategy}
             </CardDescription>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowEvidence(!showEvidence)}
-            className="h-8"
-          >
-            {showEvidence ? (
-              <>
-                <ChevronUp className="h-4 w-4 mr-1" />
-                Hide
-              </>
-            ) : (
-              <>
-                <ChevronDown className="h-4 w-4 mr-1" />
-                Show
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="bg-slate-900/50 p-1 rounded-md border border-slate-700/50 flex items-center">
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("list")}
+                className="h-6 text-xs px-2"
+              >
+                List
+              </Button>
+              <Button
+                variant={viewMode === "3d" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("3d")}
+                className="h-6 text-xs px-2"
+              >
+                3D Graph
+              </Button>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowEvidence(!showEvidence)}
+              className="h-8 w-8 p-0"
+            >
+              {showEvidence ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       
       {showEvidence && (
         <CardContent className="space-y-4">
-          {/* Reasoning */}
+          {viewMode === "3d" ? (
+             <div className="animate-in fade-in zoom-in-95 duration-300">
+                <CitationTraceGraph trace={trace} claimText={claimText} />
+             </div>
+          ) : (
+            <>
+              {/* Reasoning */}
           <div className="p-3 rounded-lg bg-slate-700/30 border border-slate-600/30">
             <p className="text-xs font-medium text-muted-foreground mb-1">Analysis</p>
             <p className="text-sm leading-relaxed">{trace.reasoning}</p>
@@ -235,6 +257,8 @@ export default function CitationTraceViewer({ trace, claimText }: CitationTraceV
                 No evidence found for this claim
               </p>
             </div>
+          )}
+        </>
           )}
         </CardContent>
       )}

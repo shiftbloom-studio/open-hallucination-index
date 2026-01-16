@@ -44,6 +44,14 @@ class VerifyTextRequest(BaseModel):
         default=True,
         description="Whether to include full evidence traces in the response.",
     )
+    tier: Literal["local", "default", "max"] | None = Field(
+        default=None,
+        description="Evidence collection tier.",
+    )
+    skip_decomposition: bool = Field(
+        default=False,
+        description="Whether to skip claim decomposition.",
+    )
 
 
 class BatchVerifyRequest(BaseModel):

@@ -251,8 +251,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    expose:
+      - "8080"  # Internal port for Cloudflare tunnel (no mTLS)
     volumes:
       - ../nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../nginx/certs:/etc/nginx/certs:ro
       - ../data/data/certbot/conf:/etc/letsencrypt:ro
       - ../data/data/certbot/www:/var/www/certbot:ro
     depends_on:
