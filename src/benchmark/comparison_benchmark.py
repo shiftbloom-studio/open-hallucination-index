@@ -371,17 +371,22 @@ async def run_benchmark(args: argparse.Namespace) -> int:
 
         # Run benchmark
         async with ComparisonBenchmarkRunner(config, console) as runner:
-            report = await runner.run_comparison()
+            try:
+                report = await runner.run_comparison()
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Benchmark interrupted — saving partial results...[/yellow]")
+                saved = await runner.save_partial_results()
+                if saved:
+                    console.print(f"  Partial results saved to: {config.output_dir}")
+                else:
+                    console.print("  No partial results to save.")
+                return 130
 
         console.print(f"\n[green]✓[/green] Benchmark complete!")
         console.print(f"  Results saved to: {config.output_dir}")
         console.print(f"  Run ID: {report.run_id}")
 
         return 0
-
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Benchmark interrupted by user[/yellow]")
-        return 130
 
     except Exception as e:
         console.print(f"\n[red]Error: {e}[/red]")

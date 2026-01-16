@@ -109,6 +109,8 @@ class LiveStats:
     # Current task progress
     current_total: int = 0
     current_completed: int = 0
+    current_correct: int = 0
+    current_errors: int = 0
     
     # Timing
     start_time: float = field(default_factory=time.perf_counter)
@@ -181,6 +183,8 @@ class LiveBenchmarkDisplay:
         self.stats.current_metric = description
         self.stats.current_total = total
         self.stats.current_completed = 0
+        self.stats.current_correct = 0
+        self.stats.current_errors = 0
         self.stats.current_latencies = []
         
         # Reset or create progress task
@@ -216,8 +220,10 @@ class LiveBenchmarkDisplay:
         """Record a result."""
         if correct:
             self.stats.correct += 1
+            self.stats.current_correct += 1
         if error:
             self.stats.errors += 1
+            self.stats.current_errors += 1
         self._update()
     
     def _update(self) -> None:
@@ -270,7 +276,11 @@ class LiveBenchmarkDisplay:
         
         # Calculate live metrics
         throughput = self.stats.total_processed / elapsed if elapsed > 0 else 0.0
-        accuracy = (self.stats.correct / self.stats.total_processed * 100) if self.stats.total_processed > 0 else 0.0
+        accuracy = (
+            (self.stats.current_correct / self.stats.current_completed * 100)
+            if self.stats.current_completed > 0
+            else 0.0
+        )
         
         # Latency stats
         p50 = p95 = avg_lat = 0.0
@@ -285,9 +295,9 @@ class LiveBenchmarkDisplay:
             self._kpi_card("🎯 Accuracy", f"{accuracy:.1f}%", 
                           style="bold green" if accuracy >= 80 else ("bold yellow" if accuracy >= 60 else "bold red")),
             self._kpi_card("⏱️ P50 / P95", f"{p50:.0f}ms / {p95:.0f}ms"),
-            self._kpi_card("📊 Processed", f"{self.stats.total_processed}", style="bold"),
-            self._kpi_card("⚠️ Errors", f"{self.stats.errors}", 
-                          style="bold red" if self.stats.errors > 0 else "dim"),
+            self._kpi_card("📊 Processed", f"{self.stats.current_completed}", style="bold"),
+            self._kpi_card("⚠️ Errors", f"{self.stats.current_errors}", 
+                          style="bold red" if self.stats.current_errors > 0 else "dim"),
         ]
         
         return Columns(cards, equal=True, expand=True)
@@ -362,6 +372,9 @@ class ComparisonBenchmarkRunner:
         
         # Evaluators (initialized lazily)
         self._evaluators: dict[str, BaseEvaluator] = {}
+
+        # Track current report for partial saves
+        self._current_report: ComparisonReport | None = None
         
         # Redis client for cache testing
         self._redis: redis.Redis | None = None
@@ -508,6 +521,7 @@ class ComparisonBenchmarkRunner:
                 "cache_testing": self.config.cache_testing,
             },
         )
+        self._current_report = report
         
         # Standard comparison mode
         if not self.config.ohi_all_strategies and not self.config.cache_testing:
@@ -528,6 +542,13 @@ class ComparisonBenchmarkRunner:
         self._print_comparison_table(report)
         
         return report
+
+    async def save_partial_results(self) -> bool:
+        """Persist partial results if available."""
+        if not self._current_report:
+            return False
+        await self._generate_outputs(self._current_report)
+        return True
     
     async def _run_standard_comparison(self, report: ComparisonReport) -> None:
         """Run standard evaluator comparison with live display."""

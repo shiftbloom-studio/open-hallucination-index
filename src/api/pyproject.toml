@@ -73,3 +73,10 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = """
+    --cov=src/open_hallucination_index
+    --cov-report=xml
+    --cov-report=term-missing
+    --cov-fail-under=70
+    -v
+"""

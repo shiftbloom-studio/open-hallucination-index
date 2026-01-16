@@ -27,8 +27,8 @@ OUTPUT_DIR="/app/benchmark_results/full_comparison_${TIMESTAMP}"
 echo "╔═══════════════════════════════════════════════════════════════════════╗"
 echo "║ OHI Benchmark - Full System Comparison                                 ║"
 echo "║                                                                        ║"
-echo "║ Comparing: OHI (2 profiles) vs GPT-4 vs VectorRAG vs GraphRAG           ║"
-echo "║ Metrics: Hallucination, TruthfulQA, FActScore, Latency (60 samples)     ║"
+echo "║ Comparing: OHI (2 profiles) vs VectorRAG vs GraphRAG           ║"
+echo "║ Metrics: Hallucination, TruthfulQA, FActScore, Latency (20 samples)     ║"
 echo "╚═══════════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -51,11 +51,6 @@ config = ComparisonBenchmarkConfig.from_env()
 print('  OHI-Latency: ✓ Ready')
 print('  OHI-Max: ✓ Ready')
 
-if config.openai.is_configured:
-    print('  GPT-4: ✓ API key configured')
-else:
-    print('  GPT-4: ⚠ No API key (will be skipped)')
-
 print('  VectorRAG: ✓ Using Wikipedia API (fair comparison)')
 print('  GraphRAG: ✓ Using Neo4j graph')
 "
@@ -66,14 +61,14 @@ echo "Running Full Comparison Benchmark..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 docker exec ${CONTAINER} python -m benchmark.comparison_benchmark \
-    --evaluators ohi_latency,ohi_max,graph_rag,vector_rag,gpt4 \
+    --evaluators ohi_latency,ohi_max,graph_rag,vector_rag \
     --metrics hallucination,truthfulqa,factscore,latency \
-    --truthfulqa-max 60 \
-    --factscore-max 60 \
-    --hallucination-max 60 \
+    --truthfulqa-max 20 \
+    --factscore-max 20 \
+    --hallucination-max 20 \
     --output-dir "${OUTPUT_DIR}" \
     --chart-dpi 200 \
-    --concurrency 5 \
+    --concurrency 1 \
     --verbose
 
 echo ""
