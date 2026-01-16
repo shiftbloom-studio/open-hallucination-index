@@ -91,7 +91,7 @@ class ToolAggregator {
     try {
       return await handler(args);
     } catch (error) {
-      console.error(`[Aggregator] Tool ${name} failed:`, error);
+      console.error("[Aggregator] Tool %s failed:", name, error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
