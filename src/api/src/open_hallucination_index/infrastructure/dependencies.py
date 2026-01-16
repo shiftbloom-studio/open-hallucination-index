@@ -80,6 +80,9 @@ _mcp_sources: list[MCPKnowledgeSource] = []
 # Lifecycle management
 # -----------------------------------------------------------------------------
 
+# Track if logging has been configured (to avoid duplicate configuration)
+_logging_configured = False
+
 
 @asynccontextmanager
 async def lifespan_manager(app: FastAPI) -> AsyncIterator[dict[str, Any]]:
@@ -89,11 +92,58 @@ async def lifespan_manager(app: FastAPI) -> AsyncIterator[dict[str, Any]]:
     Usage in FastAPI:
         app = FastAPI(lifespan=lifespan_manager)
     """
+    # Configure logging once per worker process
+    _configure_logging()
+    
     await _initialize_adapters()
     try:
         yield {}
     finally:
         await _cleanup_adapters()
+
+
+def _configure_logging() -> None:
+    """
+    Configure logging for the worker process.
+    
+    This is called once per worker in the lifespan manager to avoid
+    duplicate log entries that can occur when logging is configured
+    in the main entrypoint before workers are spawned.
+    """
+    global _logging_configured
+    
+    # Guard against multiple calls (safety check)
+    if _logging_configured:
+        return
+    
+    settings = get_settings()
+    
+    # Configure root logger with structured format
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level),
+        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,  # Force reconfiguration to override any existing config
+    )
+    
+    # Configure specific loggers
+    from open_hallucination_index.infrastructure.logging import HealthLiveAccessFilter
+    
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.addFilter(HealthLiveAccessFilter(min_interval_seconds=120.0))
+    access_logger.setLevel(logging.WARNING)
+    
+    logging.getLogger("uvicorn").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("open_hallucination_index").setLevel(logging.INFO)
+    logging.getLogger("ohi.audit").setLevel(logging.INFO)
+    
+    _logging_configured = True
+    
+    worker_logger = logging.getLogger(__name__)
+    worker_logger.info(f"Logging configured for worker process {os.getpid()}")
 
 
 async def _initialize_adapters() -> None:
@@ -110,10 +160,12 @@ async def _initialize_adapters() -> None:
 
     # Add a small random delay to stagger worker startups and avoid
     # overwhelming MCP servers with simultaneous connection attempts
-    worker_pid = os.getpid()
-    stagger_delay = random.uniform(0.5, 3.0)
-    logger.debug(f"Worker {worker_pid}: staggering startup by {stagger_delay:.1f}s")
-    await asyncio.sleep(stagger_delay)
+    # (only needed when using multiple workers)
+    if settings.api.workers > 1:
+        worker_pid = os.getpid()
+        stagger_delay = random.uniform(0.5, 2.0)
+        logger.debug(f"Worker {worker_pid}: staggering startup by {stagger_delay:.1f}s")
+        await asyncio.sleep(stagger_delay)
 
     logger.info(f"Initializing DI container - Environment: {settings.environment}")
 
@@ -276,12 +328,17 @@ async def _initialize_adapters() -> None:
         evidence_collector=evidence_collector,
         mcp_selector=mcp_selector,
         llm_provider=_llm_provider,  # Enable LLM-based evidence classification
+        verification_settings=settings.verification,  # Pass configuration for classification behavior
     )
     logger.info(
-        "Verification oracle initialized: strategy=%s, mcp_sources=%s, llm_enabled=%s",
+        "Verification oracle initialized: strategy=%s, mcp_sources=%s, llm_enabled=%s, "
+        "classification_temp=%.2f, two_pass=%s, confidence_scoring=%s",
         strategy.value,
         len(_mcp_sources),
         _llm_provider is not None,
+        settings.verification.classification_temperature,
+        settings.verification.enable_two_pass_classification,
+        settings.verification.enable_confidence_scoring,
     )
 
     _scorer = WeightedScorer()

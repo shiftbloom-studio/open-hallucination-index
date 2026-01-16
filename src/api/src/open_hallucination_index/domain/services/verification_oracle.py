@@ -71,6 +71,8 @@ class HybridVerificationOracle(VerificationOracle):
         mcp_selector: SmartMCPSelector | None = None,
         # LLM for evidence classification
         llm_provider: LLMProvider | None = None,
+        # Configuration settings
+        verification_settings: Any | None = None,
     ) -> None:
         """
         Initialize the oracle.
@@ -85,6 +87,7 @@ class HybridVerificationOracle(VerificationOracle):
             evidence_collector: AdaptiveEvidenceCollector for ADAPTIVE strategy.
             mcp_selector: SmartMCPSelector for intelligent source selection.
             llm_provider: LLM provider for intelligent evidence classification.
+            verification_settings: Configuration settings for verification behavior.
         """
         self._graph_store = graph_store
         self._vector_store = vector_store
@@ -95,6 +98,13 @@ class HybridVerificationOracle(VerificationOracle):
         self._evidence_collector = evidence_collector
         self._mcp_selector = mcp_selector
         self._llm_provider = llm_provider
+        
+        # Store verification settings (import here to avoid circular dependency)
+        if verification_settings is None:
+            from open_hallucination_index.infrastructure.config import VerificationSettings
+            self._verification_settings = VerificationSettings()
+        else:
+            self._verification_settings = verification_settings
 
     @property
     def current_strategy(self) -> VerificationStrategy:
@@ -580,8 +590,10 @@ class HybridVerificationOracle(VerificationOracle):
         """
         Classify evidence as supporting or refuting.
 
-        Uses LLM-based classification for accurate semantic understanding.
-        Falls back to heuristics ONLY if LLM is not available.
+        Supports three modes:
+        1. Two-pass classification (reduce false NEUTRAL)
+        2. Single-pass classification (original)
+        3. Heuristic fallback (if no LLM available)
         """
         # If we have an LLM provider, use it for classification
         if self._llm_provider is not None and evidence:
@@ -592,7 +604,13 @@ class HybridVerificationOracle(VerificationOracle):
             # claim is marked as UNVERIFIABLE rather than potentially
             # incorrect due to weak heuristics.
             try:
-                return await self._classify_evidence_with_llm(claim, evidence)
+                # Choose classification mode based on configuration
+                if self._verification_settings.enable_confidence_scoring:
+                    return await self._classify_evidence_with_confidence(claim, evidence)
+                elif self._verification_settings.enable_two_pass_classification:
+                    return await self._classify_evidence_two_pass(claim, evidence)
+                else:
+                    return await self._classify_evidence_with_llm(claim, evidence)
             except Exception as e:
                 logger.error(f"Strict LLM classification failed: {e}")
                 raise  # Propagate error to mark claim as UNVERIFIABLE
@@ -657,7 +675,7 @@ class HybridVerificationOracle(VerificationOracle):
         deduped = self._dedupe_evidence(evidence)
 
         # Process evidence in smaller batches to avoid token limits
-        batch_size = 6
+        batch_size = self._verification_settings.classification_batch_size
         for i in range(0, len(deduped), batch_size):
             batch: list[Evidence] = deduped[i : i + batch_size]
 
@@ -671,25 +689,40 @@ class HybridVerificationOracle(VerificationOracle):
 
             evidence_text = "\n\n".join(evidence_descriptions)
 
-            prompt = f"""You are a fact-checking assistant. Classify whether each evidence item SUPPORTS, REFUTES, or is NEUTRAL for the claim.
+            prompt = f"""You are a fact-checking assistant. Your goal is to determine whether each piece of evidence SUPPORTS, REFUTES, or is NEUTRAL toward the claim.
 
 CLAIM: "{claim.text}"
 
 EVIDENCE:
 {evidence_text}
 
-For each piece of evidence, determine:
-- SUPPORTS: The evidence confirms the claim is true
-- REFUTES: The evidence contradicts the claim or proves it false
-- NEUTRAL: The evidence is unrelated or doesn't help verify the claim
+CLASSIFICATION GUIDELINES:
 
-IMPORTANT: Pay careful attention to factual details like locations, dates, names, and numbers.
-For example, if the claim says something is in "Berlin" but the evidence says it's in "Paris", that is REFUTING evidence.
+✅ SUPPORTS - Use when:
+- The evidence directly confirms the claim
+- The evidence provides strong contextual support (e.g., related facts that make the claim plausible)
+- Minor details differ but core facts align (be PERMISSIVE with peripheral details)
+- Example: Claim "Paris is the capital of France" + Evidence "Paris has been France's capital since 1682" → SUPPORTS
 
-Respond with valid JSON only in this exact shape:
+❌ REFUTES - Use when:
+- The evidence directly contradicts a core fact in the claim
+- Key details like locations, dates, names, or numbers conflict
+- Example: Claim "Einstein was born in Berlin" + Evidence "Einstein was born in Ulm, Germany" → REFUTES
+
+⚪ NEUTRAL - Use ONLY when:
+- The evidence is completely unrelated to the claim
+- The evidence neither supports nor refutes (truly ambiguous)
+- Example: Claim "Paris is the capital of France" + Evidence "Paris has many museums" → NEUTRAL (unless claim is about culture)
+
+IMPORTANT: 
+- Be MORE PERMISSIVE with SUPPORTS - contextual relevance counts
+- Be STRICT with REFUTES - only use when facts directly contradict
+- Minimize NEUTRAL - if evidence has ANY relevance, classify as SUPPORTS or REFUTES
+
+Respond with valid JSON only:
 {{
     "classifications": [
-        {{"evidence_index": 1, "classification": "SUPPORTS|REFUTES|NEUTRAL"}}
+        {{"evidence_index": 1, "classification": "SUPPORTS|REFUTES|NEUTRAL", "reasoning": "brief explanation"}}
     ]
 }}
 """
@@ -704,7 +737,7 @@ Respond with valid JSON only in this exact shape:
                 response = await self._llm_provider.complete(
                     messages=messages,
                     max_tokens=512,
-                    temperature=0.1,  # Low temperature for consistent classification
+                    temperature=self._verification_settings.classification_temperature,
                 )
 
                 # Parse the LLM response
@@ -752,6 +785,328 @@ Respond with valid JSON only in this exact shape:
                 len(neutral),
             )
         return supporting, refuting
+
+    async def _classify_evidence_two_pass(
+        self, claim: Claim, evidence: list[Evidence]
+    ) -> tuple[list[Evidence], list[Evidence]]:
+        """
+        Two-pass classification to reduce false NEUTRAL classifications.
+        
+        Pass 1: Classify with relaxed criteria (encourage SUPPORTS/REFUTES)
+        Pass 2: Verify SUPPORTS/REFUTES with strict criteria
+        
+        This reduces cases where relevant evidence is incorrectly marked NEUTRAL.
+        """
+        if not self._llm_provider or not evidence:
+            return [], []
+        
+        deduped = self._dedupe_evidence(evidence)
+        batch_size = self._verification_settings.classification_batch_size
+        
+        # PASS 1: Relaxed classification (minimize NEUTRAL)
+        first_pass_supporting: list[Evidence] = []
+        first_pass_refuting: list[Evidence] = []
+        first_pass_neutral: list[Evidence] = []
+        
+        for i in range(0, len(deduped), batch_size):
+            batch = deduped[i : i + batch_size]
+            
+            # Use relaxed temperature (higher = more varied classifications)
+            relaxed_temp = min(0.3, self._verification_settings.classification_temperature + 0.2)
+            supporting, refuting, neutral = await self._classify_batch(
+                claim, batch, temperature=relaxed_temp, relaxed=True
+            )
+            
+            first_pass_supporting.extend(supporting)
+            first_pass_refuting.extend(refuting)
+            first_pass_neutral.extend(neutral)
+        
+        # PASS 2: Verify SUPPORTS/REFUTES with strict criteria
+        to_verify = first_pass_supporting + first_pass_refuting
+        
+        if not to_verify:
+            logger.info("Two-pass: No evidence to verify (all NEUTRAL in pass 1)")
+            return first_pass_supporting, first_pass_refuting
+        
+        verified_supporting: list[Evidence] = []
+        verified_refuting: list[Evidence] = []
+        
+        for i in range(0, len(to_verify), batch_size):
+            batch = to_verify[i : i + batch_size]
+            
+            # Use original temperature for strict verification
+            supporting, refuting, neutral = await self._classify_batch(
+                claim, batch, 
+                temperature=self._verification_settings.classification_temperature,
+                relaxed=False
+            )
+            
+            verified_supporting.extend(supporting)
+            verified_refuting.extend(refuting)
+            # Items that become NEUTRAL in pass 2 are downgraded
+            first_pass_neutral.extend(neutral)
+        
+        logger.info(
+            f"Two-pass classification: Pass 1 ({len(first_pass_supporting)} S, "
+            f"{len(first_pass_refuting)} R, {len(first_pass_neutral)} N) → "
+            f"Pass 2 ({len(verified_supporting)} S, {len(verified_refuting)} R, "
+            f"{len(first_pass_neutral)} N)"
+        )
+        
+        return verified_supporting, verified_refuting
+
+    async def _classify_batch(
+        self,
+        claim: Claim,
+        batch: list[Evidence],
+        temperature: float,
+        relaxed: bool = True,
+    ) -> tuple[list[Evidence], list[Evidence], list[Evidence]]:
+        """
+        Classify a batch of evidence with specified temperature and criteria.
+        
+        Args:
+            claim: The claim being verified
+            batch: Evidence items to classify
+            temperature: LLM temperature
+            relaxed: If True, use permissive prompt; if False, use strict prompt
+        
+        Returns:
+            Tuple of (supporting, refuting, neutral) evidence lists
+        """
+        evidence_descriptions = []
+        for idx, ev in enumerate(batch):
+            content_preview = ev.content[:250] if len(ev.content) > 250 else ev.content
+            evidence_descriptions.append(
+                f"Evidence {idx + 1} (source: {ev.source.value}):\n{content_preview}"
+            )
+        
+        evidence_text = "\n\n".join(evidence_descriptions)
+        
+        # Select prompt based on mode
+        if relaxed:
+            prompt = self._get_relaxed_classification_prompt(claim.text, evidence_text)
+        else:
+            prompt = self._get_strict_classification_prompt(claim.text, evidence_text)
+        
+        from open_hallucination_index.ports.llm_provider import LLMMessage
+        
+        messages = [
+            LLMMessage(role="system", content="You are a fact-checking assistant that classifies evidence."),
+            LLMMessage(role="user", content=prompt),
+        ]
+        
+        response = await self._llm_provider.complete(
+            messages=messages,
+            max_tokens=512,
+            temperature=temperature,
+        )
+        
+        classifications = self._parse_classification_response(response.content)
+        
+        supporting: list[Evidence] = []
+        refuting: list[Evidence] = []
+        neutral: list[Evidence] = []
+        
+        for classification in classifications:
+            ev_idx = classification.get("evidence_index", 0) - 1
+            if 0 <= ev_idx < len(batch):
+                ev = batch[ev_idx]
+                label = classification.get("classification", "NEUTRAL").upper()
+                
+                if label == "SUPPORTS":
+                    supporting.append(ev)
+                elif label == "REFUTES":
+                    refuting.append(ev)
+                else:
+                    neutral.append(ev)
+        
+        return supporting, refuting, neutral
+
+    def _get_relaxed_classification_prompt(self, claim_text: str, evidence_text: str) -> str:
+        """Get permissive classification prompt (minimize NEUTRAL)."""
+        return f"""You are a fact-checking assistant. Classify evidence as SUPPORTS, REFUTES, or NEUTRAL.
+
+CLAIM: "{claim_text}"
+
+EVIDENCE:
+{evidence_text}
+
+GUIDELINES (PERMISSIVE MODE):
+- SUPPORTS: Evidence confirms OR provides contextual support (be generous)
+- REFUTES: Evidence contradicts core facts (strict criteria)
+- NEUTRAL: Evidence is completely unrelated (minimize this category)
+
+Respond with valid JSON only:
+{{
+    "classifications": [
+        {{"evidence_index": 1, "classification": "SUPPORTS|REFUTES|NEUTRAL"}}
+    ]
+}}
+"""
+
+    def _get_strict_classification_prompt(self, claim_text: str, evidence_text: str) -> str:
+        """Get strict verification prompt (confirm SUPPORTS/REFUTES)."""
+        return f"""You are a fact-checking assistant. VERIFY whether evidence truly SUPPORTS or REFUTES the claim.
+
+CLAIM: "{claim_text}"
+
+EVIDENCE:
+{evidence_text}
+
+STRICT VERIFICATION:
+- SUPPORTS: Only if evidence DIRECTLY confirms the claim
+- REFUTES: Only if evidence DIRECTLY contradicts the claim
+- NEUTRAL: If evidence is tangentially related or ambiguous
+
+Respond with valid JSON only:
+{{
+    "classifications": [
+        {{"evidence_index": 1, "classification": "SUPPORTS|REFUTES|NEUTRAL"}}
+    ]
+}}
+"""
+
+    async def _classify_evidence_with_confidence(
+        self, claim: Claim, evidence: list[Evidence]
+    ) -> tuple[list[Evidence], list[Evidence]]:
+        """
+        Classify evidence using 5-level confidence scale.
+        
+        Classifications:
+        - STRONG_SUPPORT (0.9): Evidence directly confirms claim
+        - WEAK_SUPPORT (0.7): Evidence provides contextual support
+        - NEUTRAL (0.5): Evidence is unrelated or ambiguous
+        - WEAK_REFUTE (0.3): Evidence suggests claim might be false
+        - STRONG_REFUTE (0.1): Evidence directly contradicts claim
+        
+        This enables confidence-weighted scoring in trust computation.
+        """
+        if not self._llm_provider or not evidence:
+            return [], []
+        
+        from open_hallucination_index.domain.results import EvidenceClassification
+        
+        deduped = self._dedupe_evidence(evidence)
+        batch_size = self._verification_settings.classification_batch_size
+        
+        supporting_with_confidence: list[Evidence] = []
+        refuting_with_confidence: list[Evidence] = []
+        
+        for i in range(0, len(deduped), batch_size):
+            batch = deduped[i : i + batch_size]
+            
+            evidence_descriptions = []
+            for idx, ev in enumerate(batch):
+                content_preview = ev.content[:250] if len(ev.content) > 250 else ev.content
+                evidence_descriptions.append(
+                    f"Evidence {idx + 1} (source: {ev.source.value}):\n{content_preview}"
+                )
+            
+            evidence_text = "\n\n".join(evidence_descriptions)
+            
+            prompt = f"""You are a fact-checking assistant. Classify evidence using a 5-level confidence scale.
+
+CLAIM: "{claim.text}"
+
+EVIDENCE:
+{evidence_text}
+
+CLASSIFICATION LEVELS:
+
+🟢 STRONG_SUPPORT (confidence: 0.9)
+   - Evidence directly confirms the claim with high certainty
+   - All key facts align perfectly
+
+🟡 WEAK_SUPPORT (confidence: 0.7)
+   - Evidence provides contextual support
+   - Core facts align but peripheral details may differ
+   - Evidence makes the claim plausible
+
+⚪ NEUTRAL (confidence: 0.5)
+   - Evidence is unrelated or completely ambiguous
+   - Cannot determine support or refutation
+
+🟠 WEAK_REFUTE (confidence: 0.3)
+   - Evidence suggests the claim might be false
+   - Some contradictions but not definitive
+
+🔴 STRONG_REFUTE (confidence: 0.1)
+   - Evidence directly contradicts core facts
+   - Clearly proves the claim is false
+
+Respond with valid JSON only:
+{{
+    "classifications": [
+        {{"evidence_index": 1, "classification": "STRONG_SUPPORT|WEAK_SUPPORT|NEUTRAL|WEAK_REFUTE|STRONG_REFUTE"}}
+    ]
+}}
+"""
+            
+            try:
+                from open_hallucination_index.ports.llm_provider import LLMMessage
+                
+                messages = [
+                    LLMMessage(role="system", content="You classify evidence with confidence levels."),
+                    LLMMessage(role="user", content=prompt),
+                ]
+                
+                response = await self._llm_provider.complete(
+                    messages=messages,
+                    max_tokens=512,
+                    temperature=self._verification_settings.classification_temperature,
+                )
+                
+                classifications = self._parse_classification_response(response.content)
+                
+                for classification in classifications:
+                    ev_idx = classification.get("evidence_index", 0) - 1
+                    if 0 <= ev_idx < len(batch):
+                        original_ev = batch[ev_idx]
+                        label = classification.get("classification", "NEUTRAL").upper()
+                        
+                        try:
+                            # Convert string to enum
+                            classification_enum = EvidenceClassification[label]
+                            confidence = classification_enum.to_confidence()
+                            
+                            # Create new Evidence with classification_confidence
+                            ev_with_confidence = original_ev.model_copy(
+                                update={"classification_confidence": confidence}
+                            )
+                            
+                            # Categorize as supporting or refuting
+                            if confidence >= 0.6:  # WEAK_SUPPORT or STRONG_SUPPORT
+                                supporting_with_confidence.append(ev_with_confidence)
+                                logger.debug(
+                                    f"LLM: {label} ({confidence}) - {ev_with_confidence.content[:80]}..."
+                                )
+                            elif confidence <= 0.4:  # WEAK_REFUTE or STRONG_REFUTE
+                                refuting_with_confidence.append(ev_with_confidence)
+                                logger.debug(
+                                    f"LLM: {label} ({confidence}) - {ev_with_confidence.content[:80]}..."
+                                )
+                            # NEUTRAL (0.5) items are not included in either list
+                            
+                        except KeyError:
+                            logger.warning(f"Unknown classification label: {label}")
+                            continue
+            
+            except Exception as e:
+                logger.warning(f"Failed to classify batch with confidence: {e}")
+                # Fallback: use basic classification without confidence
+                supporting_batch, refuting_batch, _ = await self._classify_batch(
+                    claim, batch, self._verification_settings.classification_temperature, relaxed=True
+                )
+                supporting_with_confidence.extend(supporting_batch)
+                refuting_with_confidence.extend(refuting_batch)
+        
+        logger.info(
+            f"Confidence-weighted classification: {len(supporting_with_confidence)} supporting, "
+            f"{len(refuting_with_confidence)} refuting (from {len(deduped)} total)"
+        )
+        
+        return supporting_with_confidence, refuting_with_confidence
 
     @staticmethod
     def _dedupe_evidence(evidence: list[Evidence]) -> list[Evidence]:
@@ -968,6 +1323,108 @@ Respond with valid JSON only in this exact shape:
     ) -> tuple[VerificationStatus, float, str]:
         """
         Determine verification status from evidence.
+        
+        Supports confidence-weighted evidence when enabled.
+        """
+        # Check if confidence scoring is enabled and evidence has confidence values
+        has_confidence = any(
+            ev.classification_confidence is not None 
+            for ev in (supporting + refuting)
+        )
+        
+        if self._verification_settings.enable_confidence_scoring and has_confidence:
+            return self._determine_status_weighted(claim, supporting, refuting)
+        else:
+            return self._determine_status_count_based(claim, supporting, refuting)
+
+    def _determine_status_weighted(
+        self,
+        claim: Claim,
+        supporting: list[Evidence],
+        refuting: list[Evidence],
+    ) -> tuple[VerificationStatus, float, str]:
+        """
+        Determine status using confidence-weighted evidence.
+        
+        Instead of counting evidence, we sum confidence scores:
+        - Support score = sum of supporting evidence confidences
+        - Refute score = sum of refuting evidence confidences
+        - Compare weighted scores to determine status
+        """
+        # Calculate weighted scores
+        support_score = sum(
+            ev.classification_confidence or 0.0 
+            for ev in supporting
+        )
+        refute_score = sum(
+            ev.classification_confidence or 0.0
+            for ev in refuting
+        )
+        
+        total_score = support_score + refute_score
+        
+        if total_score == 0:
+            return (
+                VerificationStatus.UNVERIFIABLE,
+                0.3,
+                "No relevant evidence found in knowledge base.",
+            )
+        
+        # Calculate support ratio
+        support_ratio = support_score / total_score
+        
+        # Determine status based on weighted ratio
+        if support_ratio >= 0.85:
+            # Strong support
+            confidence = min(0.95, 0.75 + (support_ratio - 0.85) * 2.0)
+            return (
+                VerificationStatus.SUPPORTED,
+                confidence,
+                f"Strong weighted support: score {support_score:.2f} vs {refute_score:.2f} "
+                f"({len(supporting)} supporting, {len(refuting)} refuting)",
+            )
+        elif support_ratio >= 0.65:
+            # Good support
+            confidence = 0.65 + (support_ratio - 0.65) * 0.5
+            return (
+                VerificationStatus.PARTIALLY_SUPPORTED,
+                confidence,
+                f"Good weighted support: score {support_score:.2f} vs {refute_score:.2f}",
+            )
+        elif support_ratio >= 0.45:
+            # Uncertain
+            confidence = 0.40 + abs(support_ratio - 0.5) * 0.2
+            return (
+                VerificationStatus.UNCERTAIN,
+                confidence,
+                f"Mixed weighted evidence: score {support_score:.2f} vs {refute_score:.2f}",
+            )
+        elif support_ratio >= 0.25:
+            # Weak refutation
+            confidence = 0.55 + (0.45 - support_ratio) * 0.5
+            return (
+                VerificationStatus.UNCERTAIN,
+                confidence,
+                f"Slightly weighted toward refutation: score {support_score:.2f} vs {refute_score:.2f}",
+            )
+        else:
+            # Strong refutation
+            confidence = min(0.90, 0.65 + (0.25 - support_ratio) * 1.0)
+            return (
+                VerificationStatus.REFUTED,
+                confidence,
+                f"Strong weighted refutation: score {support_score:.2f} vs {refute_score:.2f} "
+                f"({len(supporting)} supporting, {len(refuting)} refuting)",
+            )
+
+    def _determine_status_count_based(
+        self,
+        claim: Claim,
+        supporting: list[Evidence],
+        refuting: list[Evidence],
+    ) -> tuple[VerificationStatus, float, str]:
+        """
+        Original count-based status determination (backward compatible).
 
         Uses evidence ratio to determine status:
         - Pure support (0 refuting) → SUPPORTED

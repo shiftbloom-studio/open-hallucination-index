@@ -257,8 +257,8 @@ class MarkdownReporter(BaseReporter):
         lines = [
             "## Strategy Comparison",
             "",
-            "| Rank | Strategy | Acc | Prec | Rec | F1 | MCC | AUC | Halluc. | P50 | P95 | Errors |",
-            "|------|----------|-----|------|-----|----|-----|-----|---------|-----|-----|--------|",
+            "| Rank | Strategy | Acc | Prec | Rec | F1 | MCC | AUC | Halluc. | P50 | P95 | Exceptions |",
+            "|------|----------|-----|------|-----|----|-----|-----|---------|-----|-----|------------|",
         ]
 
         rows = []

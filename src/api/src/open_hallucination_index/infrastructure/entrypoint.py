@@ -22,27 +22,14 @@ def main() -> None:
 
     settings = get_settings()
 
-    # Configure logging
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level),
-        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    from open_hallucination_index.infrastructure.logging import HealthLiveAccessFilter
-
+    # NOTE: Logging is now configured in the lifespan manager to avoid
+    # duplicate logs when workers are spawned or app factory is called multiple times.
+    # Only log startup messages here (before uvicorn takes over).
     logger = logging.getLogger(__name__)
-    logger.info(f"Starting {settings.api.title} v{settings.api.version}")
-    logger.info(f"Environment: {settings.environment}")
-
-    access_logger = logging.getLogger("uvicorn.access")
-    access_logger.addFilter(HealthLiveAccessFilter(min_interval_seconds=120.0))
-    access_logger.setLevel(logging.WARNING)
-    logging.getLogger("uvicorn").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("asyncio").setLevel(logging.WARNING)
-    logging.getLogger("open_hallucination_index").setLevel(logging.INFO)
-    logging.getLogger("ohi.audit").setLevel(logging.INFO)
+    
+    # Basic console output for startup (uvicorn will configure its own logging)
+    print(f"Starting {settings.api.title} v{settings.api.version}")
+    print(f"Environment: {settings.environment}")
 
     # Determine host: use 127.0.0.1 for IPv4 when 0.0.0.0 is configured
     api_host = settings.api.host

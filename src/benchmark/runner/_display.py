@@ -449,7 +449,7 @@ class LiveBenchmarkDisplay:
             self._kpi_card(f"{icons['target']} Accuracy", f"{accuracy:.1f}%", style=acc_style),
             self._kpi_card(f"{icons['time']} P50/P95", f"{p50:.0f}/{p95:.0f}ms"),
             self._kpi_card(f"{icons['chart']} Done", f"{self.stats.current_completed}", style="bold"),
-            self._kpi_card(f"{icons['warn']} Errors", str(self.stats.current_errors), style=error_style),
+            self._kpi_card(f"{icons['warn']} Exceptions", str(self.stats.current_errors), style=error_style),
         ]
         
         return Columns(cards, equal=True, expand=True)

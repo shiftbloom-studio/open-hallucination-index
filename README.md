@@ -45,6 +45,8 @@ Detailed documentation is stored in the docs folder:
 - [docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md) – Public access and usage framework
 - [docs/API.md](docs/API.md) – Full API specification, models, examples
 - [docs/FRONTEND.md](docs/FRONTEND.md) – UI architecture, page structure, design principles
+- [docs/CLASSIFICATION_IMPROVEMENTS.md](docs/CLASSIFICATION_IMPROVEMENTS.md) – Evidence classification improvements and deployment
+- [docs/CLASSIFICATION_CONFIG.md](docs/CLASSIFICATION_CONFIG.md) – Classification configuration guide with profiles
 
 ## 🧭 Subsystem Guides
 
