@@ -27,7 +27,7 @@ T = TypeVar("T")
 async def execute_with_display_updates(
     tasks: list[Awaitable[T]],
     display: LiveBenchmarkDisplay,
-    poll_interval: float = 0.5,
+    poll_interval: float = 2.0,  # Increased to reduce jitter
 ) -> list[T]:
     """
     Execute async tasks while keeping the display updated.
