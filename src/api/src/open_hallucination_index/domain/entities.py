@@ -111,6 +111,12 @@ class Evidence(BaseModel):
     match_type: str | None = Field(
         default=None, description="Type of match (exact, partial, semantic)"
     )
+    classification_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for evidence classification (STRONG_SUPPORT=0.9, WEAK_SUPPORT=0.7, etc.)",
+    )
 
     # Provenance
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
