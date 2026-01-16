@@ -114,7 +114,15 @@ class OHIEvaluator(BaseEvaluator):
             data = response.json()
             
             # Parse OHI response
-            trust_score = data.get("trust_score", 0.0)
+            trust_score_raw = data.get("trust_score", 0.0)
+            if isinstance(trust_score_raw, dict):
+                trust_score = float(
+                    trust_score_raw.get("overall")
+                    or trust_score_raw.get("score")
+                    or 0.0
+                )
+            else:
+                trust_score = float(trust_score_raw)
             claims_data = data.get("claims", [])
             
             # Determine verdict from trust score
@@ -149,6 +157,7 @@ class OHIEvaluator(BaseEvaluator):
                     "claims_count": len(claims_data),
                     "strategy": self.strategy,
                     "response_id": data.get("id"),
+                    "trust_score_raw": trust_score_raw,
                 },
             )
             
@@ -191,11 +200,12 @@ class OHIEvaluator(BaseEvaluator):
                 "strategy": self.strategy,
                 "return_evidence": True,
                 "target_sources": 10,
+                "use_cache": False,  # Disable cache for accurate benchmarking
             }
             
             headers = {}
             if self.config.ohi_api_key:
-                headers["Authorization"] = f"Bearer {self.config.ohi_api_key}"
+                headers["X-API-Key"] = self.config.ohi_api_key
             
             response = await client.post(
                 self.verify_url,

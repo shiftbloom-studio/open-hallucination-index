@@ -23,6 +23,7 @@ import argparse
 import asyncio
 import logging
 import sys
+import warnings
 from pathlib import Path
 
 from rich.console import Console
@@ -44,6 +45,11 @@ def setup_logging(verbose: bool = False) -> None:
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("datasets").setLevel(logging.ERROR)
     logging.getLogger("transformers").setLevel(logging.ERROR)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("matplotlib.font_manager").setLevel(logging.WARNING)
+
+    # Suppress noisy matplotlib warnings in benchmark output
+    warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
     logging.getLogger("filelock").setLevel(logging.ERROR)
     logging.getLogger("fsspec").setLevel(logging.ERROR)
     
@@ -121,6 +127,13 @@ Environment Variables:
         type=Path,
         default=None,
         help="Path to hallucination dataset CSV",
+    )
+
+    parser.add_argument(
+        "--hallucination-max",
+        type=int,
+        default=100,
+        help="Maximum hallucination samples (HuggingFace dataset)",
     )
 
     parser.add_argument(
@@ -303,6 +316,9 @@ def build_config(args: argparse.Namespace) -> ComparisonBenchmarkConfig:
 
     # FActScore config
     config.factscore.max_samples = args.factscore_max
+
+    # Hallucination config
+    config.hallucination_max_samples = args.hallucination_max
 
     # OHI strategy options
     config.ohi_strategy = args.ohi_strategy

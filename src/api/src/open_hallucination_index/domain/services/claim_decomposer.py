@@ -165,10 +165,15 @@ class LLMClaimDecomposer(ClaimDecomposer):
     def _parse_response(self, response: str, original_text: str) -> list[Claim]:
         """Parse LLM response into Claim objects."""
         # Extract JSON from response (handle markdown code blocks)
-        json_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", response)
+        # Allow for unclosed code blocks (truncation) or standard blocks
+        json_match = re.search(r"```(?:json)?\s*([\s\S]*?)(?:```|$)", response, re.IGNORECASE)
+        json_str = ""
         if json_match:
-            json_str = json_match.group(1).strip()
-        else:
+            candidate = json_match.group(1).strip()
+            if candidate.startswith("{") or candidate.startswith("["):
+                json_str = candidate
+        
+        if not json_str:
             json_str = response.strip()
 
         data = None

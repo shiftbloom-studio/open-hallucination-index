@@ -222,7 +222,7 @@ class ComparisonBenchmarkConfig:
     redis_password: str | None = None
     
     # Dataset paths
-    hallucination_dataset: Path = field(
+    hallucination_dataset: Path | None = field(
         default_factory=lambda: Path("benchmark/benchmark_dataset.csv")
     )
     extended_dataset: Path | None = None  # Optional extended dataset
@@ -238,6 +238,7 @@ class ComparisonBenchmarkConfig:
     concurrency: int = 5
     timeout_seconds: float = 120.0
     warmup_requests: int = 3
+    hallucination_max_samples: int = 100
     
     # Statistical Parameters
     bootstrap_iterations: int = 1000
@@ -276,8 +277,10 @@ class ComparisonBenchmarkConfig:
             redis_host=os.getenv("REDIS_HOST", "localhost"),
             redis_port=int(os.getenv("REDIS_PORT", "6379")),
             redis_password=os.getenv("REDIS_PASSWORD"),
-            hallucination_dataset=Path(
-                os.getenv("BENCHMARK_DATASET", "benchmark/benchmark_dataset.csv")
+            hallucination_dataset=(
+                Path(os.getenv("BENCHMARK_DATASET"))
+                if os.getenv("BENCHMARK_DATASET")
+                else Path("benchmark/benchmark_dataset.csv")
             ),
             extended_dataset=Path(extended_path) if extended_path else None,
             output_dir=Path(
@@ -286,6 +289,7 @@ class ComparisonBenchmarkConfig:
             chart_dpi=int(os.getenv("CHART_DPI", "200")),
             concurrency=int(os.getenv("BENCHMARK_CONCURRENCY", "5")),
             timeout_seconds=float(os.getenv("BENCHMARK_TIMEOUT", "120.0")),
+            hallucination_max_samples=int(os.getenv("BENCHMARK_HALLUCINATION_MAX", "100")),
         )
     
     @property

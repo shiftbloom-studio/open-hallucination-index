@@ -58,7 +58,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Benchmark package + dataset (used by benchmark-runner)
 COPY src/benchmark /app/benchmark
-COPY src/benchmark/benchmark_dataset.csv /app/benchmark/benchmark_dataset.csv
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system /app/benchmark
 
