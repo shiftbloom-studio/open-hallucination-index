@@ -205,7 +205,7 @@ services:
       # Timeout settings - INCREASED significantly for MCP sources
       VERIFY_LOCAL_TIMEOUT_MS: "2000.0"
       VERIFY_MCP_TIMEOUT_MS: "10000.0"
-      VERIFY_TOTAL_TIMEOUT_MS: "60000.0"
+      VERIFY_TOTAL_TIMEOUT_MS: "240000.0"
       # Evidence thresholds
       VERIFY_MIN_EVIDENCE_COUNT: "2"
       VERIFY_MIN_WEIGHTED_VALUE: "1.5"

@@ -11,6 +11,9 @@ Benchmarks:
 - Hallucination Detection: Binary classification of claims
 - TruthfulQA: Truthfulness evaluation
 - FActScore: Factual accuracy scoring with claim decomposition
+
+Note: Error logging uses display.log_error() instead of logger.error()
+to prevent corrupting the Rich Live display.
 """
 
 from __future__ import annotations
@@ -242,9 +245,9 @@ async def run_hallucination_benchmark(
             display.advance(1, latency_ms=result.latency_ms)
             has_error = result.error is not None
             if has_error:
-                logger.error(
-                    f"Hallucination benchmark error for claim '{case.text[:50]}...': {result.error}"
-                )
+                # Use display.log_error to prevent corrupting the Live display
+                claim_preview = case.text[:50] if len(case.text) > 50 else case.text
+                display.log_error(f"Hallucination error: {result.error} (claim: '{claim_preview}...')")
             display.add_result(correct=is_correct, error=has_error)
     
     return metrics, latencies
@@ -288,6 +291,7 @@ async def run_truthfulqa_benchmark(
             categories=categories,
         )
     except Exception as e:
+        # Log warning - this happens before display is active, so logger is safe
         logger.warning(f"Failed to load TruthfulQA: {e}")
         return TruthfulQAMetrics(), []
     
@@ -340,7 +344,8 @@ async def run_truthfulqa_benchmark(
             display.advance(1, latency_ms=result.latency_ms)
             is_error = result.error is not None
             if is_error:
-                logger.error(f"TruthfulQA Error: {result.error}")
+                # Use display.log_error to prevent corrupting the Live display
+                display.log_error(f"TruthfulQA error: {result.error}")
             display.add_result(correct=correct, error=is_error)
     
     return metrics, latencies
