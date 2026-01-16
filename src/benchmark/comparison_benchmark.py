@@ -5,7 +5,7 @@ Comparison Benchmark CLI
 
 Command-line interface for running multi-evaluator comparison benchmarks.
 
-Compares OHI vs GPT-4 vs VectorRAG across:
+Compares OHI profiles vs GPT-4 vs VectorRAG vs GraphRAG across:
 - Hallucination Detection
 - TruthfulQA
 - FActScore
@@ -109,8 +109,11 @@ Environment Variables:
     parser.add_argument(
         "--evaluators", "-e",
         type=str,
-        default="ohi,gpt4,vector_rag",
-        help="Comma-separated list of evaluators (ohi, gpt4, vector_rag)",
+        default="ohi_latency,ohi_max,graph_rag,vector_rag,gpt4",
+        help=(
+            "Comma-separated list of evaluators "
+            "(ohi, ohi_latency, ohi_max, gpt4, vector_rag, graph_rag)"
+        ),
     )
 
     # Metric selection
@@ -132,7 +135,7 @@ Environment Variables:
     parser.add_argument(
         "--hallucination-max",
         type=int,
-        default=100,
+        default=60,
         help="Maximum hallucination samples (HuggingFace dataset)",
     )
 
@@ -177,7 +180,7 @@ Environment Variables:
     parser.add_argument(
         "--truthfulqa-max",
         type=int,
-        default=200,
+        default=60,
         help="Maximum TruthfulQA samples",
     )
 
@@ -192,7 +195,7 @@ Environment Variables:
     parser.add_argument(
         "--factscore-max",
         type=int,
-        default=100,
+        default=60,
         help="Maximum FActScore samples",
     )
 

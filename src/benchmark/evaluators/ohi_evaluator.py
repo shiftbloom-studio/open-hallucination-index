@@ -37,12 +37,22 @@ class OHIEvaluator(BaseEvaluator):
     
     name = "OHI"
     
-    def __init__(self, config: ComparisonBenchmarkConfig) -> None:
+    def __init__(
+        self,
+        config: ComparisonBenchmarkConfig,
+        *,
+        name_override: str | None = None,
+        strategy_override: str | None = None,
+        target_sources_override: int | None = None,
+    ) -> None:
         self.config = config
         self.base_url = config.ohi_api_base_url
         self.verify_url = config.ohi_verify_url
-        self.strategy = config.ohi_strategy
+        self.strategy = strategy_override or config.ohi_strategy
+        if name_override:
+            self.name = name_override
         self.timeout = config.timeout_seconds
+        self._target_sources = target_sources_override or 10
         
         # Persistent HTTP client
         self._client: httpx.AsyncClient | None = None
@@ -84,7 +94,7 @@ class OHIEvaluator(BaseEvaluator):
                 "text": claim,
                 "strategy": self.strategy,
                 "return_evidence": True,
-                "target_sources": 10,
+                "target_sources": self._target_sources,
                 "use_cache": False,  # Disable cache for accurate benchmarking
             }
             

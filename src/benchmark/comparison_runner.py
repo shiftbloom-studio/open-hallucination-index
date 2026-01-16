@@ -4,7 +4,7 @@ Comparison Benchmark Runner
 
 Main orchestration for multi-evaluator benchmark comparison.
 
-Runs three evaluators (OHI, GPT-4, VectorRAG) across four metrics:
+Runs multiple evaluators (OHI profiles, GPT-4, VectorRAG, GraphRAG) across four metrics:
 - Hallucination Detection
 - TruthfulQA
 - FActScore

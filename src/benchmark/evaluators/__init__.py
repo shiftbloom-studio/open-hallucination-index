@@ -19,6 +19,7 @@ from benchmark.evaluators.base import (
 )
 from benchmark.evaluators.gpt4_evaluator import GPT4Evaluator
 from benchmark.evaluators.ohi_evaluator import OHIEvaluator
+from benchmark.evaluators.graph_rag_evaluator import GraphRAGEvaluator
 from benchmark.evaluators.vector_rag_evaluator import VectorRAGEvaluator
 from benchmark.evaluators.fair_vector_rag_evaluator import FairVectorRAGEvaluator
 
@@ -35,6 +36,7 @@ __all__ = [
     "GPT4Evaluator",
     "VectorRAGEvaluator",
     "FairVectorRAGEvaluator",
+    "GraphRAGEvaluator",
 ]
 
 
@@ -57,6 +59,25 @@ def get_evaluator(name: str, config, fair_mode: bool = True):
             return FairVectorRAGEvaluator(config)
         else:
             return VectorRAGEvaluator(config)
+
+    if name == "graph_rag":
+        return GraphRAGEvaluator(config)
+
+    if name == "ohi_latency":
+        return OHIEvaluator(
+            config,
+            name_override="OHI-Latency",
+            strategy_override="mcp_enhanced",
+            target_sources_override=6,
+        )
+
+    if name == "ohi_max":
+        return OHIEvaluator(
+            config,
+            name_override="OHI-Max",
+            strategy_override="adaptive",
+            target_sources_override=18,
+        )
     
     evaluators = {
         "ohi": OHIEvaluator,
@@ -64,6 +85,8 @@ def get_evaluator(name: str, config, fair_mode: bool = True):
     }
     
     if name not in evaluators:
-        raise ValueError(f"Unknown evaluator: {name}. Available: ohi, gpt4, vector_rag")
+        raise ValueError(
+            f"Unknown evaluator: {name}. Available: ohi, ohi_latency, ohi_max, gpt4, vector_rag, graph_rag"
+        )
     
     return evaluators[name](config)

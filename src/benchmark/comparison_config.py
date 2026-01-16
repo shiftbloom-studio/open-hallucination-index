@@ -26,7 +26,14 @@ from typing import Literal
 # Type Definitions
 # =============================================================================
 
-EvaluatorType = Literal["ohi", "gpt4", "vector_rag"]
+EvaluatorType = Literal[
+    "ohi",
+    "ohi_latency",
+    "ohi_max",
+    "gpt4",
+    "vector_rag",
+    "graph_rag",
+]
 MetricType = Literal["hallucination", "truthfulqa", "factscore", "latency"]
 
 
@@ -104,11 +111,39 @@ class VectorRAGConfig:
 
 
 @dataclass
+class GraphRAGConfig:
+    """
+    Configuration for GraphRAG baseline.
+
+    Uses Neo4j graph queries only (no vector search, no MCP).
+    """
+
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_username: str = "neo4j"
+    neo4j_password: str = "password123"
+    top_k: int = 5
+    min_support_ratio: float = 0.5
+    min_partial_ratio: float = 0.3
+
+    @classmethod
+    def from_env(cls) -> "GraphRAGConfig":
+        """Load from environment variables."""
+        return cls(
+            neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+            neo4j_username=os.getenv("NEO4J_USERNAME", "neo4j"),
+            neo4j_password=os.getenv("NEO4J_PASSWORD", "password123"),
+            top_k=int(os.getenv("GRAPH_RAG_TOP_K", "5")),
+            min_support_ratio=float(os.getenv("GRAPH_RAG_SUPPORT_RATIO", "0.5")),
+            min_partial_ratio=float(os.getenv("GRAPH_RAG_PARTIAL_RATIO", "0.3")),
+        )
+
+
+@dataclass
 class TruthfulQAConfig:
     """Configuration for TruthfulQA evaluation."""
     
     evaluation_mode: Literal["generation", "mc1", "mc2"] = "generation"
-    max_samples: int | None = 200  # Limit for faster benchmarks
+    max_samples: int | None = 60  # Limit for faster benchmarks
     categories: list[str] | None = None  # None = all categories
     split: str = "validation"
     
@@ -119,7 +154,7 @@ class TruthfulQAConfig:
         categories = categories_str.split(",") if categories_str else None
         
         max_samples_str = os.getenv("TRUTHFULQA_MAX_SAMPLES")
-        max_samples = int(max_samples_str) if max_samples_str else 200
+        max_samples = int(max_samples_str) if max_samples_str else 60
         
         return cls(
             evaluation_mode=os.getenv("TRUTHFULQA_MODE", "generation"),  # type: ignore
@@ -139,7 +174,7 @@ class FActScoreConfig:
     
     gamma: float = 10.0  # Length penalty parameter
     min_facts_threshold: int = 2  # Minimum facts for valid score
-    max_samples: int | None = 100  # Limit for faster benchmarks
+    max_samples: int | None = 60  # Limit for faster benchmarks
     
     @classmethod
     def from_env(cls) -> "FActScoreConfig":
@@ -148,7 +183,7 @@ class FActScoreConfig:
         return cls(
             gamma=float(os.getenv("FACTSCORE_GAMMA", "10.0")),
             min_facts_threshold=int(os.getenv("FACTSCORE_MIN_FACTS", "2")),
-            max_samples=int(max_samples_str) if max_samples_str else 100,
+            max_samples=int(max_samples_str) if max_samples_str else 60,
         )
 
 
@@ -180,7 +215,7 @@ class ComparisonBenchmarkConfig:
     
     # Which evaluators to run
     evaluators: list[EvaluatorType] = field(
-        default_factory=lambda: ["ohi", "gpt4", "vector_rag"]
+        default_factory=lambda: ["ohi_latency", "ohi_max", "graph_rag", "vector_rag", "gpt4"]
     )
     
     # Which metrics to compute
@@ -191,6 +226,7 @@ class ComparisonBenchmarkConfig:
     # Sub-configurations
     openai: OpenAIConfig = field(default_factory=OpenAIConfig.from_env)
     vector_rag: VectorRAGConfig = field(default_factory=VectorRAGConfig.from_env)
+    graph_rag: GraphRAGConfig = field(default_factory=GraphRAGConfig.from_env)
     truthfulqa: TruthfulQAConfig = field(default_factory=TruthfulQAConfig.from_env)
     factscore: FActScoreConfig = field(default_factory=FActScoreConfig.from_env)
     
@@ -238,7 +274,7 @@ class ComparisonBenchmarkConfig:
     concurrency: int = 5
     timeout_seconds: float = 120.0
     warmup_requests: int = 3
-    hallucination_max_samples: int = 100
+    hallucination_max_samples: int = 60
     
     # Statistical Parameters
     bootstrap_iterations: int = 1000
@@ -247,7 +283,10 @@ class ComparisonBenchmarkConfig:
     @classmethod
     def from_env(cls) -> "ComparisonBenchmarkConfig":
         """Load full configuration from environment."""
-        evaluators_str = os.getenv("BENCHMARK_EVALUATORS", "ohi,gpt4,vector_rag")
+        evaluators_str = os.getenv(
+            "BENCHMARK_EVALUATORS",
+            "ohi_latency,ohi_max,graph_rag,vector_rag,gpt4",
+        )
         metrics_str = os.getenv("BENCHMARK_METRICS", "hallucination,truthfulqa,factscore,latency")
         
         extended_path = os.getenv("BENCHMARK_EXTENDED_DATASET")
@@ -289,7 +328,7 @@ class ComparisonBenchmarkConfig:
             chart_dpi=int(os.getenv("CHART_DPI", "200")),
             concurrency=int(os.getenv("BENCHMARK_CONCURRENCY", "5")),
             timeout_seconds=float(os.getenv("BENCHMARK_TIMEOUT", "120.0")),
-            hallucination_max_samples=int(os.getenv("BENCHMARK_HALLUCINATION_MAX", "100")),
+            hallucination_max_samples=int(os.getenv("BENCHMARK_HALLUCINATION_MAX", "60")),
         )
     
     @property
