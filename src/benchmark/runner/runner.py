@@ -152,7 +152,6 @@ class ComparisonBenchmarkRunner:
                 "hallucination_dataset": str(self.config.hallucination_dataset),
                 "ohi_all_strategies": self.config.ohi_all_strategies,
                 "cache_testing": self.config.cache_testing,
-                "vector_rag_fair_mode": self.config.vector_rag_fair_mode,
             },
         )
         self._current_report = report
@@ -229,7 +228,6 @@ class ComparisonBenchmarkRunner:
                 evaluator = get_evaluator(
                     eval_name,
                     self.config,
-                    fair_mode=self.config.vector_rag_fair_mode,
                 )
                 is_healthy = await evaluator.health_check()
                 

@@ -5,8 +5,8 @@ Evaluators Package
 Provides different claim verification strategies for benchmark comparison:
 - OHIEvaluator: Our hybrid verification system (expected winner)
 - GPT4Evaluator: Direct LLM-based verification (baseline)
-- VectorRAGEvaluator: Vector similarity with Qdrant (default baseline)
-- FairVectorRAGEvaluator: Vector similarity with public Wikipedia API (optional fair mode)
+- VectorRAGEvaluator: Vector similarity with Qdrant (baseline)
+- GraphRAGEvaluator: Graph-based verification with Neo4j
 """
 
 from benchmark.evaluators.base import (
@@ -21,7 +21,6 @@ from benchmark.evaluators.gpt4_evaluator import GPT4Evaluator
 from benchmark.evaluators.ohi_evaluator import OHIEvaluator
 from benchmark.evaluators.graph_rag_evaluator import GraphRAGEvaluator
 from benchmark.evaluators.vector_rag_evaluator import VectorRAGEvaluator
-from benchmark.evaluators.fair_vector_rag_evaluator import FairVectorRAGEvaluator
 
 __all__ = [
     # Base classes
@@ -35,30 +34,23 @@ __all__ = [
     "OHIEvaluator",
     "GPT4Evaluator",
     "VectorRAGEvaluator",
-    "FairVectorRAGEvaluator",
     "GraphRAGEvaluator",
 ]
 
 
-def get_evaluator(name: str, config, fair_mode: bool = False):
+def get_evaluator(name: str, config):
     """
     Factory function to create evaluator by name.
     
     Args:
-        name: Evaluator name ("ohi", "gpt4", "vector_rag")
+        name: Evaluator name ("ohi", "gpt4", "vector_rag", "graph_rag")
         config: ComparisonBenchmarkConfig instance
-        fair_mode: If True, VectorRAG uses public Wikipedia API (fair mode).
-               If False, uses Qdrant vector database (default).
         
     Returns:
         Evaluator instance
     """
-    # For vector_rag, choose fair or unfair version
     if name == "vector_rag":
-        if fair_mode:
-            return FairVectorRAGEvaluator(config)
-        else:
-            return VectorRAGEvaluator(config)
+        return VectorRAGEvaluator(config)
 
     if name == "graph_rag":
         return GraphRAGEvaluator(config)

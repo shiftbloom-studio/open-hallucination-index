@@ -88,9 +88,9 @@ class TestBenchmarkRunner:
     def test_runner_import(self):
         """Test that runner can be imported."""
         try:
-            from benchmark.comparison_runner import ComparisonRunner
+            from benchmark.runner import ComparisonBenchmarkRunner
 
-            assert ComparisonRunner is not None
+            assert ComparisonBenchmarkRunner is not None
         except ImportError:
             pytest.skip("Comparison runner not available")
 

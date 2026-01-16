@@ -63,7 +63,7 @@ from benchmark.comparison_metrics import (
     LatencyMetrics,
     TruthfulQAMetrics,
 )
-from benchmark.comparison_runner import (
+from benchmark.runner import (
     ComparisonBenchmarkRunner,
     run_comparison_benchmark,
 )
@@ -81,7 +81,6 @@ from benchmark.evaluators import (
     BaseEvaluator,
     EvaluatorResult,
     FActScoreResult,
-    FairVectorRAGEvaluator,
     GPT4Evaluator,
     OHIEvaluator,
     VectorRAGEvaluator,
@@ -111,7 +110,6 @@ __all__ = [
     "BaseEvaluator",
     "EvaluatorResult",
     "FActScoreResult",
-    "FairVectorRAGEvaluator",
     "GPT4Evaluator",
     "OHIEvaluator",
     "VectorRAGEvaluator",
