@@ -74,6 +74,15 @@ class TestNeo4jGraphAdapter:
         
         assert len(evidence) > 0
         assert isinstance(evidence[0], Evidence)
+        first = evidence[0]
+        assert first.text == "Python was created by Guido van Rossum in 1991"
+        assert first.title == "Python (programming language)"
+        assert first.url == "https://en.wikipedia.org/wiki/Python_(programming_language)"
+        assert first.score == 0.95
+        # Verify that the Neo4j query was executed with the expected parameters.
+        mock_session.run.assert_called_once()
+        _, kwargs = mock_session.run.call_args
+        assert kwargs.get("limit") == 5
 
     @pytest.mark.asyncio
     async def test_find_evidence_empty(self, neo4j_store: Neo4jGraphAdapter):
@@ -89,12 +98,15 @@ class TestNeo4jGraphAdapter:
         evidence = await neo4j_store.find_evidence(claim, limit=5)
         
         assert len(evidence) == 0
+        # Verify that the Neo4j query was executed with the expected parameters.
+        mock_session.run.assert_called_once()
+        _, kwargs = mock_session.run.call_args
+        assert kwargs.get("limit") == 5
 
     def test_close(self, neo4j_store: Neo4jGraphAdapter):
         """Test closing the connection."""
         neo4j_store.close()
-        # Should not raise exception
-        assert True
+        neo4j_store._driver.close.assert_called_once()
 
 
 class TestNeo4jConnectionHandling:
