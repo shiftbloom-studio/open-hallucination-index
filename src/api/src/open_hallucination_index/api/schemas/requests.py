@@ -40,6 +40,10 @@ class VerifyTextRequest(BaseModel):
         le=20,
         description="Preferred number of sources to query during verification.",
     )
+    return_evidence: bool = Field(
+        default=True,
+        description="Whether to include full evidence traces in the response.",
+    )
 
 
 class BatchVerifyRequest(BaseModel):

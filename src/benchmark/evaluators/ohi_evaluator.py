@@ -9,7 +9,6 @@ This is our primary system - expected to outperform baselines.
 from __future__ import annotations
 
 import time
-from typing import Any
 
 import httpx
 
@@ -270,7 +269,9 @@ class OHIEvaluator(BaseEvaluator):
                 claim_status = claim_data.get("status", "unverifiable")
 
                 # Map OHI status to verified boolean
-                verified = str(claim_status).lower() == "supported"
+                # Both "supported" and "partially_supported" count as verified for FActScore
+                status_lower = str(claim_status).lower().replace("_", "-")
+                verified = status_lower in ("supported", "partially-supported", "partially_supported")
 
                 # Extract evidence from trace
                 trace = claim_data.get("trace") or {}
