@@ -194,11 +194,11 @@ export class DBpediaSource extends BaseSource {
     const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
     if (!match?.[1]) return undefined;
     return match[1]
-      .replace(/&amp;/g, "&")
       .replace(/&quot;/g, '"')
       .replace(/&apos;/g, "'")
       .replace(/&lt;/g, "<")
       .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&")
       .trim();
   }
 }
