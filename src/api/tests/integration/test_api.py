@@ -32,7 +32,7 @@ class TestHealthEndpoints:
     def client(self) -> TestClient:
         """Create a test client with mocked dependencies."""
         # Import here to avoid import errors during collection
-        from open_hallucination_index.api.app import create_app
+        from server.app import create_app
 
         app = create_app(enable_lifespan=False)
 
@@ -113,8 +113,8 @@ class TestVerificationEndpoints:
     @pytest.fixture
     def client_with_mock(self, mock_verify_use_case: AsyncMock) -> TestClient:
         """Create a test client with mocked use case."""
-        from open_hallucination_index.api.app import create_app
-        from open_hallucination_index.infrastructure import dependencies
+        from server.app import create_app
+        from config import dependencies
 
         app = create_app(enable_lifespan=False)
 

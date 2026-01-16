@@ -51,7 +51,8 @@ describe('CitationTraceViewer', () => {
     ],
   };
 
-  it('should render evidence trail with supporting evidence', () => {
+  it('should render evidence trail with supporting evidence', async () => {
+    const user = userEvent.setup();
     render(
       <CitationTraceViewer 
         trace={mockTrace} 
@@ -61,11 +62,21 @@ describe('CitationTraceViewer', () => {
 
     expect(screen.getByText('Evidence Trail')).toBeInTheDocument();
     expect(screen.getByText(/2 sources? analyzed/i)).toBeInTheDocument();
+    
+    // Click expand button to show evidence
+    const expandButton = screen.getByRole('button', { name: '' });
+    await user.click(expandButton);
+    
+    // Switch to list view to see evidence cards
+    const listButton = screen.getByRole('button', { name: 'List' });
+    await user.click(listButton);
+    
     expect(screen.getByText('This claim is supported by multiple reliable sources.')).toBeInTheDocument();
     expect(screen.getByText('Supporting Evidence (2)')).toBeInTheDocument();
   });
 
-  it('should render evidence cards with correct content', () => {
+  it('should render evidence cards with correct content', async () => {
+    const user = userEvent.setup();
     render(
       <CitationTraceViewer 
         trace={mockTrace} 
@@ -73,11 +84,20 @@ describe('CitationTraceViewer', () => {
       />
     );
 
+    // Click expand button to show evidence
+    const expandButton = screen.getByRole('button', { name: '' });
+    await user.click(expandButton);
+    
+    // Switch to list view to see evidence cards
+    const listButton = screen.getByRole('button', { name: 'List' });
+    await user.click(listButton);
+
     expect(screen.getByText('Wikipedia confirms this fact.')).toBeInTheDocument();
     expect(screen.getByText('Knowledge graph has an exact match.')).toBeInTheDocument();
   });
 
-  it('should render refuting evidence', () => {
+  it('should render refuting evidence', async () => {
+    const user = userEvent.setup();
     render(
       <CitationTraceViewer 
         trace={mockTraceWithRefuting} 
@@ -85,29 +105,55 @@ describe('CitationTraceViewer', () => {
       />
     );
 
+    // Click expand button to show evidence
+    const expandButton = screen.getByRole('button', { name: '' });
+    await user.click(expandButton);
+    
+    // Switch to list view
+    const listButton = screen.getByRole('button', { name: 'List' });
+    await user.click(listButton);
+
     expect(screen.getByText('Refuting Evidence (1)')).toBeInTheDocument();
     expect(screen.getByText('Scientific study shows the opposite.')).toBeInTheDocument();
   });
 
-  it('should display source links when available', () => {
+  it('should display source links when available', async () => {
+    const user = userEvent.setup();
     render(
       <CitationTraceViewer 
         trace={mockTrace} 
         claimText="Test claim" 
       />
     );
+
+    // Click expand button to show evidence
+    const expandButton = screen.getByRole('button', { name: '' });
+    await user.click(expandButton);
+    
+    // Switch to list view
+    const listButton = screen.getByRole('button', { name: 'List' });
+    await user.click(listButton);
 
     const links = screen.getAllByText('View source');
     expect(links.length).toBeGreaterThan(0);
   });
 
-  it('should display match scores', () => {
+  it('should display match scores', async () => {
+    const user = userEvent.setup();
     render(
       <CitationTraceViewer 
         trace={mockTrace} 
         claimText="Test claim" 
       />
     );
+
+    // Click expand button to show evidence
+    const expandButton = screen.getByRole('button', { name: '' });
+    await user.click(expandButton);
+    
+    // Switch to list view
+    const listButton = screen.getByRole('button', { name: 'List' });
+    await user.click(listButton);
 
     expect(screen.getByText(/Match: 95%/i)).toBeInTheDocument();
     expect(screen.getByText(/Match: 100%/i)).toBeInTheDocument();
@@ -122,14 +168,29 @@ describe('CitationTraceViewer', () => {
       />
     );
 
-    const hideButton = screen.getByRole('button', { name: /hide/i });
-    await user.click(hideButton);
-
-    // Evidence should be hidden after clicking
+    // Initially collapsed - content should not be visible
+    expect(screen.queryByText('Wikipedia confirms this fact.')).not.toBeInTheDocument();
+    
+    // Click expand button
+    const expandButton = screen.getByRole('button', { name: '' });
+    await user.click(expandButton);
+    
+    // Switch to list view to see content
+    const listButton = screen.getByRole('button', { name: 'List' });
+    await user.click(listButton);
+    
+    // Evidence should now be visible
+    expect(screen.getByText('Wikipedia confirms this fact.')).toBeInTheDocument();
+    
+    // Click collapse button
+    await user.click(expandButton);
+    
+    // Evidence should be hidden again
     expect(screen.queryByText('Wikipedia confirms this fact.')).not.toBeInTheDocument();
   });
 
-  it('should show message when no evidence is found', () => {
+  it('should show message when no evidence is found', async () => {
+    const user = userEvent.setup();
     const emptyTrace: CitationTrace = {
       ...mockTrace,
       supporting_evidence: [],
@@ -142,6 +203,14 @@ describe('CitationTraceViewer', () => {
         claimText="Test claim" 
       />
     );
+
+    // Click expand button to show evidence section
+    const expandButton = screen.getByRole('button', { name: '' });
+    await user.click(expandButton);
+    
+    // Switch to list view
+    const listButton = screen.getByRole('button', { name: 'List' });
+    await user.click(listButton);
 
     expect(screen.getByText('No evidence found for this claim')).toBeInTheDocument();
   });

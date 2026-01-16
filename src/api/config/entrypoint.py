@@ -10,12 +10,17 @@ from __future__ import annotations
 import sys
 
 import uvicorn
-import uvloop
+
+try:
+    import uvloop
+except ImportError:
+    uvloop = None  # type: ignore
 
 
 def main() -> None:
     """Run the API server using uvicorn."""
-    uvloop.install()
+    if uvloop is not None:
+        uvloop.install()
 
     from config.settings import get_settings
 

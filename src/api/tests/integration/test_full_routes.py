@@ -18,13 +18,13 @@ os.environ["LLM_API_KEY"] = "mock-key"
 os.environ["NEO4J_PASSWORD"] = "mock-pass"
 os.environ["QDRANT_API_KEY"] = "mock-key"
 
-from open_hallucination_index.api.app import create_app
+from server.app import create_app
 
 
 @pytest.fixture
 def mock_llm():
     """Mock the LLM adapter to avoid external calls to vLLM."""
-    with patch("open_hallucination_index.infrastructure.dependencies.OpenAILLMAdapter") as mock:
+    with patch("config.dependencies.OpenAILLMAdapter") as mock:
         adapter_instance = mock.return_value
         adapter_instance.decompose_claim = AsyncMock(return_value=[
             Claim(
@@ -44,7 +44,7 @@ def mock_llm():
 @pytest.fixture
 def mock_graph():
     """Mock Neo4j adapter."""
-    with patch("open_hallucination_index.infrastructure.dependencies.Neo4jGraphAdapter") as mock:
+    with patch("config.dependencies.Neo4jGraphAdapter") as mock:
         instance = mock.return_value
         instance.connect = AsyncMock()
         instance.verify_claim = AsyncMock(return_value=[])  # Default no evidence
@@ -55,7 +55,7 @@ def mock_graph():
 @pytest.fixture
 def mock_vector():
     """Mock Qdrant adapter."""
-    with patch("open_hallucination_index.infrastructure.dependencies.QdrantVectorAdapter") as mock:
+    with patch("config.dependencies.QdrantVectorAdapter") as mock:
         instance = mock.return_value
         instance.connect = AsyncMock()
         instance.search_evidence = AsyncMock(return_value=[])
@@ -66,7 +66,7 @@ def mock_vector():
 @pytest.fixture
 def mock_mcp():
     """Mock MCP adapter."""
-    with patch("open_hallucination_index.infrastructure.dependencies.OHIMCPAdapter") as mock:
+    with patch("config.dependencies.OHIMCPAdapter") as mock:
         instance = mock.return_value
         instance.connect = AsyncMock()
         
@@ -94,16 +94,22 @@ def client_with_mocks(mock_llm, mock_graph, mock_vector, mock_mcp):
     """
     # Force settings so that MCP is enabled in the logic
     # We patch get_settings to return a config where MCP is enabled
-    with patch("open_hallucination_index.infrastructure.dependencies.get_settings") as mock_settings_func:
+    with patch("config.dependencies.get_settings") as mock_settings_func:
+        # Create nested mock objects properly
+        redis_mock = MagicMock()
+        redis_mock.enabled = False
+        
+        mcp_mock = MagicMock()
+        mcp_mock.enabled = True
+        mcp_mock.wikipedia_enabled = True
+        mcp_mock.wikidata_enabled = True
+        mcp_mock.context7_enabled = True
+        mcp_mock.academic_enabled = True
+        mcp_mock.news_enabled = True
+        
         settings = MagicMock()
-        # Enable relevant settings
-        settings.redis.enabled = False  # Disable Redis as requested/default for test
-        settings.mcp.enabled = True
-        settings.mcp.wikipedia_enabled = True
-        settings.mcp.wikidata_enabled = True
-        settings.mcp.context7_enabled = True
-        settings.mcp.academic_enabled = True
-        settings.mcp.news_enabled = True
+        settings.redis = redis_mock
+        settings.mcp = mcp_mock
         
         mock_settings_func.return_value = settings
         
@@ -115,10 +121,16 @@ def client_with_mocks(mock_llm, mock_graph, mock_vector, mock_mcp):
 @pytest.fixture
 def client_local_only(mock_llm, mock_graph, mock_vector, mock_mcp):
     """Client with MCP disabled and Redis disabled."""
-    with patch("open_hallucination_index.infrastructure.dependencies.get_settings") as mock_settings_func:
+    with patch("config.dependencies.get_settings") as mock_settings_func:
+        redis_mock = MagicMock()
+        redis_mock.enabled = False
+        
+        mcp_mock = MagicMock()
+        mcp_mock.enabled = False  # Critical: Disable MCP
+        
         settings = MagicMock()
-        settings.redis.enabled = False
-        settings.mcp.enabled = False  # Critical: Disable MCP
+        settings.redis = redis_mock
+        settings.mcp = mcp_mock
         
         mock_settings_func.return_value = settings
         
