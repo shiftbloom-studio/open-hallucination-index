@@ -112,6 +112,17 @@ class OHIEvaluator(BaseEvaluator):
             latency_ms = (time.perf_counter() - start_time) * 1000
             
             if response.status_code != 200:
+                # Treat filter rejections as non-error unverifiable for benchmarks
+                if response.status_code in {403, 422}:
+                    return EvaluatorResult(
+                        claim=claim,
+                        verdict=VerificationVerdict.UNVERIFIABLE,
+                        trust_score=0.0,
+                        latency_ms=latency_ms,
+                        evaluator=self.name,
+                        metadata={"api_status": response.status_code},
+                    )
+
                 return EvaluatorResult(
                     claim=claim,
                     verdict=VerificationVerdict.UNVERIFIABLE,
