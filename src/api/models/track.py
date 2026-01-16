@@ -152,7 +152,6 @@ class MCPSource(StrEnum):
     QDRANT = "qdrant"
     REDIS = "redis"
 
-
 # Human-readable descriptions for each MCP source
 MCP_SOURCE_DESCRIPTIONS: dict[str, str] = {
     "wikipedia": "Wikipedia - Free encyclopedia with crowd-sourced knowledge",
