@@ -71,6 +71,9 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - LD_LIBRARY_PATH=/usr/lib/wsl/lib:${LD_LIBRARY_PATH}
       - VLLM_LOGGING_LEVEL=WARNING
+      - MAX_MODEL_LENGTH=8192
+      - MAX_NUM_SEQS=8
+      - TENSOR_PARALLEL_SIZE=1
     runtime: nvidia
     gpus: all
     # NVIDIA GPU configuration
@@ -90,7 +93,7 @@ services:
     # Optimized for RTX 4090 (24GB VRAM)
     command: >
       --model Qwen/Qwen2.5-14B-Instruct-AWQ
-      --gpu-memory-utilization 0.80
+      --gpu-memory-utilization 0.74
       --enable-prefix-caching
       --enable-chunked-prefill
       --disable-log-requests
