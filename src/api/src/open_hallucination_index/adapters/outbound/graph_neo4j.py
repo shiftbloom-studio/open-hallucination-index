@@ -501,6 +501,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                 e.last_accessed = datetime(),
                 e.access_count = COALESCE(e.access_count, 0) + 1
             RETURN e.content_hash AS hash, e.created_at IS NOT NULL AS was_created
+            LIMIT 1
         """
 
         params = {

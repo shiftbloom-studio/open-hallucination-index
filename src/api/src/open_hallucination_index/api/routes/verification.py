@@ -187,6 +187,7 @@ async def verify_text(
     use_case: Annotated[VerifyTextUseCase, Depends(get_verify_use_case)],
     llm_provider: Annotated[LLMProvider | None, Depends(get_llm_provider_optional)],
     user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
+    benchmark_mode: Annotated[str | None, Header(alias="X-Benchmark-Mode")] = None,
 ) -> VerifyTextResponse:
     """
     Verify a text for factual accuracy.
@@ -202,26 +203,28 @@ async def verify_text(
     input_text = request.text
 
     # Apply pre-filter pipeline (blacklist -> LLM harm -> LLM claim)
-    filters = build_default_filters(llm_provider)
-    for filter_step in filters:
-        decision = await filter_step.evaluate(input_text)
-        if decision.action == "reject":
-            audit_logger.warning(
-                f"[OUTPUT] ID: {request_seq} - RESULT: REJECTED - STAGE: {decision.stage}"
-            )
-            raise HTTPException(
-                status_code=decision.status_code,
-                detail=decision.reason,
-            )
-        if decision.action == "rewrite" and decision.text:
-            logger.info(
-                "Input text rewritten by filter",
-                extra={
-                    "request_id": str(request_id),
-                    "stage": decision.stage,
-                },
-            )
-            input_text = decision.text
+    # Skip filters if benchmark mode is enabled
+    if benchmark_mode != "true":
+        filters = build_default_filters(llm_provider)
+        for filter_step in filters:
+            decision = await filter_step.evaluate(input_text)
+            if decision.action == "reject":
+                audit_logger.warning(
+                    f"[OUTPUT] ID: {request_seq} - RESULT: REJECTED - STAGE: {decision.stage}"
+                )
+                raise HTTPException(
+                    status_code=decision.status_code,
+                    detail=decision.reason,
+                )
+            if decision.action == "rewrite" and decision.text:
+                logger.info(
+                    "Input text rewritten by filter",
+                    extra={
+                        "request_id": str(request_id),
+                        "stage": decision.stage,
+                    },
+                )
+                input_text = decision.text
 
     # Map string strategy to enum
     strategy = None

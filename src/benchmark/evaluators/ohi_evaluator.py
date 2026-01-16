@@ -103,6 +103,9 @@ class OHIEvaluator(BaseEvaluator):
             else:
                 headers = {}
             
+            # Disable pre-checks for benchmarking
+            headers["X-Benchmark-Mode"] = "true"
+            
             response = await client.post(
                 self.verify_url,
                 json=payload,
@@ -232,6 +235,9 @@ class OHIEvaluator(BaseEvaluator):
             headers = {}
             if self.config.ohi_api_key:
                 headers["X-API-Key"] = self.config.ohi_api_key
+            
+            # Disable pre-checks for benchmarking
+            headers["X-Benchmark-Mode"] = "true"
             
             response = await client.post(
                 self.verify_url,

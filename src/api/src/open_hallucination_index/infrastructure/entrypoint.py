@@ -41,7 +41,7 @@ def main() -> None:
     logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
-    logging.getLogger("open_hallucination_index").setLevel(logging.WARNING)
+    logging.getLogger("open_hallucination_index").setLevel(logging.INFO)
     logging.getLogger("ohi.audit").setLevel(logging.INFO)
 
     # Determine host: use 127.0.0.1 for IPv4 when 0.0.0.0 is configured

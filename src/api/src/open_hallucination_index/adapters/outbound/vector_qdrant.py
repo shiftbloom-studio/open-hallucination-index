@@ -86,6 +86,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
         self._settings = settings
         self._embedding_func = embedding_func
         self._client: AsyncQdrantClient | None = None
+        self._use_named_vectors: bool = False
 
     def set_embedding_func(self, func: EmbeddingFunc) -> None:
         """Set the embedding function after initialization."""
@@ -154,10 +155,12 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 # Case 1: Simple vector config (has .size directly)
                 if hasattr(vectors_params, "size") and vectors_params.size:
                     existing_size = vectors_params.size
+                    self._use_named_vectors = False
                 # Case 2: Named vectors (dict with vector names like "dense", "sparse")
                 elif isinstance(vectors_params, dict):
                     # Check for "dense" vector first (common in hybrid setups)
                     if "dense" in vectors_params:
+                        self._use_named_vectors = True
                         dense_config = vectors_params["dense"]
                         if hasattr(dense_config, "size"):
                             existing_size = dense_config.size
@@ -319,11 +322,13 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 # Future: use proper hybrid query with sparse vector
                 logger.debug("Hybrid search requested but using dense-only for now")
             
-            # Dense vector search - use "dense" named vector for wikipedia_hybrid collection
+            # Dense vector search - use "dense" named vector if available, else default
+            using_vector = "dense" if self._use_named_vectors else None
+            
             results = await self._client.query_points(
                 collection_name=self._settings.collection_name,
                 query=embedding,
-                using="dense",  # Named vector for hybrid collections
+                using=using_vector,
                 limit=query.top_k,
                 score_threshold=query.min_similarity,
                 query_filter=query_filter,

@@ -41,6 +41,8 @@ class GraphRAGEvaluator(BaseEvaluator):
             self._driver = GraphDatabase.driver(
                 self.graph_config.neo4j_uri,
                 auth=(self.graph_config.neo4j_username, self.graph_config.neo4j_password),
+                connection_timeout=5.0,
+                max_connection_pool_size=5,
             )
         return self._driver
 
@@ -115,12 +117,11 @@ class GraphRAGEvaluator(BaseEvaluator):
             driver = await self._get_driver()
 
             def _ping() -> bool:
-                with driver.session() as session:
-                    session.run("RETURN 1").single()
+                driver.verify_connectivity()
                 return True
 
-            return await asyncio.to_thread(_ping)
-        except Exception:
+            return await asyncio.wait_for(asyncio.to_thread(_ping), timeout=5)
+        except (asyncio.TimeoutError, Exception):
             return False
 
     async def verify(self, claim: str) -> EvaluatorResult:
