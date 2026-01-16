@@ -21,30 +21,30 @@ High-performance MCP (Model Context Protocol) server that aggregates 13+ externa
 ```mermaid
 flowchart TD
     A[MCP Client] --> B[Transport Layer]
-    B --> C[Rate Limiter]
-    C --> D[Cache Lookup]
+    B --> C["Rate Limiter"]
+    C --> D["Cache Lookup"]
     D -->|Hit| E[Return Cached Response]
     D -->|Miss| F[Tool Router]
-    F --> G[Parallel Source Adapters]
-    G --> H[Normalize + Score]
+    F --> G["Parallel Source Adapters"]
+    G --> H["Normalize and Score"]
     H --> I[Aggregate Response]
-    I --> J[Cache + Return]
+    I --> J["Cache and Return"]
 ```
 
 ### Tool-routing strategy (mental model)
 
 ```mermaid
 flowchart LR
-    Q[Incoming Tool Call] --> R{Tool Type?}
-    R -->|Search| S[Search API Adapter]
-    R -->|Summary| T[Article Summary Adapter]
-    R -->|SPARQL| U[Graph Adapter]
-    R -->|Docs| V[Context7 Adapter]
+    Q["Incoming Tool Call"] --> R{Tool Type?}
+    R -->|Search| S["Search API Adapter"]
+    R -->|Summary| T["Article Summary Adapter"]
+    R -->|SPARQL| U["Graph Adapter"]
+    R -->|Docs| V["Context7 Adapter"]
     S --> W[Source Registry]
     T --> W
     U --> W
     V --> W
-    W --> X[Result Normalizer]
+    W --> X["Result Normalizer"]
 ```
 
 ---
