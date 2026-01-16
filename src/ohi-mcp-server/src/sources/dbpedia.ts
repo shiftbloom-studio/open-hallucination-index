@@ -153,8 +153,7 @@ export class DBpediaSource extends BaseSource {
 
   private sanitizeForSparql(text: string): string {
     return this.sanitizeQuery(text)
-      .replace(/[\\"]/g, "")
-      .replace(/'/g, "\\'")
+      .replace(/[\\']/g, "\\$&")
       .slice(0, 100);
   }
 
