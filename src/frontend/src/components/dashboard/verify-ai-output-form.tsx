@@ -55,14 +55,22 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
     let interval: NodeJS.Timeout;
     if (isVerifying) {
       setProgress(0);
+      const startTime = Date.now();
+      const targetTime = 20000; // 20 seconds in milliseconds
+      const targetProgress = 80; // Stop at 80%
+      
       interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 90) return prev;
-          // Faster at beginning, slows down
-          const increment = prev < 30 ? 10 : prev < 60 ? 5 : 1;
-          return prev + increment;
-        });
-      }, 800);
+        const elapsed = Date.now() - startTime;
+        
+        if (elapsed >= targetTime) {
+          // After 20 seconds, stay at 80% until response arrives
+          setProgress(targetProgress);
+        } else {
+          // Linear progress from 0 to 80% over 20 seconds
+          const calculatedProgress = (elapsed / targetTime) * targetProgress;
+          setProgress(Math.min(calculatedProgress, targetProgress));
+        }
+      }, 100); // Update every 100ms for smooth animation
     } else {
       setProgress(100);
     }
