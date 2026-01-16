@@ -109,26 +109,79 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
       }
 
       const deductResult = await deductResponse.json();
+      const tokensDeducted = deductResult.tokensDeducted;
       onTokensUpdated(deductResult.tokensRemaining);
 
       // Now verify with OHI API
-      const client = createApiClient();
-      const result = await client.verifyText({
-        text,
-        context: context || undefined,
-        strategy: "adaptive",
-        target_sources: targetSources,
-        return_evidence: returnEvidence,
-      });
+      let verificationFailed = false;
+      try {
+        const client = createApiClient();
+        const result = await client.verifyText({
+          text,
+          context: context || undefined,
+          strategy: "adaptive",
+          target_sources: targetSources,
+          return_evidence: returnEvidence,
+        });
 
-      setVerificationResult(result);
-      toast.success(`Verification complete! ${deductResult.tokensDeducted} token(s) used.`);
-      // Leere die Input-Felder nach erfolgreicher Verifikation
-      setText("");
-      setContext("");
+        setVerificationResult(result);
+        toast.success(`Verification complete! ${tokensDeducted} token(s) used.`);
+        // Leere die Input-Felder nach erfolgreicher Verifikation
+        setText("");
+        setContext("");
+      } catch (error: any) {
+        verificationFailed = true;
+        console.error("Verification failed:", error);
+        
+        // Extract error message
+        let errorMessage = "Verification failed";
+        if (error.message) {
+          errorMessage = error.message;
+        } else if (typeof error === "string") {
+          errorMessage = error;
+        }
+        
+        // Handle 422 validation errors specifically
+        if (error.status === 422) {
+          toast.error(errorMessage, {
+            duration: 6000,
+            description: "Your tokens have been refunded.",
+          });
+        } else if (error.status === 500) {
+          toast.error("Server error occurred", {
+            duration: 5000,
+            description: errorMessage,
+          });
+        } else {
+          toast.error(errorMessage, {
+            duration: 5000,
+            description: "Please check if the OHI API is running.",
+          });
+        }
+        
+        // Refund tokens since verification failed
+        try {
+          const refundResponse = await fetch("/api/tokens/refund", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ amount: tokensDeducted }),
+          });
+          
+          if (refundResponse.ok) {
+            const refundResult = await refundResponse.json();
+            onTokensUpdated(refundResult.tokensRemaining);
+            console.log(`Refunded ${tokensDeducted} tokens`);
+          }
+        } catch (refundError) {
+          console.error("Failed to refund tokens:", refundError);
+          toast.error("Failed to refund tokens. Please contact support.", {
+            duration: 10000,
+          });
+        }
+      }
     } catch (error) {
-      console.error("Verification failed:", error);
-      toast.error("Verification failed. Please check if the OHI API is running.");
+      console.error("Token deduction failed:", error);
+      toast.error("Failed to process request. Please try again.");
     } finally {
       setIsVerifying(false);
     }

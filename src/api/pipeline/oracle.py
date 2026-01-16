@@ -585,7 +585,11 @@ class HybridVerificationOracle(VerificationOracle):
                     mcp_sources = mcp_sources[:max_mcp_allowed]
 
             # Collect evidence using adaptive collector
-            result = await self._evidence_collector.collect(claim, mcp_sources)
+            result = await self._evidence_collector.collect(
+                claim,
+                mcp_sources,
+                target_evidence_count=target_sources,
+            )
 
             logger.debug(
                 f"Adaptive collection: {len(result.evidence)} evidence, "

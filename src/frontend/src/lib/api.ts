@@ -135,8 +135,30 @@ export class ApiClient {
       body: JSON.stringify(request),
     });
     if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Verification failed: ${res.status} ${errorText}`);
+      let errorMessage = `Verification failed: ${res.status}`;
+      let errorDetail = null;
+      
+      try {
+        const errorData = await res.json();
+        if (errorData.detail) {
+          errorDetail = errorData.detail;
+          errorMessage = errorData.detail;
+        } else if (errorData.message) {
+          errorDetail = errorData.message;
+          errorMessage = errorData.message;
+        }
+      } catch {
+        // If JSON parsing fails, try text
+        const errorText = await res.text();
+        if (errorText) {
+          errorMessage = errorText;
+        }
+      }
+      
+      const error: any = new Error(errorMessage);
+      error.status = res.status;
+      error.detail = errorDetail;
+      throw error;
     }
     return res.json();
   }

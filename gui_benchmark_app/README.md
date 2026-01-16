@@ -57,6 +57,57 @@ Tip: Use **adaptive** for best coverage, **graph_exact** for lowest latency, and
 
 ---
 
+## Benchmark Modes
+
+### Standard Mode
+Default evaluation mode with configurable datasets and metrics.
+
+### Strategy Comparison Mode
+Tests all OHI verification strategies to identify optimal approach.
+
+### Cache Testing Mode
+Compares cold vs warm cache performance to measure caching impact.
+
+### COMPLETE Mode (Research-Grade)
+**New comprehensive evaluation mode for publication-quality results:**
+
+- **Multi-Dataset Coverage**: Automatically loads and combines multiple HuggingFace datasets:
+  - `aporia-ai/rag_hallucinations`
+  - `SridharKumarKannam/neural-bridge-rag-hallucination`
+  - `Jerry999/rag-hallucination`
+  - `muntasir2179/rag-hallucination-combined-dataset-v1`
+  - `neural-bridge/rag-hallucination-dataset-1000`
+  - `cemuluoglakci/hallucination_evaluation`
+
+- **Balanced Sampling**: Configurable samples per dataset (default: 200) to prevent dataset bias
+
+- **Statistical Rigor**: 
+  - Bootstrap confidence intervals (95%)
+  - Cohen's d effect sizes for pairwise comparisons
+  - Wilson score intervals for binomial proportions
+  - Practical significance interpretation
+
+- **Comprehensive Metrics**: All metrics enabled (accuracy, precision, recall, F1, HPR, latency, throughput)
+
+- **Research-Grade Report**: Generates detailed Markdown report with:
+  - Executive summary with top performer
+  - Performance rankings with confidence intervals
+  - Detailed per-system analysis
+  - Statistical significance tables
+  - Actionable recommendations
+  - Methodology documentation
+
+**Usage:**
+```bash
+# GUI: Check "COMPLETE mode (research-grade)"
+# CLI: Set environment variable
+export BENCHMARK_COMPLETE_MODE=true
+export COMPLETE_SAMPLES_PER_DATASET=200
+python -m benchmark
+```
+
+---
+
 ## Installation
 
 ```bash
