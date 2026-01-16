@@ -167,8 +167,6 @@ class HallucinationLoader:
         Supports:
         - aporia-ai/rag_hallucinations (context, question, answer, hallucination)
         - SridharKumarKannam/neural-bridge-rag-hallucination
-        - Jerry999/rag-hallucination  
-        - muntasir2179/rag-hallucination-combined-dataset-v1
         - neural-bridge/rag-hallucination-dataset-1000
         - cemuluoglakci/hallucination_evaluation
         
@@ -406,8 +404,6 @@ class HallucinationLoader:
         - Local CSV dataset
         - aporia-ai/rag_hallucinations
         - SridharKumarKannam/neural-bridge-rag-hallucination
-        - Jerry999/rag-hallucination
-        - muntasir2179/rag-hallucination-combined-dataset-v1
         - neural-bridge/rag-hallucination-dataset-1000
         - cemuluoglakci/hallucination_evaluation
         
@@ -441,8 +437,6 @@ class HallucinationLoader:
         hf_datasets = [
             "aporia-ai/rag_hallucinations",
             "SridharKumarKannam/neural-bridge-rag-hallucination",
-            "Jerry999/rag-hallucination",
-            "muntasir2179/rag-hallucination-combined-dataset-v1",
             "neural-bridge/rag-hallucination-dataset-1000",
             "cemuluoglakci/hallucination_evaluation",
         ]

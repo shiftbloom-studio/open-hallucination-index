@@ -18,7 +18,6 @@ export function Navbar() {
 
   const [user, setUser] = useState<User | null>(null);
   const [tokens, setTokens] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
 
 
   const isDashboard = pathname?.startsWith("/dashboard");
@@ -42,7 +41,6 @@ export function Navbar() {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
-      setLoading(false);
 
       if (user) {
         await fetchTokens();
@@ -53,7 +51,6 @@ export function Navbar() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setUser(session?.user ?? null);
-      setLoading(false);
       if (session?.user) {
         fetchTokens();
       } else {

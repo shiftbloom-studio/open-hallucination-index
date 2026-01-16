@@ -34,11 +34,9 @@ Implemented a comprehensive research-grade COMPLETE mode for the OHI benchmark G
 **Supported Datasets:**
 1. `aporia-ai/rag_hallucinations`
 2. `SridharKumarKannam/neural-bridge-rag-hallucination`
-3. `Jerry999/rag-hallucination`
-4. `muntasir2179/rag-hallucination-combined-dataset-v1`
-5. `neural-bridge/rag-hallucination-dataset-1000`
-6. `cemuluoglakci/hallucination_evaluation`
-7. Local CSV datasets
+3. `neural-bridge/rag-hallucination-dataset-1000`
+4. `cemuluoglakci/hallucination_evaluation`
+5. Local CSV datasets
 
 ### 2. Configuration Extensions
 **File:** `gui_benchmark_app/benchmark/comparison_config.py`
