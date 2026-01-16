@@ -148,7 +148,7 @@ export default function CitationTraceViewer({ trace, claimText }: CitationTraceV
   
   return (
     <Card className="border-slate-700/50 bg-slate-800/30">
-      <CardHeader className="pb-3">
+      <CardHeader className="py-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <CardTitle className="text-base font-medium mb-1">
@@ -195,7 +195,7 @@ export default function CitationTraceViewer({ trace, claimText }: CitationTraceV
       </CardHeader>
       
       {showEvidence && (
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 pt-0 pb-4">
           {viewMode === "3d" ? (
              <div className="animate-in fade-in zoom-in-95 duration-300">
                 <CitationTraceGraph trace={trace} claimText={claimText} />

@@ -111,7 +111,7 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
   }, [trace, claimText]);
 
   return (
-    <div className="relative h-[500px] w-full overflow-hidden rounded-lg border border-slate-700/50 bg-slate-950 shadow-inner">
+    <div className="relative h-[400px] w-full overflow-hidden rounded-lg border border-slate-700/50 bg-slate-950 shadow-inner">
         <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-full bg-slate-900/80 px-3 py-1 text-xs backdrop-blur border border-slate-700">
             <Zap className="h-3 w-3 text-yellow-400 fill-yellow-400" />
             <span className="font-medium text-slate-300">Live Neural Net</span>
@@ -124,6 +124,10 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
         nodeVal="val"
         nodeResolution={16}
         showNavInfo={false}
+        width={undefined}
+        height={400}
+        d3VelocityDecay={0.3}
+        d3AlphaDecay={0.01}
         
         // Link Styling
         linkWidth={1}
@@ -181,9 +185,23 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
             `;
         }}
         
-        // Initial Camera Position
-        onEngineStop={() => graphRef.current.zoomToFit(1000, 50)}
+        // Initial Camera Position - center and zoom properly
+        onEngineStop={() => {
+          if (graphRef.current) {
+            // Center camera on origin first
+            graphRef.current.cameraPosition(
+              { x: 0, y: 0, z: 300 },
+              { x: 0, y: 0, z: 0 },
+              1000
+            );
+            // Then zoom to fit with proper padding
+            setTimeout(() => {
+              graphRef.current.zoomToFit(1000, 80);
+            }, 100);
+          }
+        }}
         cooldownTicks={100}
+        enableNodeDrag={false}
       />
     </div>
   );
