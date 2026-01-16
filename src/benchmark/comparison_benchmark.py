@@ -34,11 +34,17 @@ from benchmark.runner import ComparisonBenchmarkRunner, run_comparison_benchmark
 
 
 def setup_logging(verbose: bool = False) -> None:
-    """Configure logging with Rich handler."""
-    # Default to WARNING to keep console clean for live display
-    level = logging.DEBUG if verbose else logging.ERROR
+    """Configure logging with Rich handler.
     
-    # Suppress external libraries
+    Note: During benchmark execution, the LiveBenchmarkDisplay installs
+    a buffered log handler to capture errors without corrupting the
+    Rich Live display. This function sets up the baseline logging.
+    """
+    # Default to WARNING to keep console clean for live display
+    # Errors during benchmark will be captured by the buffered handler
+    level = logging.DEBUG if verbose else logging.WARNING
+    
+    # Suppress external libraries - these can be very noisy
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("neo4j").setLevel(logging.WARNING)
@@ -67,11 +73,19 @@ def setup_logging(verbose: bool = False) -> None:
     except ImportError:
         pass
     
+    # Use a quieter handler that won't interfere with Rich Live
+    # The RichHandler will only be used before/after the live display
     logging.basicConfig(
         level=level,
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[RichHandler(rich_tracebacks=True, markup=True)],
+        handlers=[RichHandler(
+            rich_tracebacks=True,
+            markup=True,
+            show_time=False,
+            show_path=False,
+        )],
+        force=True,  # Override any existing config
     )
 
 

@@ -17,19 +17,24 @@ Design Philosophy:
 - Throttled updates to prevent UI freezing
 - Thread-safe for async contexts
 - Graceful fallback for limited terminals
+- Fixed-height layout to prevent jitter
+- Buffered logging to prevent overlap
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
+import threading
 import time
+from collections import deque
 from typing import Any
 
 from rich.align import Align
-from rich.box import ROUNDED, SIMPLE, ASCII
+from rich.box import ROUNDED, SIMPLE, ASCII, MINIMAL
 from rich.columns import Columns
-from rich.console import Console, Group
+from rich.console import Console, Group, RenderableType
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
@@ -48,6 +53,96 @@ from rich.text import Text
 from benchmark.runner._types import COLORS, LiveStats
 
 
+# =============================================================================
+# Buffered Log Handler - Captures logs for display in the Live panel
+# =============================================================================
+
+
+class BufferedLogHandler(logging.Handler):
+    """
+    Thread-safe log handler that buffers messages for display in Live panel.
+    
+    Instead of printing directly (which disrupts Rich Live), this handler
+    stores messages in a bounded deque that can be rendered as part of
+    the live display.
+    """
+    
+    MAX_MESSAGES = 5  # Show last N log messages
+    
+    def __init__(self) -> None:
+        super().__init__()
+        self._messages: deque[tuple[str, str, str]] = deque(maxlen=self.MAX_MESSAGES)
+        self._lock = threading.Lock()
+    
+    def emit(self, record: logging.LogRecord) -> None:
+        """Buffer the log record instead of printing."""
+        try:
+            msg = self.format(record)
+            level = record.levelname
+            timestamp = time.strftime("%H:%M:%S")
+            
+            with self._lock:
+                self._messages.append((timestamp, level, msg))
+        except Exception:
+            self.handleError(record)
+    
+    def get_messages(self) -> list[tuple[str, str, str]]:
+        """Get buffered messages (thread-safe)."""
+        with self._lock:
+            return list(self._messages)
+    
+    def clear(self) -> None:
+        """Clear buffered messages."""
+        with self._lock:
+            self._messages.clear()
+
+
+# Global buffered handler for benchmark logging
+_buffered_handler: BufferedLogHandler | None = None
+
+
+def get_buffered_handler() -> BufferedLogHandler:
+    """Get or create the global buffered log handler."""
+    global _buffered_handler
+    if _buffered_handler is None:
+        _buffered_handler = BufferedLogHandler()
+        _buffered_handler.setFormatter(logging.Formatter("%(message)s"))
+    return _buffered_handler
+
+
+def install_buffered_logging() -> BufferedLogHandler:
+    """
+    Install buffered logging for benchmark modules.
+    
+    Returns the handler so it can be queried for messages.
+    """
+    handler = get_buffered_handler()
+    
+    # Install on benchmark loggers
+    for logger_name in ("benchmark", "benchmark.runner", "benchmark.evaluators"):
+        logger = logging.getLogger(logger_name)
+        # Remove any existing handlers that would print directly
+        for h in logger.handlers[:]:
+            if not isinstance(h, BufferedLogHandler):
+                logger.removeHandler(h)
+        # Add our buffered handler
+        if handler not in logger.handlers:
+            logger.addHandler(handler)
+    
+    return handler
+
+
+def uninstall_buffered_logging() -> None:
+    """Remove buffered logging and restore normal output."""
+    global _buffered_handler
+    if _buffered_handler is not None:
+        for logger_name in ("benchmark", "benchmark.runner", "benchmark.evaluators"):
+            logger = logging.getLogger(logger_name)
+            if _buffered_handler in logger.handlers:
+                logger.removeHandler(_buffered_handler)
+        _buffered_handler = None
+
+
 def _detect_terminal_capabilities() -> dict[str, bool]:
     """
     Detect terminal capabilities for optimal rendering.
@@ -58,6 +153,9 @@ def _detect_terminal_capabilities() -> dict[str, bool]:
         - colors: Supports ANSI colors
         - live: Supports live updating (cursor control)
         - wide: Terminal is at least 80 columns
+        - docker: Running in Docker container
+        - gitbash: Running in Git Bash
+        - vscode: Running in VS Code terminal
     """
     # Check for Docker environment
     in_docker = os.path.exists("/.dockerenv") or bool(os.environ.get("DOCKER_CONTAINER"))
@@ -97,7 +195,7 @@ def _detect_terminal_capabilities() -> dict[str, bool]:
     # Width detection
     try:
         width = os.get_terminal_size().columns
-        is_wide = width >= 80
+        is_wide = width >= 100
     except OSError:
         is_wide = True  # Assume wide if can't detect
     
@@ -126,13 +224,21 @@ def create_optimized_console() -> Console:
     # Force certain settings for problematic environments
     force_terminal = caps["colors"] or caps["docker"] or caps["vscode"]
     
+    # Use fixed width in constrained environments to prevent layout shifts
+    width = None
+    if caps["docker"] or caps["gitbash"]:
+        width = 120
+    elif not caps["wide"]:
+        width = 100
+    
     return Console(
         force_terminal=force_terminal,
         force_interactive=caps["live"],
         color_system="auto" if caps["colors"] else None,
-        width=120 if not caps["wide"] else None,
+        width=width,
         legacy_windows=False,  # We handle Git Bash separately
         soft_wrap=True,
+        stderr=False,  # Don't use stderr - prevents interleaving issues
     )
 
 
@@ -145,12 +251,15 @@ class LiveBenchmarkDisplay:
     - Current task progress bar
     - Live KPI cards (throughput, accuracy, latency)
     - Running statistics table
+    - Buffered log messages (errors/warnings)
     
     Optimized for Docker exec and Git Bash environments with:
     - ASCII fallback for box drawing
     - Reduced refresh rate to prevent flickering
     - Simpler spinners that render reliably
     - Graceful degradation for limited terminals
+    - Fixed-height layout to prevent jitter
+    - Buffered logging to capture errors without disrupting display
     
     Usage:
         ```python
@@ -164,16 +273,21 @@ class LiveBenchmarkDisplay:
         ```
     
     Threading Notes:
-        - Uses `auto_refresh=True` for background rendering
+        - Uses `auto_refresh=False` for controlled rendering
         - `_update()` is throttled to prevent blocking the event loop
         - Safe to call from async contexts
+        - Logs are buffered and displayed in the panel
     """
     
-    # Background refresh rate (Hz) - very low to prevent jitter
-    REFRESH_RATE: float = 1.0
+    # Minimum interval between updates (seconds) - prevents jitter
+    UPDATE_THROTTLE: float = 0.15
     
-    # Minimum interval between manual updates (seconds) - higher to reduce flicker
-    UPDATE_THROTTLE: float = 1.0
+    # Fixed heights for layout stability
+    HEADER_HEIGHT: int = 4
+    PROGRESS_HEIGHT: int = 3
+    KPI_HEIGHT: int = 3
+    RESULTS_MIN_HEIGHT: int = 4
+    LOG_HEIGHT: int = 3
     
     def __init__(self, console: Console, stats: LiveStats) -> None:
         """
@@ -187,13 +301,24 @@ class LiveBenchmarkDisplay:
         self.stats = stats
         self._live: Live | None = None
         self._last_update_time: float = 0.0
+        self._update_lock = threading.Lock()
+        
+        # Install buffered logging
+        self._log_handler = install_buffered_logging()
         
         # Detect terminal capabilities
         self._caps = _detect_terminal_capabilities()
         
-        # Choose appropriate box style
-        self._box = ROUNDED if self._caps["unicode"] else ASCII
-        self._simple_box = SIMPLE if self._caps["unicode"] else ASCII
+        # Choose appropriate box style - use minimal for Docker/Git Bash
+        if self._caps["docker"] or self._caps["gitbash"]:
+            self._box = MINIMAL
+            self._simple_box = MINIMAL
+        elif self._caps["unicode"]:
+            self._box = ROUNDED
+            self._simple_box = SIMPLE
+        else:
+            self._box = ASCII
+            self._simple_box = ASCII
         
         # Choose spinner - dots work better in Docker/Git Bash
         spinner_name = "dots" if self._caps["unicode"] else "line"
@@ -216,20 +341,15 @@ class LiveBenchmarkDisplay:
     
     def __enter__(self) -> LiveBenchmarkDisplay:
         """Start the live display context."""
-        # Use very low refresh rate to minimize jitter in Docker/Git Bash
-        # We rely on manual _update() calls for responsiveness
-        refresh_rate = 1.0
-        
         self._live = Live(
             self._render(),
             console=self.console,
-            refresh_per_second=refresh_rate,
-            auto_refresh=False,  # Disable auto-refresh to prevent jitter
+            refresh_per_second=4,  # Background refresh rate
+            auto_refresh=True,  # Enable auto-refresh for smooth updates
             transient=False,
-            vertical_overflow="ellipsis",  # Prevent height changes
-            # Don't redirect in Docker - causes issues
-            redirect_stdout=False,
-            redirect_stderr=False,
+            vertical_overflow="visible",  # Keep content visible
+            redirect_stdout=False,  # Don't redirect - causes issues
+            redirect_stderr=False,  
             screen=False,  # Don't use alternate screen
         )
         self._live.__enter__()
@@ -239,8 +359,14 @@ class LiveBenchmarkDisplay:
         """Stop the live display context."""
         if self._live:
             # Final render before exit
-            self._live.update(self._render(), refresh=True)
+            try:
+                self._live.update(self._render(), refresh=True)
+            except Exception:
+                pass
             self._live.__exit__(*args)
+        
+        # Cleanup buffered logging
+        uninstall_buffered_logging()
     
     # ========================================================================
     # Public API
@@ -260,7 +386,10 @@ class LiveBenchmarkDisplay:
         
         # Reset or create progress task
         if self._task_id is not None:
-            self._progress.remove_task(self._task_id)
+            try:
+                self._progress.remove_task(self._task_id)
+            except Exception:
+                pass
         self._task_id = self._progress.add_task(description, total=total)
         self._update(force=True)
     
@@ -300,6 +429,9 @@ class LiveBenchmarkDisplay:
             }
         else:
             self.stats.evaluator_results[name]["status"] = "running"
+        
+        # Clear log buffer for new evaluator
+        self._log_handler.clear()
         self._update(force=True)
     
     def complete_evaluator(self, name: str, metrics: dict[str, Any]) -> None:
@@ -332,8 +464,36 @@ class LiveBenchmarkDisplay:
         self._update()
     
     def force_refresh(self) -> None:
-        """Request a display refresh (still respects minimum throttle to prevent jitter)."""
-        self._update(force=False)  # Use normal throttling to prevent jitter
+        """Force a display refresh (respects minimum throttle)."""
+        self._update(force=False)
+    
+    def log_error(self, message: str) -> None:
+        """
+        Log an error message that will be displayed in the panel.
+        
+        Use this instead of logger.error() during benchmark execution
+        to prevent display corruption.
+        
+        Args:
+            message: Error message to display
+        """
+        # Add to buffered messages directly
+        with self._log_handler._lock:
+            timestamp = time.strftime("%H:%M:%S")
+            self._log_handler._messages.append((timestamp, "ERROR", message))
+        self._update(force=True)
+    
+    def log_warning(self, message: str) -> None:
+        """
+        Log a warning message that will be displayed in the panel.
+        
+        Args:
+            message: Warning message to display
+        """
+        with self._log_handler._lock:
+            timestamp = time.strftime("%H:%M:%S")
+            self._log_handler._messages.append((timestamp, "WARNING", message))
+        self._update()
     
     # ========================================================================
     # Internal Methods
@@ -350,22 +510,34 @@ class LiveBenchmarkDisplay:
             return
         
         now = time.perf_counter()
-        if force or (now - self._last_update_time >= self.UPDATE_THROTTLE):
-            try:
-                self._live.update(self._render(), refresh=True)
-                self._last_update_time = now
-            except Exception:
-                # Silently handle rendering errors in constrained environments
-                pass
+        
+        # Thread-safe throttle check
+        with self._update_lock:
+            if not force and (now - self._last_update_time < self.UPDATE_THROTTLE):
+                return
+            self._last_update_time = now
+        
+        try:
+            self._live.update(self._render(), refresh=True)
+        except Exception:
+            # Silently handle rendering errors in constrained environments
+            pass
     
     def _render(self) -> Group:
-        """Render the complete display layout."""
-        return Group(
+        """Render the complete display layout with fixed structure."""
+        components: list[RenderableType] = [
             self._render_header(),
             self._render_progress(),
             self._render_kpis(),
             self._render_results_table(),
-        )
+        ]
+        
+        # Add log panel if there are messages
+        messages = self._log_handler.get_messages()
+        if messages:
+            components.append(self._render_log_panel(messages))
+        
+        return Group(*components)
     
     def _render_header(self) -> Panel:
         """Render the header panel with status and progress."""
@@ -373,20 +545,21 @@ class LiveBenchmarkDisplay:
         
         # Use ASCII-safe status indicators
         if self.stats.completed_evaluators == self.stats.total_evaluators:
-            status_icon = "[+]" if not self._caps["unicode"] else "✓"
+            status_icon = "[OK]" if not self._caps["unicode"] else "✓"
             status = f"[bold {COLORS.cyan}]{status_icon} COMPLETE[/bold {COLORS.cyan}]"
         else:
-            status_icon = "[>]" if not self._caps["unicode"] else "●"
+            status_icon = "[>>]" if not self._caps["unicode"] else "●"
             status = f"[bold {COLORS.good}]{status_icon} RUNNING[/bold {COLORS.good}]"
         
         evaluator_name = self.stats.current_evaluator or "initializing"
         
         # Format elapsed time nicely
         mins, secs = divmod(int(elapsed), 60)
-        time_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+        time_str = f"{mins:02d}m {secs:02d}s"
         
+        # Fixed-width formatting for stability
         lines = [
-            f"{status}  [dim]Evaluator:[/dim] [bold white]{evaluator_name}[/bold white]",
+            f"{status}  [dim]Evaluator:[/dim] [bold white]{evaluator_name:<20}[/bold white]",
             f"[dim]Progress:[/dim] {self.stats.completed_evaluators}/{self.stats.total_evaluators} evaluators  [dim]|[/dim]  [dim]Elapsed:[/dim] {time_str}",
         ]
         
@@ -396,16 +569,23 @@ class LiveBenchmarkDisplay:
             border_style="cyan",
             box=self._box,
             padding=(0, 2),
+            height=self.HEADER_HEIGHT,  # Fixed height
         )
     
     def _render_progress(self) -> Panel:
         """Render the progress bar panel."""
+        # Truncate long metric names for display stability
+        metric_name = self.stats.current_metric
+        if len(metric_name) > 40:
+            metric_name = metric_name[:37] + "..."
+        
         return Panel(
             self._progress,
-            title=f"[dim]{self.stats.current_metric}[/dim]",
+            title=f"[dim]{metric_name}[/dim]",
             border_style="blue",
             box=self._simple_box,
             padding=(0, 1),
+            height=self.PROGRESS_HEIGHT,  # Fixed height
         )
     
     def _render_kpis(self) -> Columns:
@@ -529,4 +709,48 @@ class LiveBenchmarkDisplay:
             border_style="cyan",
             box=self._box,
             padding=(0, 0),
+        )
+    
+    def _render_log_panel(self, messages: list[tuple[str, str, str]]) -> Panel:
+        """
+        Render the log message panel.
+        
+        Args:
+            messages: List of (timestamp, level, message) tuples
+            
+        Returns:
+            Panel containing formatted log messages
+        """
+        lines: list[Text] = []
+        
+        for timestamp, level, message in messages:
+            line = Text()
+            line.append(f"[{timestamp}] ", style="dim")
+            
+            # Style based on level
+            if level == "ERROR":
+                line.append(f"ERROR: ", style=f"bold {COLORS.bad}")
+            elif level == "WARNING":
+                line.append(f"WARN: ", style=f"bold {COLORS.warn}")
+            else:
+                line.append(f"{level}: ", style="dim")
+            
+            # Truncate long messages
+            msg_display = message[:80] + "..." if len(message) > 80 else message
+            line.append(msg_display, style="")
+            lines.append(line)
+        
+        # Ensure minimum height for stability
+        while len(lines) < self.LOG_HEIGHT - 2:
+            lines.append(Text(""))
+        
+        content = Text("\n").join(lines)
+        
+        return Panel(
+            content,
+            title="[dim]Messages[/dim]",
+            border_style="dim yellow" if any(m[1] == "ERROR" for m in messages) else "dim",
+            box=self._simple_box,
+            padding=(0, 1),
+            height=self.LOG_HEIGHT + len(messages),  # Grow with messages
         )

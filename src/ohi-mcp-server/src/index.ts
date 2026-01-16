@@ -428,8 +428,8 @@ async function main() {
     const app = express();
     app.use(express.json());
 
-    // Request Timeout Middleware (1 minute default)
-    const REQUEST_TIMEOUT_MS = 60000;
+    // Request Timeout Middleware (4 minutes default)
+    const REQUEST_TIMEOUT_MS = 240000;
     app.use((req: Request, res: Response, next) => {
       // Set socket timeout
       req.socket.setTimeout(REQUEST_TIMEOUT_MS);
@@ -439,7 +439,7 @@ async function main() {
         if (!res.headersSent) {
           res.status(504).json({ 
             error: "Request timed out",
-            message: "Operation took longer than 60 seconds"
+            message: "Operation took longer than 240 seconds"
           });
         }
       }, REQUEST_TIMEOUT_MS);
