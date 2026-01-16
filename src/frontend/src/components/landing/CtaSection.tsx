@@ -127,6 +127,18 @@ export function CtaSection() {
                 </motion.div>
               </Link>
 
+              <Link href="/pricing">
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    size="lg"
+                    variant="ghost"
+                    className="h-12 rounded-full border border-blue-500/30 bg-blue-500/10 px-8 text-blue-300 hover:bg-blue-500/20 hover:border-blue-500/50"
+                  >
+                    View Pricing
+                  </Button>
+                </motion.div>
+              </Link>
+
               <Link href="/about">
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                   <Button

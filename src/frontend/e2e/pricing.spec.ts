@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test.describe.skip('Tokens Page (temporarily disabled)', () => {
+test.describe('Pricing Page', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/tokens');
+    await page.goto('/pricing');
   });
 
   test('should display tokens heading', async ({ page }) => {

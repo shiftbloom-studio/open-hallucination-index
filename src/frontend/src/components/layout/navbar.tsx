@@ -95,6 +95,15 @@ export function Navbar() {
         </Link>
         <nav className="flex items-center gap-4">
           <Link 
+            href="/pricing" 
+            className={cn(
+              "text-neutral-300 hover:text-white font-medium transition-colors px-3 py-2",
+              pathname === "/pricing" && "text-white"
+            )}
+          >
+            Pricing
+          </Link>
+          <Link 
             href="/tokens" 
             className={cn(
               "text-neutral-300 hover:text-white font-medium transition-colors px-3 py-2",
@@ -118,7 +127,7 @@ export function Navbar() {
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20">
                 <Coins className="h-4 w-4 text-amber-400" />
                 <span className="font-medium text-amber-300 text-sm">
-                  {tokens !== null ? tokens : "..."} tokens
+                  {tokens !== null ? tokens : 0} tokens
                 </span>
               </div>
               

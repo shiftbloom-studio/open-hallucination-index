@@ -29,7 +29,7 @@ export default function TokensPage() {
               Free Tokens Every Day!
             </h1>
             <CardDescription className="text-lg text-neutral-300 mt-2">
-              No payment required – enjoy our service for free
+              Get 2 free tokens daily, or upgrade for more
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
@@ -39,14 +39,14 @@ export default function TokensPage() {
                   <Sparkles className="h-6 w-6 text-amber-400" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-semibold text-white">5 Free Tokens Daily</h3>
+                  <h3 className="text-xl font-semibold text-white">2 Free Tokens Daily</h3>
                   <p className="text-sm text-neutral-400">Automatically credited to your account</p>
                 </div>
               </div>
               <ul className="space-y-3 text-neutral-300">
                 <li className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                  Each token verifies up to 1,000 characters
+                  Each token verifies up to 100 characters
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />
@@ -64,8 +64,14 @@ export default function TokensPage() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link href="/pricing">
+                <Button className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold px-8 py-3 h-12">
+                  Buy More Tokens
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
               <Link href="/auth/signup">
-                <Button className="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold px-8 py-3 h-12">
+                <Button variant="outline" className="w-full sm:w-auto border-amber-500/30 hover:border-amber-500/50 px-8 py-3 h-12 text-amber-400">
                   Get Started Free
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
