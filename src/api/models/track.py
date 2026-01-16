@@ -180,7 +180,10 @@ class SourceReference(BaseModel):
     Contains URL, description, and evidence snippet from the source.
     """
 
-    mcp_source: MCPSource = Field(..., description="Name of the MCP source")
+    mcp_source: MCPSource | str = Field(
+        ...,
+        description="Name of the MCP source (known MCPSource or custom string)",
+    )
     source_description: str = Field(..., description="Human-readable description of the source")
     url: str | None = Field(default=None, description="Direct URL to the source content")
     evidence_snippet: str | None = Field(
