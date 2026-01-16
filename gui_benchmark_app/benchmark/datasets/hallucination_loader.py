@@ -12,6 +12,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, field
 from pathlib import Path
+import warnings
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,12 @@ class HallucinationDataset:
     def sample(self, n: int, seed: int = 42) -> "HallucinationDataset":
         """Return random sample of n cases."""
         import random
+        if n > len(self.cases):
+            warnings.warn(
+                f"Requested sample size {n} is larger than the available number of cases "
+                f"({len(self.cases)}). Returning a sample of size {len(self.cases)} instead.",
+                RuntimeWarning,
+            )
         random.seed(seed)
         sampled = random.sample(self.cases, min(n, len(self.cases)))
         return HallucinationDataset(cases=sampled, source_path=self.source_path)
@@ -126,8 +133,8 @@ class HallucinationLoader:
         Returns:
             HallucinationDataset with loaded cases
         """
-        csv_path = Path(path) if path else self.dataset_path
-        if not csv_path or not csv_path.exists():
+        csv_path = Path(path) if path is not None else self.dataset_path
+        if csv_path is None or not csv_path.exists():
             raise FileNotFoundError(f"Dataset not found: {csv_path}")
         
         cases: list[HallucinationCase] = []
@@ -391,8 +398,10 @@ class HallucinationLoader:
                         hallucination_type=case.hallucination_type,
                         source=case.source,
                     ))
-            except Exception:
-                pass  # HuggingFace not available, continue with CSV only
+            except (ImportError, ModuleNotFoundError, OSError):
+                # HuggingFace or its dependencies are not available, or remote dataset cannot be accessed.
+                # Continue with CSV-only data.
+                pass
         
         return HallucinationDataset(cases=cases, source_path="combined")
     
@@ -435,9 +444,9 @@ class HallucinationLoader:
                 hallucination_type = "negation"
         
         # Strategy 2: Number/date modification (30% chance)
-        elif random.random() < 0.7:  # 0.3/0.6 = 0.5
+        elif random.random() < 0.7:  # 30% absolute chance (0.7 - 0.4)
             # Find and modify years
-            years = re.findall(r'\b(19|20)\d{2}\b', text)
+            years = re.findall(r'\b(?:19|20)\d{2}\b', text)
             if years:
                 old_year = years[0]
                 new_year = str(int(old_year) + random.choice([-50, -20, -10, 10, 20, 50]))
