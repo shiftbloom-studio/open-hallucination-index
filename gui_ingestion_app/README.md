@@ -62,7 +62,7 @@ This decouples stages so slow I/O does not block CPU/GPU stages.
 
 ```bash
 # Run from project root
-cd src/ingestion
+cd gui_ingestion_app/ingestion
 python -m ingestion --help
 
 # Basic usage with defaults
@@ -86,7 +86,7 @@ python -m ingestion --endless --keep-downloads
 
 ```bash
 # Install GUI dependencies and run
-pip install -e "src/ingestion/"
+pip install -e "gui_ingestion_app/ingestion/"
 ohi-ingestion-gui
 ```
 

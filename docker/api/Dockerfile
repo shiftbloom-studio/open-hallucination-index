@@ -54,20 +54,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN useradd --create-home --uid 10001 appuser \
-    && mkdir -p /app/.cache/huggingface /app/benchmark_results \
-    && chown -R appuser:appuser /app/.cache /app/benchmark_results
+RUN useradd --create-home --uid 10001 appuser
 
 COPY --from=builder /wheels /wheels
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system torch --index-url ${TORCH_INDEX_URL} \
     && uv pip install --system /wheels/* \
     && rm -rf /wheels
-
-# Benchmark package + dataset (used by benchmark-runner)
-COPY src/benchmark /app/benchmark
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system /app/benchmark
 
 # Pre-download the embedding model (speeds up first request and bakes it into image)
 # Download directly to the app cache directory with proper ownership

@@ -25,6 +25,6 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
 	"%PY_EXE%" -m virtualenv "%VENV_DIR%"
 )
 
-"%VENV_DIR%\Scripts\python.exe" -m pip install -e "%ROOT%\src\ingestion"
+"%VENV_DIR%\Scripts\python.exe" -m pip install -e "%~dp0ingestion"
 "%VENV_DIR%\Scripts\python.exe" "%~dp0app.py"
 endlocal

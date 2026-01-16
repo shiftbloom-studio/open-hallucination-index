@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "open-hallucination-index-ingestion"
+version = "0.1.0"
+description = "High-performance Wikipedia ingestion pipeline for Open Hallucination Index"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+    { name = "shiftbloom studio.", email = "fabian@shiftbloom.studio" }
+]
+keywords = ["ingestion", "wikipedia", "neo4j", "qdrant", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "numpy>=1.26.0",
+    "torch>=2.2.0",
+    "qdrant-client>=1.16.2",
+    "sentence-transformers>=5.2.0",
+    "neo4j>=6.0.3",
+    "tqdm>=4.66.0",
+    "requests>=2.32.0",
+    "lxml>=5.1.0",
+    "PySide6>=6.7.0",
+    "matplotlib>=3.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.14.10",
+    "mypy>=1.19.1",
+]
+
+[project.scripts]
+ohi-ingestion = "ingestion.__main__:main"
+ohi-ingestion-gui = "ingestion.gui_app:main"
+
+[tool.setuptools]
+packages = ["ingestion"]
+package-dir = { ingestion = "." }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = [".", "tests"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true

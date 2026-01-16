@@ -6,9 +6,9 @@ from pathlib import Path
 
 def _add_repo_paths() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    src_root = repo_root / "src"
-    if src_root.exists():
-        sys.path.insert(0, str(src_root))
+    ingestion_root = repo_root / "gui_ingestion_app" / "ingestion"
+    if ingestion_root.exists():
+        sys.path.insert(0, str(ingestion_root))
 
 
 if __name__ == "__main__":
