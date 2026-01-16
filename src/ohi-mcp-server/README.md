@@ -2,21 +2,66 @@
 
 **Unified Knowledge Sources MCP Server for Open Hallucination Index**
 
-High-performance MCP (Model Context Protocol) server that aggregates 13+ external knowledge sources into a single, unified interface.
+High-performance MCP (Model Context Protocol) server that aggregates 13+ external knowledge sources into a single, unified interface. It is optimized for parallel search, controlled rate limits, and predictable latency under load.
 
-## Knowledge Sources
+---
 
-### Wikipedia/Knowledge Graph
-- **Wikidata** - Entity search + SPARQL queries
+## Highlights
+
+- **🚀 High Performance**: Async parallel queries with connection pooling
+- **📦 Unified Interface**: 21 MCP tools across all sources
+- **🔒 Rate Limiting**: Token bucket per source to avoid throttling
+- **💾 Response Caching**: LRU cache with configurable TTL
+- **📊 Observability**: Health + stats endpoints for runtime insight
+
+---
+
+## End-to-end workflow
+
+```mermaid
+flowchart TD
+    A[MCP Client] --> B[Transport Layer]
+    B --> C[Rate Limiter]
+    C --> D[Cache Lookup]
+    D -->|Hit| E[Return Cached Response]
+    D -->|Miss| F[Tool Router]
+    F --> G[Parallel Source Adapters]
+    G --> H[Normalize + Score]
+    H --> I[Aggregate Response]
+    I --> J[Cache + Return]
+```
+
+### Tool-routing strategy (mental model)
+
+```mermaid
+flowchart LR
+    Q[Incoming Tool Call] --> R{Tool Type?}
+    R -->|Search| S[Search API Adapter]
+    R -->|Summary| T[Article Summary Adapter]
+    R -->|SPARQL| U[Graph Adapter]
+    R -->|Docs| V[Context7 Adapter]
+    S --> W[Source Registry]
+    T --> W
+    U --> W
+    V --> W
+    W --> X[Result Normalizer]
+```
+
+---
+
+## Knowledge sources
+
+### Wikipedia / Knowledge Graph
+- **Wikidata** - Entity search + SPARQL
 - **MediaWiki Action API** - Wikipedia search
 - **Wikimedia REST** - Article summaries
-- **DBpedia** - Structured knowledge from Wikipedia
+- **DBpedia** - Structured graph lookup
 
 ### Technical Documentation
 - **Context7** - Library and API documentation
 
-### Academic/Research
-- **OpenAlex** - 250M+ scholarly works
+### Academic / Research
+- **OpenAlex** - Scholarly works
 - **Crossref** - DOI metadata
 - **Europe PMC** - Life sciences literature
 - **OpenCitations** - Citation data
@@ -29,20 +74,14 @@ High-performance MCP (Model Context Protocol) server that aggregates 13+ externa
 - **GDELT** - Global news and events
 
 ### Economic
-- **World Bank** - Economic indicators (GDP, population, etc.)
+- **World Bank** - Economic indicators
 
 ### Security
 - **OSV** - Open Source Vulnerabilities database
 
-## Features
+---
 
-- **🚀 High Performance**: Async parallel queries, connection pooling
-- **📦 Unified Interface**: 21 MCP tools across all sources
-- **🔒 Rate Limiting**: Token bucket per source to avoid API throttling
-- **💾 Response Caching**: LRU cache with configurable TTL
-- **📊 Stats & Health**: Real-time monitoring endpoints
-
-## Available Tools
+## Available tools
 
 | Tool | Description |
 |------|-------------|
@@ -68,7 +107,18 @@ High-performance MCP (Model Context Protocol) server that aggregates 13+ externa
 | `search_vulnerabilities` | Search OSV database |
 | `get_vulnerability` | Get vulnerability details |
 
-## Docker Usage
+---
+
+## API endpoints
+
+- `GET /health` - Health check
+- `GET /sse` - SSE endpoint for MCP
+- `POST /messages` - Message handler for MCP
+- `GET /stats` - Server statistics
+
+---
+
+## Docker usage
 
 ### Build
 ```bash
@@ -80,7 +130,7 @@ docker build -f docker/mcp-server/Dockerfile -t ohi-mcp-server .
 docker run -p 8080:8080 ohi-mcp-server
 ```
 
-### Environment Variables
+### Environment variables
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `8080` | Server port |
@@ -92,7 +142,9 @@ docker run -p 8080:8080 ohi-mcp-server
 | `CONTEXT7_API_KEY` | - | Context7 API key for higher limits |
 | `CONTEXT7_BASE_URL` | `https://context7.com` | Base URL for Context7 REST API |
 
-## Polite Pool Access
+---
+
+## Polite pool access
 
 Set `POLITE_POOL_EMAIL` to enable higher rate limits for academic APIs:
 
@@ -103,12 +155,16 @@ Set `POLITE_POOL_EMAIL` to enable higher rate limits for academic APIs:
 docker run -p 8080:8080 -e POLITE_POOL_EMAIL=api@example.org ohi-mcp-server
 ```
 
-## API Endpoints
+---
 
-- `GET /health` - Health check
-- `GET /sse` - SSE endpoint for MCP
-- `POST /messages` - Message handler for MCP
-- `GET /stats` - Server statistics
+## Operations tips
+
+- **Latency tuning**: Reduce `CACHE_TTL` for fresher results or increase it for stability.
+- **Throttling**: Rate-limiter is per-source; keep `POLITE_POOL_EMAIL` set for academic APIs.
+- **Transport**: Use `sse` for long-lived MCP sessions; use `stdio` for local CLI tooling.
+- **Context7**: Provide `CONTEXT7_API_KEY` for higher limits.
+
+---
 
 ## Development
 
@@ -125,6 +181,8 @@ npm run build
 # Type check
 npm run typecheck
 ```
+
+---
 
 ## Architecture
 
@@ -154,6 +212,8 @@ src/
     ├── http-client.ts  # Shared HTTP client
     └── context7.ts     # Context7 REST helpers
 ```
+
+---
 
 ## License
 

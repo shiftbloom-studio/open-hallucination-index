@@ -1,20 +1,38 @@
 # Wikipedia Ingestion Pipeline
 
-High-performance Wikipedia ingestion pipeline for the Open Hallucination Index project.
+High-performance Wikipedia ingestion pipeline for the Open Hallucination Index project. Built for throughput, resumability, and rich knowledge graph creation.
 
-## Features
+---
 
-- **10-50x faster** than the original monolithic script
-- **Parallel dump processing** with configurable worker count
+## Highlights
+
+- **10–50x faster** than the original monolithic script
+- **Parallel dump processing** with configurable worker counts
 - **Producer-consumer architecture** with non-blocking queues
-- **Parallel downloads** with resume support for Wikipedia dumps
-- **GPU-accelerated embeddings** with dedicated embedding workers
+- **Parallel downloads** with resume support
+- **GPU-accelerated embeddings** with dedicated workers
 - **Async uploads** to both Qdrant and Neo4j
 - **10+ relationship types** in Neo4j knowledge graph
 - **Resumable checkpoints** for crash recovery
 - **Real-time progress** with rich statistics
 
-## Architecture
+---
+
+## End-to-end workflow
+
+```mermaid
+flowchart TD
+    A[CLI / Scheduler] --> B[Download Wikipedia Dumps]
+    B --> C[Parse + Preprocess]
+    C --> D[Chunk + Tokenize]
+    D --> E[Embed (Dense + Sparse)]
+    E --> F[Upload to Qdrant]
+    E --> G[Upload to Neo4j]
+    F --> H[Checkpoint + Metrics]
+    G --> H
+```
+
+### Pipeline stages (threaded)
 
 ```
 ┌─────────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────────┐
@@ -27,18 +45,20 @@ High-performance Wikipedia ingestion pipeline for the Open Hallucination Index p
     Dumps            + Preprocess        + BM25 Sparse     Parallel Upload
 ```
 
-### Multi-Worker Architecture
+---
 
-The pipeline now supports **parallel dump file processing**:
+## Multi-worker architecture
 
-- **Dump Workers** (`--dump-workers`): Multiple dump files are processed simultaneously
-- **Embedding Workers** (`--embedding-workers`): Dedicated GPU threads for embedding computation
-- **Preprocess Workers** (`--preprocess-workers`): Parallel text preprocessing
-- **Upload Workers** (`--upload-workers`): Async database uploads
+- **Dump Workers** (`--dump-workers`): Multiple dump files processed simultaneously
+- **Preprocess Workers** (`--preprocess-workers`): Parallel text cleaning + chunking
+- **Embedding Workers** (`--embedding-workers`): Dedicated GPU/CPU embedding workers
+- **Upload Workers** (`--upload-workers`): Async uploads to Qdrant and Neo4j
 
-This eliminates freezing during batch processing by decoupling all stages.
+This decouples stages so slow I/O does not block CPU/GPU stages.
 
-## Quick Start
+---
+
+## Quick start
 
 ```bash
 # Run from project root
@@ -62,7 +82,9 @@ python -m ingestion \
 python -m ingestion --endless --keep-downloads
 ```
 
-## Module Structure
+---
+
+## Module structure
 
 | Module | Description |
 |--------|-------------|
@@ -75,9 +97,9 @@ python -m ingestion --endless --keep-downloads
 | `pipeline.py` | Main producer-consumer orchestration |
 | `__main__.py` | CLI entry point |
 
-## Neo4j Relationship Types
+---
 
-The pipeline creates rich relationships between articles:
+## Neo4j relationship types (core set)
 
 | Relationship | Description |
 |--------------|-------------|
@@ -92,35 +114,37 @@ The pipeline creates rich relationships between articles:
 | `RELATED_TO` | Category co-occurrence relationships |
 | `NEXT` | Section ordering within article |
 
-## Configuration Options
+---
 
-### Performance Tuning
+## Configuration options
+
+### Performance tuning
 
 ```python
 IngestionConfig(
     batch_size=256,              # Articles per batch
     chunk_size=512,              # Characters per chunk
     chunk_overlap=64,            # Overlap between chunks
-    
+
     # Worker configuration
     dump_workers=2,              # Parallel dump file workers
     download_workers=4,          # Parallel download threads
     preprocess_workers=8,        # Text processing threads
     embedding_workers=2,         # GPU embedding workers
     upload_workers=4,            # Upload threads per store
-    
+
     # Queue sizes
     download_queue_size=8,       # Pending downloads
     preprocess_queue_size=2048,  # Pending articles
     upload_queue_size=16,        # Pending batches
-    
+
     # Embedding settings
     embedding_batch_size=512,    # GPU batch size
     embedding_device="cuda",     # "cuda", "cpu", or "auto"
 )
 ```
 
-### Recommended Settings by Hardware
+### Recommended settings by hardware
 
 | RAM | GPU | dump_workers | embedding_workers | batch_size |
 |-----|-----|--------------|-------------------|------------|
@@ -129,7 +153,7 @@ IngestionConfig(
 | 64GB | 12GB+ | 3 | 3 | 384 |
 | 128GB | 24GB+ | 8 | 8 | 1024 |
 
-### Database Settings
+### Database settings
 
 ```python
 IngestionConfig(
@@ -142,7 +166,9 @@ IngestionConfig(
 )
 ```
 
-## Requirements
+---
+
+## Requirements (minimum)
 
 ```txt
 sentence-transformers>=2.2.0
@@ -154,38 +180,54 @@ nltk>=3.8.0
 tqdm>=4.65.0
 ```
 
-## Comparison with Original Script
+---
+
+## Performance comparison
 
 | Metric | Original | New Pipeline | Improvement |
 |--------|----------|--------------|-------------|
-| Articles/sec | ~1 | 10-50 | 10-50x |
+| Articles/sec | ~1 | 10–50 | 10–50x |
 | CPU utilization | ~10% | ~80% | 8x |
 | GPU utilization | 0% | ~90% | Full usage |
 | Memory efficiency | High | Streamed | Lower peak |
 | Relationship types | 3 | 10+ | 3x+ |
 | Crash recovery | None | Checkpoint | Full resume |
 
+---
+
+## Operational tips
+
+- **IO-bound**: Increase `--download-workers` when network is the bottleneck.
+- **CPU-bound**: Increase `--preprocess-workers` for faster parsing.
+- **GPU-bound**: Increase `--embedding-batch-size` and `--embedding-workers` (within VRAM).
+- **Queue tuning**: If workers are idle, increase queue sizes.
+- **Resume**: Keep checkpoints on fast disk for reliable recovery.
+
+---
+
 ## Troubleshooting
 
-### Low GPU Utilization
-- Increase `--batch-size` (default: 256, try 512 or 1024)
+### Low GPU utilization
+- Increase `--batch-size` (try 512 or 1024)
 - Ensure CUDA is available: `torch.cuda.is_available()`
 
-### Memory Issues
+### Memory issues
 - Reduce `--preprocess-queue-size` (default: 2048)
 - Reduce `--batch-size` for smaller GPU memory
 
-### Network Bottleneck
+### Network bottleneck
 - Increase `--download-workers` for faster downloads
 - Use local file with `--wiki-dump` for best performance
 
-### Neo4j Connection Issues
+### Neo4j connection issues
 - Check connection pool: increase `--upload-workers`
 - Verify credentials and database name
 
-## Legacy Compatibility
+---
 
-The original `api/scripts/ingest_wiki_dual.py` has been replaced with a thin wrapper that redirects to this module:
+## Legacy compatibility
+
+The original script has been replaced by a thin wrapper:
 
 ```bash
 # Both commands are equivalent:

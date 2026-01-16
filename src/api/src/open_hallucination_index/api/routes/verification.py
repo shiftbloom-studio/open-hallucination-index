@@ -23,7 +23,12 @@ from open_hallucination_index.domain.results import (
     VerificationResult,
     VerificationStatus,
 )
-from open_hallucination_index.infrastructure.dependencies import get_verify_use_case
+from open_hallucination_index.api.filters.verify_filters import build_default_filters
+from open_hallucination_index.infrastructure.dependencies import (
+    get_llm_provider_optional,
+    get_verify_use_case,
+)
+from open_hallucination_index.ports.llm_provider import LLMProvider
 from open_hallucination_index.ports.verification_oracle import VerificationStrategy
 
 router = APIRouter()
@@ -180,6 +185,7 @@ class BatchVerifyResponse(BaseModel):
 async def verify_text(
     request: VerifyTextRequest,
     use_case: Annotated[VerifyTextUseCase, Depends(get_verify_use_case)],
+    llm_provider: Annotated[LLMProvider | None, Depends(get_llm_provider_optional)],
     user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
 ) -> VerifyTextResponse:
     """
@@ -193,6 +199,30 @@ async def verify_text(
     request_seq = _next_request_id()
     start = time.perf_counter()
 
+    input_text = request.text
+
+    # Apply pre-filter pipeline (blacklist -> LLM harm -> LLM claim)
+    filters = build_default_filters(llm_provider)
+    for filter_step in filters:
+        decision = await filter_step.evaluate(input_text)
+        if decision.action == "reject":
+            audit_logger.warning(
+                f"[OUTPUT] ID: {request_seq} - RESULT: REJECTED - STAGE: {decision.stage}"
+            )
+            raise HTTPException(
+                status_code=decision.status_code,
+                detail=decision.reason,
+            )
+        if decision.action == "rewrite" and decision.text:
+            logger.info(
+                "Input text rewritten by filter",
+                extra={
+                    "request_id": str(request_id),
+                    "stage": decision.stage,
+                },
+            )
+            input_text = decision.text
+
     # Map string strategy to enum
     strategy = None
     if request.strategy:
@@ -201,14 +231,14 @@ async def verify_text(
     audit_logger.info(
         f'[REQUEST] ID: {request_seq} - UserID: "{user_id or "unknown"}" - '
         f'Mode: "{_format_mode(request.target_sources)}" - '
-        f'Text: "{_format_text_preview(request.text)}"'
+        f'Text: "{_format_text_preview(input_text)}"'
     )
 
     logger.info(
         "Verify request started",
         extra={
             "request_id": str(request_id),
-            "text_length": len(request.text),
+            "text_length": len(input_text),
             "has_context": bool(request.context),
             "strategy": strategy.value if strategy else "default",
             "use_cache": request.use_cache,
@@ -218,7 +248,7 @@ async def verify_text(
 
     try:
         result: VerificationResult = await use_case.execute(
-            text=request.text,
+            text=input_text,
             strategy=strategy,
             use_cache=request.use_cache,
             context=request.context,
@@ -296,6 +326,7 @@ async def verify_text(
 async def verify_batch(
     request: BatchVerifyRequest,
     use_case: Annotated[VerifyTextUseCase, Depends(get_verify_use_case)],
+    llm_provider: Annotated[LLMProvider | None, Depends(get_llm_provider_optional)],
 ) -> BatchVerifyResponse:
     """
     Batch verification of multiple texts.
@@ -325,6 +356,24 @@ async def verify_batch(
         },
     )
 
+    # Apply pre-filter pipeline for each text
+    filters = build_default_filters(llm_provider)
+    filtered_texts: list[str] = []
+    for idx, text in enumerate(request.texts, start=1):
+        input_text = text
+        for filter_step in filters:
+            decision = await filter_step.evaluate(input_text)
+            if decision.action == "reject":
+                raise HTTPException(
+                    status_code=decision.status_code,
+                    detail=(
+                        f"Batch item {idx} rejected at {decision.stage}: {decision.reason}"
+                    ),
+                )
+            if decision.action == "rewrite" and decision.text:
+                input_text = decision.text
+        filtered_texts.append(input_text)
+
     # Semaphore to limit concurrent verification operations
     semaphore = asyncio.Semaphore(BATCH_CONCURRENCY_LIMIT)
 
@@ -338,7 +387,7 @@ async def verify_batch(
             )
 
     # Process all texts with concurrency limit
-    tasks = [verify_with_limit(text) for text in request.texts]
+    tasks = [verify_with_limit(text) for text in filtered_texts]
     gathered = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Transform results

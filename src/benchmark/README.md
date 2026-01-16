@@ -1,36 +1,61 @@
 # OHI Benchmark Suite
 
-Research-grade benchmark for evaluating hallucination detection performance
-of the **Open Hallucination Index (OHI)** API against VectorRAG and GraphRAG systems.
+Research-grade benchmark for evaluating hallucination detection performance of the **Open Hallucination Index (OHI)** API against VectorRAG and GraphRAG systems. This suite focuses on accuracy, calibration, latency, and statistical significance across multiple verification strategies.
 
-## Features
+---
 
-### 🧪 Multi-Strategy Comparison
-- **Vector Semantic**: Pure vector similarity search
-- **Graph Exact**: Knowledge graph exact matching
-- **Hybrid**: Graph + vector parallel
-- **Cascading**: Graph first, vector fallback
-- **MCP Enhanced**: Model Context Protocol-augmented verification
-- **Adaptive**: Tiered retrieval with early-exit heuristics
+## Highlights
 
-### 📊 Research-Grade Statistical Analysis
-- **Bootstrap Confidence Intervals**: For all metrics with configurable iterations
-- **DeLong Test**: Statistical comparison of ROC-AUC between strategies
-- **McNemar's Test**: Paired classifier comparison with continuity correction
-- **Wilson Score Interval**: For proportion estimation
+- **🧪 Multi-Strategy Comparison**: Vector, Graph, Hybrid, Cascading, MCP Enhanced, Adaptive
+- **📊 Statistical Rigor**: Bootstrap CIs, DeLong ROC-AUC, McNemar, Wilson intervals
+- **📈 Full Metrics Stack**: Classification, calibration, curves, latency percentiles
+- **📝 Multi-Format Reports**: Console, Markdown, JSON, CSV, HTML
 
-### 📈 Comprehensive Metrics
-- **Classification**: Accuracy, Precision, Recall, F1, MCC
-- **Calibration**: Brier Score, Expected Calibration Error (ECE), Maximum Calibration Error (MCE)
-- **Curve Analysis**: ROC-AUC, PR-AUC, optimal threshold detection
-- **Latency**: P50, P90, P95, P99 percentiles with confidence intervals
-- **Custom**: Hallucination Pass Rate (HPR) for AI safety evaluation
+---
 
-### 📝 Multi-Format Reporting
-- **Console**: Rich terminal output with tables and panels
-- **Markdown**: Publication-ready reports
-- **JSON**: Machine-readable structured data
-- **CSV**: For spreadsheet analysis
+## End-to-end workflow
+
+```mermaid
+flowchart TD
+  A[Dataset CSV] --> B[Benchmark Runner]
+  B --> C[Strategy Executor]
+  C --> D[OHI API Calls]
+  D --> E[Result Collector]
+  E --> F[Metrics + Statistical Tests]
+  F --> G[Reporters: Markdown/JSON/CSV/HTML]
+  G --> H[benchmark_results/]
+```
+
+### Metric computation pipeline
+
+```mermaid
+flowchart LR
+  A[Raw Predictions] --> B[Confusion Matrix]
+  A --> C[Probability Scores]
+  C --> D[Calibration: Brier/ECE/MCE]
+  C --> E[ROC/PR Curves]
+  A --> F[Latency Stats]
+  B --> G[Accuracy/Precision/Recall/F1/MCC]
+  D --> H[Confidence Intervals]
+  E --> H
+  G --> H
+  F --> H
+```
+
+---
+
+## Strategies under test
+
+- **vector_semantic**: Qdrant-only semantic similarity
+- **graph_exact**: Neo4j-only exact graph matching
+- **hybrid**: graph + vector in parallel
+- **cascading**: graph first, vector fallback
+- **mcp_enhanced**: MCP sources first, local fallback
+- **adaptive**: tiered local-first with early-exit heuristics
+
+Tip: Use **adaptive** for best coverage, **graph_exact** for lowest latency, and **hybrid** for balanced recall.
+
+---
 
 ## Installation
 
@@ -42,9 +67,11 @@ pip install -e src/benchmark/
 pip install -e "src/benchmark/[dev]"
 ```
 
+---
+
 ## Usage
 
-### Command Line
+### Command line
 
 ```bash
 # Run with default settings
@@ -67,22 +94,24 @@ import asyncio
 from benchmark import OHIBenchmarkRunner, get_config
 
 async def run_benchmark():
-    config = get_config().with_overrides(
-        strategies=["vector_semantic", "mcp_enhanced"],
-        threshold=0.5,
-        concurrency=10,
-    )
-    
-    async with OHIBenchmarkRunner(config=config) as runner:
-        report = await runner.run_benchmark()
-        print(f"Completed: {report.total_cases} cases")
-        
+  config = get_config().with_overrides(
+    strategies=["vector_semantic", "mcp_enhanced"],
+    threshold=0.5,
+    concurrency=10,
+  )
+
+  async with OHIBenchmarkRunner(config=config) as runner:
+    report = await runner.run_benchmark()
+    print(f"Completed: {report.total_cases} cases")
+
 asyncio.run(run_benchmark())
 ```
 
+---
+
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -97,7 +126,7 @@ asyncio.run(run_benchmark())
 | `BENCHMARK_BOOTSTRAP_ITERATIONS` | Bootstrap iterations | `1000` |
 | `BENCHMARK_CONFIDENCE_LEVEL` | Confidence level | `0.95` |
 
-### CLI Options
+### CLI options
 
 ```
 Options:
@@ -117,7 +146,9 @@ Options:
   --version                Show version
 ```
 
-## Dataset Format
+---
+
+## Dataset format
 
 The benchmark expects a CSV file with the following columns:
 
@@ -131,9 +162,13 @@ The benchmark expects a CSV file with the following columns:
 | `notes` | string | Optional notes |
 | `hallucination_type` | string | Optional hallucination pattern |
 
-## Output
+Tip: Keep a consistent label definition (true = factual). Mixing labeling conventions will distort calibration and HPR.
 
-### Directory Structure
+---
+
+## Output and artifacts
+
+### Directory structure
 
 ```
 benchmark_results/
@@ -144,7 +179,7 @@ benchmark_results/
 │   └── console.html
 ```
 
-### Report Contents
+### Report contents
 
 Each report includes:
 - **Summary Statistics**: Overall performance metrics
@@ -153,7 +188,19 @@ Each report includes:
 - **Calibration Analysis**: Reliability diagrams
 - **Error Analysis**: Misclassification patterns
 
-## Module Structure
+---
+
+## Operational tips
+
+- **Warmup**: Use `BENCHMARK_WARMUP` to stabilize LLM latency before measurement.
+- **Concurrency**: Keep `BENCHMARK_CONCURRENCY` below the API worker count for reproducible latency.
+- **Timeouts**: If MCP sources are slow, increase `BENCHMARK_TIMEOUT` to avoid biased failures.
+- **Reproducibility**: Fix strategy list, thresholds, and dataset versions.
+- **CI**: Use `--dry-run` for configuration validation without load.
+
+---
+
+## Module structure
 
 ```
 benchmark/
@@ -174,9 +221,11 @@ benchmark/
 └── pyproject.toml       # Package configuration
 ```
 
-## API Reference
+---
 
-### Core Classes
+## API reference (key types)
+
+### Core classes
 
 - `OHIBenchmarkRunner`: Main benchmark orchestrator
 - `BenchmarkConfig`: Configuration container
@@ -195,12 +244,14 @@ benchmark/
 - `ROCAnalysis`: ROC curve with AUC
 - `LatencyStats`: Timing statistics
 
-### Statistical Functions
+### Statistical functions
 
 - `mcnemar_test()`: Paired classifier comparison
 - `delong_test()`: AUC comparison
 - `bootstrap_ci()`: Bootstrap confidence intervals
 - `wilson_ci()`: Wilson score interval
+
+---
 
 ## License
 
