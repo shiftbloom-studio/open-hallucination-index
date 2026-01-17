@@ -1415,7 +1415,7 @@ class ChartsReporter(BaseReporter):
             aurc = getattr(m.hallucination, 'aurc', None)
             if aurc is None:
                 # Approx AURC
-                aurc = float(np.trapz(risk, coverage))
+                aurc = float(np.trapezoid(risk, coverage))
             ax.text(
                 0.02,
                 0.92 - i * 0.06,
