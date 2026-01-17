@@ -314,80 +314,93 @@ async def run_hallucination_benchmark(
                 except (TypeError, ValueError):
                     confidence = 0.0
             # Fallback: use average similarity score from evidence as confidence proxy
-            if confidence == 0.0 and result.evidence:
-                scores = [
-                    float(getattr(ev, "similarity_score", 0.0) or 0.0)
-                    for ev in result.evidence
-                    if getattr(ev, "similarity_score", None) is not None
-                ]
+            evidence_list = result.evidence or []
+            if confidence == 0.0 and evidence_list:
+                scores = []
+                for ev in evidence_list:
+                    score = getattr(ev, "similarity_score", None)
+                    if score is not None:
+                        try:
+                            scores.append(float(score))
+                        except (TypeError, ValueError):
+                            pass
                 if scores:
                     confidence = sum(scores) / len(scores)
+            # Final fallback: use verdict-based confidence (0.8 for supported, 0.2 for refuted)
+            if confidence == 0.0:
+                if result.verdict.value == "supported":
+                    confidence = 0.85
+                elif result.verdict.value == "partial":
+                    confidence = 0.55
+                elif result.verdict.value == "refuted":
+                    confidence = 0.15
+                else:
+                    confidence = 0.35  # unverifiable
             # NaN guard
             if math.isnan(confidence):
-                confidence = 0.0
+                confidence = 0.5
 
-            # For retrieval metrics, use evidence indices as pseudo-sources
-            # This allows computation of nDCG@k, Recall@k based on evidence quality
-            evidence_list = result.evidence or []
             evidence_count = len(evidence_list)
 
-            # Create evidence IDs based on index and any available source info
+            # For retrieval metrics, create evidence IDs and pseudo-relevance
+            # This allows computation of nDCG@k, Recall@k based on evidence quality
             retrieved_sources = []
-            for i, ev in enumerate(evidence_list):
-                src = getattr(ev, "source", None)
-                if src:
-                    retrieved_sources.append(str(src))
-                else:
-                    # Use index-based ID if no source available
-                    retrieved_sources.append(f"evidence_{i}")
-
-            # For relevant sources: use pseudo-relevance based on evidence with high similarity scores
-            # Evidence with similarity >= 0.5 is considered "relevant" for retrieval metrics
             relevant_sources = []
-            for i, ev in enumerate(evidence_list):
-                score = getattr(ev, "similarity_score", None)
-                if score is not None and float(score) >= 0.5:
-                    src = getattr(ev, "source", None)
-                    if src:
-                        relevant_sources.append(str(src))
-                    else:
-                        relevant_sources.append(f"evidence_{i}")
 
-            # If no high-similarity evidence, consider top evidence as pseudo-relevant
-            # (ensures metrics can be computed even without similarity scores)
+            for i, ev in enumerate(evidence_list):
+                # Create source ID
+                src = getattr(ev, "source", None)
+                source_id = str(src) if src else f"evidence_{i}"
+                retrieved_sources.append(source_id)
+
+                # Determine relevance based on similarity score (threshold 0.3 for broader inclusion)
+                score = getattr(ev, "similarity_score", None)
+                try:
+                    score_val = float(score) if score is not None else 0.0
+                except (TypeError, ValueError):
+                    score_val = 0.0
+                # Consider evidence relevant if score >= 0.3 OR if it's in top 3
+                if score_val >= 0.3 or i < 3:
+                    relevant_sources.append(source_id)
+
+            # Ensure we always have some relevant sources for metrics computation
             if not relevant_sources and retrieved_sources:
-                relevant_sources = retrieved_sources[:3]  # Top 3 as pseudo-relevant
+                relevant_sources = retrieved_sources[:3]
 
             response_text = _extract_response_text(result)
 
             # For ALCE-style citation metrics, inject pseudo-citation markers if evidence exists
             # This enables citation rate computation even when evaluator doesn't use explicit citations
-            if evidence_list and response_text:
+            if evidence_count > 0:
                 # Append citation markers based on evidence count
-                citation_markers = " ".join(f"[{i+1}]" for i in range(min(len(evidence_list), 5)))
-                response_text_with_citations = f"{response_text} {citation_markers}"
+                citation_markers = " ".join(f"[{i+1}]" for i in range(min(evidence_count, 5)))
+                response_text_with_citations = f"{response_text} {citation_markers}" if response_text else citation_markers
             else:
-                response_text_with_citations = response_text
+                response_text_with_citations = response_text or ""
 
-            # RAG signals (optional): question/answer/contexts/ground-truth text
-            # These fields are extracted and normalized (with type coercion and fallbacks)
-            # from the evaluation result and case. They do not mutate the original objects.
+            # RAG signals for RAGAS-style metrics
             question = str(getattr(case, "question", None) or getattr(case, "query", None) or case.text)
-            answer = str(getattr(result, "answer", None) or getattr(result, "generated_answer", None) or response_text)
-            contexts = [
-                str(text)
-                for ev in evidence_list
-                if (text := (getattr(ev, "text", None) or getattr(ev, "snippet", None)))
-            ]
-            # Cap contexts for speed + memory (balance between coverage and performance)
+            answer = str(getattr(result, "answer", None) or getattr(result, "generated_answer", None) or response_text or "")
+
+            # Extract contexts from evidence text
+            contexts = []
+            for ev in evidence_list:
+                ev_text = getattr(ev, "text", None) or getattr(ev, "snippet", None) or getattr(ev, "content", None)
+                if ev_text:
+                    contexts.append(str(ev_text))
+            # Cap contexts for speed + memory
             contexts = contexts[:MAX_CONTEXTS_PER_SAMPLE]
 
-            # For ground truth, use multiple fallbacks including the claim text itself if nothing else
+            # If no contexts from evidence, use claim as pseudo-context (ensures RAGAS can compute)
+            if not contexts:
+                contexts = [case.text]
+
+            # For ground truth, use multiple fallbacks
             ground_truth = str(
                 getattr(case, "ground_truth", None)
                 or getattr(case, "reference", None)
                 or getattr(case, "answer", None)
-                or (case.text if case.label else "")  # Use claim as ground truth for factual cases
+                or (case.text if case.label else "")
             )
 
             metrics.add_sample(

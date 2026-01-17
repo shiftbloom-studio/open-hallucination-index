@@ -282,21 +282,71 @@ class OHIEvaluator(BaseEvaluator):
             else:
                 verdict = VerificationVerdict.REFUTED
             
-            # Extract evidence from trace
+            # Extract evidence from multiple possible locations in response
             evidence: list[EvidenceItem] = []
+
+            def _extract_evidence_item(ev: dict) -> EvidenceItem:
+                """Extract evidence item from various possible formats."""
+                text = (
+                    ev.get("content")
+                    or ev.get("text")
+                    or ev.get("snippet")
+                    or ev.get("passage")
+                    or ""
+                )[:500]
+                source = (
+                    ev.get("source")
+                    or ev.get("url")
+                    or ev.get("title")
+                    or ev.get("id")
+                    or "unknown"
+                )
+                score = ev.get("similarity_score") or ev.get("score") or ev.get("relevance") or 0.0
+                try:
+                    score = float(score)
+                except (TypeError, ValueError):
+                    score = 0.0
+                return EvidenceItem(
+                    text=text,
+                    source=str(source),
+                    similarity_score=score,
+                    metadata=ev.get("structured_data") or ev.get("metadata") or {},
+                )
+
+            # Try 1: Evidence in claims[].trace
             for claim_data in claims_data:
                 trace = claim_data.get("trace") or {}
                 supporting = trace.get("supporting_evidence", []) or []
                 refuting = trace.get("refuting_evidence", []) or []
-                for ev in [*supporting, *refuting]:
-                    evidence.append(
-                        EvidenceItem(
-                            text=(ev.get("content") or ev.get("text") or "")[:500],
-                            source=ev.get("source", "unknown"),
-                            similarity_score=ev.get("similarity_score", 0.0),
-                            metadata=ev.get("structured_data", ev.get("metadata", {})),
-                        )
-                    )
+                neutral = trace.get("neutral_evidence", []) or []
+                for ev in [*supporting, *refuting, *neutral]:
+                    if isinstance(ev, dict):
+                        evidence.append(_extract_evidence_item(ev))
+
+            # Try 2: Evidence at top level (data["evidence"] or data["sources"])
+            if not evidence:
+                top_evidence = data.get("evidence") or data.get("sources") or []
+                if isinstance(top_evidence, list):
+                    for ev in top_evidence:
+                        if isinstance(ev, dict):
+                            evidence.append(_extract_evidence_item(ev))
+
+            # Try 3: Evidence in claims[].evidence directly
+            if not evidence:
+                for claim_data in claims_data:
+                    claim_ev = claim_data.get("evidence") or claim_data.get("sources") or []
+                    if isinstance(claim_ev, list):
+                        for ev in claim_ev:
+                            if isinstance(ev, dict):
+                                evidence.append(_extract_evidence_item(ev))
+
+            # Try 4: Check for aggregated_sources or combined evidence
+            if not evidence:
+                agg_sources = data.get("aggregated_sources") or data.get("all_evidence") or []
+                if isinstance(agg_sources, list):
+                    for ev in agg_sources:
+                        if isinstance(ev, dict):
+                            evidence.append(_extract_evidence_item(ev))
             
             return EvaluatorResult(
                 claim=claim,
