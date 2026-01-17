@@ -324,7 +324,7 @@ def compute_aurc(confidence_scores: list[float], correct_flags: list[bool]) -> f
     # Include (0,0)
     x = np.concatenate(([0.0], coverage))
     y = np.concatenate(([0.0], risk))
-    return float(np.trapz(y, x))
+    return float(np.trapezoid(y, x))
 
 
 def compute_optimal_aurc(n: int, correct_count: int) -> float:
@@ -341,7 +341,7 @@ def compute_optimal_aurc(n: int, correct_count: int) -> float:
 
     x = np.concatenate(([0.0], coverage))
     y = np.concatenate(([0.0], risk))
-    return float(np.trapz(y, x))
+    return float(np.trapezoid(y, x))
 
 
 def compute_eaurc(confidence_scores: list[float], correct_flags: list[bool]) -> float:
