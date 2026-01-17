@@ -658,7 +658,15 @@ class BenchmarkWorker(QThread):
         json_payload = report.to_dict()
         json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
         charts_reporter = ChartsReporter(output_dir, dpi=config.chart_dpi)
-        charts_reporter.generate_comparison_charts(report, prefix=f"{report.run_id}_")
+        # Generate all individual comparison charts (not just dashboard)
+        chart_files = charts_reporter.generate_comparison_charts(
+            report, 
+            prefix=f"{report.run_id}_",
+            consolidated=False
+        )
+        # Log each generated chart
+        for chart_path in chart_files:
+            self.log_message.emit(f"✓ Generated chart: {chart_path.name}")
 
     @staticmethod
     def _make_run_id() -> str:
@@ -1602,11 +1610,16 @@ class BenchmarkWindow(QMainWindow):
             if self._current_report.evaluators:
                 charts_reporter = ChartsReporter(output_dir, dpi=config.chart_dpi)
                 try:
+                    # Generate all individual comparison charts (not just dashboard)
                     chart_files = charts_reporter.generate_comparison_charts(
                         self._current_report,
-                        prefix=f"{filename}_"
+                        prefix=f"{filename}_",
+                        consolidated=False
                     )
-                    self._append_log(f"✓ Exported {len(chart_files)} charts")
+                    self._append_log(f"✓ Exported {len(chart_files)} charts:")
+                    # Display list of all generated chart filenames
+                    for chart_path in chart_files:
+                        self._append_log(f"  - {chart_path.name}")
                 except Exception as chart_error:
                     self._append_log(f"⚠ Chart generation failed: {chart_error}")
             
