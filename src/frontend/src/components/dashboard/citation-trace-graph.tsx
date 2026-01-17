@@ -136,14 +136,15 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
         linkDirectionalParticleColor="particleColor"
         
         // Node Object Customization (Glowing Spheres)
-        nodeThreeObject={(node: GraphNode) => {
+        nodeThreeObject={(node) => {
+            const typedNode = node as GraphNode;
             const group = new THREE.Group();
             
             // Core Sphere
-            const geometry = new THREE.SphereGeometry(node.val / 2);
+            const geometry = new THREE.SphereGeometry(typedNode.val / 2);
             const material = new THREE.MeshPhongMaterial({ 
-                color: node.color,
-                emissive: node.color,
+                color: typedNode.color,
+                emissive: typedNode.color,
                 emissiveIntensity: 0.6,
                 shininess: 100
             });
@@ -151,9 +152,9 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
             group.add(mesh);
 
             // Glow Halo (Transparent Outer Sphere)
-            const glowGeometry = new THREE.SphereGeometry((node.val / 2) * 1.4);
+            const glowGeometry = new THREE.SphereGeometry((typedNode.val / 2) * 1.4);
             const glowMaterial = new THREE.MeshBasicMaterial({
-                color: node.color,
+                color: typedNode.color,
                 transparent: true,
                 opacity: 0.15,
                 side: THREE.BackSide
@@ -165,7 +166,8 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
         }}
 
         // Tooltip Customization
-        nodeLabel={(node: GraphNode) => {
+        nodeLabel={(node) => {
+            const typedNode = node as GraphNode;
             return `
                 <div style="
                     background: rgba(15, 23, 42, 0.9); 
@@ -177,8 +179,8 @@ export default function CitationTraceGraph({ trace, claimText }: CitationTraceGr
                     max-width: 300px;
                     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
                 ">
-                    <div style="font-weight: bold; margin-bottom: 4px; color: ${node.color}">${node.label}</div>
-                    <div style="font-size: 0.8em; line-height: 1.4; opacity: 0.9;">${node.desc.substring(0, 100)}${node.desc.length > 100 ? '...' : ''}</div>
+                    <div style="font-weight: bold; margin-bottom: 4px; color: ${typedNode.color}">${typedNode.label}</div>
+                    <div style="font-size: 0.8em; line-height: 1.4; opacity: 0.9;">${typedNode.desc.substring(0, 100)}${typedNode.desc.length > 100 ? '...' : ''}</div>
                 </div>
             `;
         }}
