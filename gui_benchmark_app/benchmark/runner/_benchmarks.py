@@ -316,7 +316,8 @@ async def run_hallucination_benchmark(
             evidence_count = len(result.evidence or [])
 
             # RAG signals (optional): question/answer/contexts/ground-truth text
-            # These fields are derived from the evaluation result and case and do not modify the underlying data.
+            # These fields are extracted and normalized (with type coercion and fallbacks)
+            # from the evaluation result and case. They do not mutate the original objects.
             question = str(getattr(case, "question", None) or getattr(case, "query", None) or case.text)
             answer = str(getattr(result, "answer", None) or getattr(result, "generated_answer", None) or response_text)
             contexts = [

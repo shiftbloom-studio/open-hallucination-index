@@ -297,8 +297,8 @@ def compute_aurc(confidence_scores: list[float], correct_flags: list[bool]) -> f
     -----
     - ``confidence_scores`` and ``correct_flags`` are truncated to the same length.
     - NaN confidence scores are treated as the lowest possible confidence (mapped to
-      ``-np.inf``) so that, after sorting in descending order, they appear at the end
-      of the ranking. This keeps all samples in the AURC calculation while
+      ``-np.inf``) so that, when sorted in descending order by confidence, they appear
+      at the end of the ranking. This keeps all samples in the AURC calculation while
       conservatively assuming NaN scores are least reliable.
     - Positive infinity values are clamped to a large finite float so that they sort
       before all finite scores without breaking downstream arithmetic.
@@ -397,7 +397,7 @@ def compute_retrieval_metrics(
             # Recall@k
             recall_sum[k] += (sum(hits) / len(rel_set))
 
-            # Precision@k (k is guaranteed > 0 by validation on line 355)
+            # Precision@k (k is guaranteed > 0 by validation on line 375)
             precision_sum[k] += sum(hits) / k
 
             # HitRate@k ("success" if any relevant appears in top-k)
@@ -513,15 +513,11 @@ def compute_alce_style_metrics(
                 # (similar to compute_ragas_proxy_metrics), but the current per-response
                 # approach is simpler and handles variable contexts per sample more naturally.
                 # For typical benchmark sizes (100s-1000s of responses), the performance
-                # difference is negligible.
-                try:
-                    from sklearn.feature_extraction.text import TfidfVectorizer
-                    from sklearn.metrics.pairwise import cosine_similarity
-                except ImportError:
-                    # scikit-learn is now a required dependency, but we silently skip
-                    # grounding computation if sklearn fails to import for any reason
-                    # (e.g., optional dependency in older versions or import errors).
-                    ctx = []
+                # difference is expected to be negligible given the simplicity of the
+                # TF-IDF implementation. If benchmarks show significant overhead, consider
+                # switching to a batched approach similar to compute_ragas_proxy_metrics.
+                from sklearn.feature_extraction.text import TfidfVectorizer
+                from sklearn.metrics.pairwise import cosine_similarity
 
                 if ctx:
                     corpus = list(dict.fromkeys([c for c in ctx if c]))  # de-dup preserve order
@@ -590,11 +586,6 @@ def compute_ragas_proxy_metrics(
     
     **Requirements:**
     Requires scikit-learn for TF-IDF vectorization and cosine similarity calculations.
-    Returns an empty dict if scikit-learn is not available.
-    
-    **Note:**
-    While scikit-learn is a listed dependency, this function gracefully handles
-    import failures to maintain backward compatibility.
     """
     n = min(len(questions), len(answers), len(contexts))
     if n == 0:
@@ -604,13 +595,8 @@ def compute_ragas_proxy_metrics(
     if len(gt) < n:
         gt = list(gt) + [None] * (n - len(gt))
 
-    try:
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        from sklearn.metrics.pairwise import cosine_similarity
-    except ImportError:
-        # scikit-learn is required for RAGAS proxy metrics.
-        # If not available, return empty dict to signal metrics cannot be computed.
-        return {}
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
 
     # Build a global vectorizer for stability across samples.
     corpus: list[str] = []
