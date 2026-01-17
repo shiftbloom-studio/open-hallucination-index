@@ -242,25 +242,67 @@ class HallucinationLoader:
         label = True  # Default to factual
         context = ""
         question = ""
+        answer = ""
         hallucination_type = None
         
-        # Extract text content (try multiple field names)
-        for field in ["answer", "text", "claim", "statement", "response", "output"]:
-            if field in entry and entry[field]:
-                text = str(entry[field]).strip()
+        # Extract answer first (highest priority for verification)
+        for field_name in ["answer", "response", "output"]:
+            if field_name in entry and entry[field_name]:
+                answer = str(entry[field_name]).strip()
+                break
+        
+        # Extract general text content (fallback)
+        for field_name in ["text", "claim", "statement"]:
+            if field_name in entry and entry[field_name]:
+                text = str(entry[field_name]).strip()
                 break
         
         # Extract context if available
-        for field in ["context", "document", "passage", "source"]:
-            if field in entry and entry[field]:
-                context = str(entry[field]).strip()
+        for field_name in ["context", "document", "passage", "source"]:
+            if field_name in entry and entry[field_name]:
+                context = str(entry[field_name]).strip()
                 break
         
         # Extract question if available
-        for field in ["question", "query", "input", "prompt"]:
-            if field in entry and entry[field]:
-                question = str(entry[field]).strip()
+        for field_name in ["question", "query", "input", "prompt"]:
+            if field_name in entry and entry[field_name]:
+                question = str(entry[field_name]).strip()
                 break
+        
+        # Determine final text to verify:
+        # Priority: answer > text (but skip standalone questions)
+        if answer:
+            # We have an explicit answer field - use it
+            text = answer
+        elif text:
+            # Check if text is actually a question (ends with ?) without an answer
+            # Skip these as they can't be verified directly
+            if text.strip().endswith('?'):
+                if question and not answer:
+                    # This is a question-only entry, skip it
+                    return None
+                # Otherwise the text field might contain "Q: ... A: ..." format
+                # Keep it for now
+        else:
+            # No valid text content
+            return None
+        
+        # Skip entries that are meta-responses about inability to answer
+        # These are common in RAG datasets when the system couldn't answer
+        text_lower = text.lower()
+        skip_patterns = [
+            "cannot be answered",
+            "not enough information",
+            "insufficient context",
+            "unable to answer",
+            "don't have enough",
+            "cannot determine",
+            "not provided in the",
+            "information is not available",
+        ]
+        if any(pattern in text_lower for pattern in skip_patterns):
+            # This is a meta-response, not an actual claim to verify
+            return None
         
         # Determine label (hallucination vs factual)
         # Try multiple label field names and formats
