@@ -30,21 +30,21 @@ logger = logging.getLogger(__name__)
 class OHIEvaluator(BaseEvaluator):
     """
     Evaluator using the OHI API for claim verification.
-    
+
     Uses the full OHI pipeline:
     - Hybrid graph + vector search
     - MCP knowledge sources (based on tier)
     - Claim decomposition
     - Evidence aggregation
-    
+
     Tiers:
     - local: Only local sources (Neo4j + Qdrant) - fastest
     - default: Local first, MCP fallback if insufficient
     - max: All sources for maximum evidence coverage
     """
-    
+
     name = "OHI"
-    
+
     def __init__(
         self,
         config: ComparisonBenchmarkConfig,
@@ -67,17 +67,19 @@ class OHIEvaluator(BaseEvaluator):
         self.max_concurrency = min(5, config.concurrency)
         self.max_retries = 3  # Retry failed requests
         self.retry_delay = 0.5  # Initial retry delay in seconds
-        
+
         # Log API key status
         if config.ohi_api_key:
             logger.info(f"{self.name}: API key configured (length: {len(config.ohi_api_key)})")
         else:
-            logger.warning(f"{self.name}: No API key configured - ensure API_API_KEY env var is set")
-        
+            logger.warning(
+                f"{self.name}: No API key configured - ensure API_API_KEY env var is set"
+            )
+
         # Persistent HTTP client
         self._client: httpx.AsyncClient | None = None
         self._client_lock = asyncio.Lock()  # Ensure thread-safe client access
-    
+
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client with proper connection pooling."""
         async with self._client_lock:
@@ -104,7 +106,7 @@ class OHIEvaluator(BaseEvaluator):
                     transport=httpx.AsyncHTTPTransport(retries=1),
                 )
             return self._client
-    
+
     async def close(self) -> None:
         """Close the HTTP client and free resources."""
         async with self._client_lock:
@@ -112,7 +114,7 @@ class OHIEvaluator(BaseEvaluator):
                 logger.info(f"{self.name}: Closing HTTP client")
                 await self._client.aclose()
                 self._client = None
-    
+
     async def health_check(self) -> bool:
         """Check if OHI API is healthy."""
         try:
@@ -124,7 +126,7 @@ class OHIEvaluator(BaseEvaluator):
             return response.status_code == 200
         except Exception:
             return False
-    
+
     async def _make_request(
         self,
         payload: dict,
@@ -133,20 +135,20 @@ class OHIEvaluator(BaseEvaluator):
     ) -> httpx.Response:
         """
         Make HTTP request with retry logic.
-        
+
         Args:
             payload: Request payload
             headers: Request headers
             attempt: Current retry attempt (1-indexed)
-            
+
         Returns:
             httpx.Response object
-            
+
         Raises:
             httpx.HTTPError: If all retries fail
         """
         client = await self._get_client()
-        
+
         try:
             response = await client.post(
                 self.verify_url,
@@ -154,14 +156,14 @@ class OHIEvaluator(BaseEvaluator):
                 headers=headers,
             )
             return response
-            
+
         except (httpx.ConnectError, httpx.PoolTimeout, httpx.ConnectTimeout) as e:
             if attempt >= self.max_retries:
                 logger.error(
                     f"{self.name}: Connection failed after {attempt} attempts: {type(e).__name__}: {e}"
                 )
                 raise
-            
+
             # Exponential backoff
             delay = self.retry_delay * (2 ** (attempt - 1))
             logger.warning(
@@ -170,11 +172,11 @@ class OHIEvaluator(BaseEvaluator):
             )
             await asyncio.sleep(delay)
             return await self._make_request(payload, headers, attempt + 1)
-        
+
         except httpx.TimeoutException as e:
             logger.error(f"{self.name}: Request timeout: {e}")
             raise
-        
+
         except Exception as e:
             logger.error(f"{self.name}: Unexpected error: {type(e).__name__}: {e}")
             raise
@@ -182,15 +184,15 @@ class OHIEvaluator(BaseEvaluator):
     async def verify(self, claim: str) -> EvaluatorResult:
         """
         Verify a claim using OHI API with retry logic.
-        
+
         Args:
             claim: The claim text to verify.
-            
+
         Returns:
             EvaluatorResult with OHI verification results.
         """
         start_time = time.perf_counter()
-        
+
         try:
             payload = {
                 "text": claim,
@@ -201,32 +203,32 @@ class OHIEvaluator(BaseEvaluator):
                 "use_cache": False,  # Disable cache for accurate benchmarking
                 "skip_decomposition": True,  # Treat input as single claim, no decomposition
             }
-            
+
             headers = {}
             if self.config.ohi_api_key:
                 headers["X-API-Key"] = self.config.ohi_api_key
             else:
                 logger.debug(f"{self.name}: Making request without API key")
-            
+
             # Disable pre-checks for benchmarking
             headers["X-Benchmark-Mode"] = "true"
-            
+
             response = await self._make_request(payload, headers)
-            
+
             latency_ms = (time.perf_counter() - start_time) * 1000
-            
+
             if response.status_code != 200:
                 # Log response details for debugging
                 try:
                     error_detail = response.text[:500]  # First 500 chars
                 except Exception:
                     error_detail = "<unable to read response>"
-                
+
                 logger.error(
                     f"{self.name}: API error - Status {response.status_code}, "
                     f"URL: {self.verify_url}, Detail: {error_detail}"
                 )
-                
+
                 # Treat filter rejections as non-error unverifiable for benchmarks
                 if response.status_code in {403, 422}:
                     return EvaluatorResult(
@@ -237,7 +239,7 @@ class OHIEvaluator(BaseEvaluator):
                         evaluator=self.name,
                         metadata={"api_status": response.status_code},
                     )
-                
+
                 # 401 indicates authentication failure
                 if response.status_code == 401:
                     return EvaluatorResult(
@@ -257,21 +259,19 @@ class OHIEvaluator(BaseEvaluator):
                     evaluator=self.name,
                     error=f"API error {response.status_code}: {error_detail[:100]}",
                 )
-            
+
             data = response.json()
-            
+
             # Parse OHI response
             trust_score_raw = data.get("trust_score", 0.0)
             if isinstance(trust_score_raw, dict):
                 trust_score = float(
-                    trust_score_raw.get("overall")
-                    or trust_score_raw.get("score")
-                    or 0.0
+                    trust_score_raw.get("overall") or trust_score_raw.get("score") or 0.0
                 )
             else:
                 trust_score = float(trust_score_raw)
             claims_data = data.get("claims", [])
-            
+
             # Determine verdict from trust score
             if trust_score >= 0.7:
                 verdict = VerificationVerdict.SUPPORTED
@@ -281,7 +281,7 @@ class OHIEvaluator(BaseEvaluator):
                 verdict = VerificationVerdict.UNVERIFIABLE
             else:
                 verdict = VerificationVerdict.REFUTED
-            
+
             # Extract evidence from multiple possible locations in response
             evidence: list[EvidenceItem] = []
 
@@ -347,7 +347,7 @@ class OHIEvaluator(BaseEvaluator):
                     for ev in agg_sources:
                         if isinstance(ev, dict):
                             evidence.append(_extract_evidence_item(ev))
-            
+
             return EvaluatorResult(
                 claim=claim,
                 verdict=verdict,
@@ -362,12 +362,10 @@ class OHIEvaluator(BaseEvaluator):
                     "trust_score_raw": trust_score_raw,
                 },
             )
-            
+
         except httpx.TimeoutException as e:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                f"{self.name}: Request timeout after {latency_ms:.0f}ms: {e}"
-            )
+            logger.error(f"{self.name}: Request timeout after {latency_ms:.0f}ms: {e}")
             return EvaluatorResult(
                 claim=claim,
                 verdict=VerificationVerdict.UNVERIFIABLE,
@@ -378,9 +376,7 @@ class OHIEvaluator(BaseEvaluator):
             )
         except (httpx.ConnectError, httpx.PoolTimeout, httpx.NetworkError) as e:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                f"{self.name}: Connection error: {type(e).__name__}: {e}"
-            )
+            logger.error(f"{self.name}: Connection error: {type(e).__name__}: {e}")
             return EvaluatorResult(
                 claim=claim,
                 verdict=VerificationVerdict.UNVERIFIABLE,
@@ -403,16 +399,16 @@ class OHIEvaluator(BaseEvaluator):
                 evaluator=self.name,
                 error=f"{type(e).__name__}: {str(e)[:200]}",
             )
-    
+
     async def decompose_and_verify(self, text: str) -> FActScoreResult:
         """
         Decompose text and verify each atomic fact using OHI.
-        
+
         OHI's claim decomposer extracts atomic facts,
         then each is verified individually.
         """
         start_time = time.perf_counter()
-        
+
         try:
             # First, get claim decomposition
             payload = {
@@ -422,18 +418,18 @@ class OHIEvaluator(BaseEvaluator):
                 "target_sources": 10,
                 "use_cache": False,  # Disable cache for accurate benchmarking
             }
-            
+
             headers = {}
             if self.config.ohi_api_key:
                 headers["X-API-Key"] = self.config.ohi_api_key
-            
+
             # Disable pre-checks for benchmarking
             headers["X-Benchmark-Mode"] = "true"
-            
+
             response = await self._make_request(payload, headers)
-            
+
             latency_ms = (time.perf_counter() - start_time) * 1000
-            
+
             if response.status_code != 200:
                 return FActScoreResult(
                     original_text=text,
@@ -442,10 +438,10 @@ class OHIEvaluator(BaseEvaluator):
                     evaluator=self.name,
                     error=f"API error: {response.status_code}",
                 )
-            
+
             data = response.json()
             claims_data = data.get("claims", [])
-            
+
             # Convert OHI claims to atomic facts
             atomic_facts: list[AtomicFact] = []
             for i, claim_data in enumerate(claims_data):
@@ -455,7 +451,11 @@ class OHIEvaluator(BaseEvaluator):
                 # Map OHI status to verified boolean
                 # Both "supported" and "partially_supported" count as verified for FActScore
                 status_lower = str(claim_status).lower().replace("_", "-")
-                verified = status_lower in ("supported", "partially-supported", "partially_supported")
+                verified = status_lower in (
+                    "supported",
+                    "partially-supported",
+                    "partially_supported",
+                )
 
                 # Extract evidence from trace
                 trace = claim_data.get("trace") or {}
@@ -470,22 +470,24 @@ class OHIEvaluator(BaseEvaluator):
                     )
                     for ev in [*supporting, *refuting]
                 ]
-                
-                atomic_facts.append(AtomicFact(
-                    text=claim_text,
-                    source_text=text,
-                    index=i,
-                    verified=verified,
-                    evidence=evidence,
-                ))
-            
+
+                atomic_facts.append(
+                    AtomicFact(
+                        text=claim_text,
+                        source_text=text,
+                        index=i,
+                        verified=verified,
+                        evidence=evidence,
+                    )
+                )
+
             return FActScoreResult(
                 original_text=text,
                 atomic_facts=atomic_facts,
                 latency_ms=latency_ms,
                 evaluator=self.name,
             )
-            
+
         except Exception as e:
             latency_ms = (time.perf_counter() - start_time) * 1000
             return FActScoreResult(

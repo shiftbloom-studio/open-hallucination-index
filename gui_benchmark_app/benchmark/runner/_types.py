@@ -16,9 +16,10 @@ from typing import Any
 class ColorScheme:
     """
     Consistent color scheme for console output.
-    
+
     Matches ConsoleReporter styling for visual consistency.
     """
+
     good: str = "green"
     warn: str = "yellow"
     bad: str = "red"
@@ -35,10 +36,10 @@ COLORS = ColorScheme()
 class LiveStats:
     """
     Real-time benchmark statistics tracked during execution.
-    
+
     This dataclass serves as the single source of truth for all
     progress tracking, shared between the display and executor.
-    
+
     Attributes:
         total_evaluators: Number of evaluators to benchmark
         completed_evaluators: Number of evaluators completed
@@ -55,30 +56,31 @@ class LiveStats:
         total_processed: Total items processed across all tasks
         evaluator_results: Per-evaluator metrics for display
     """
+
     # Overall progress
     total_evaluators: int = 0
     completed_evaluators: int = 0
     current_evaluator: str = ""
     current_metric: str = ""
-    
+
     # Current task progress
     current_total: int = 0
     current_completed: int = 0
     current_correct: int = 0
     current_errors: int = 0
-    
+
     # Timing
     start_time: float = field(default_factory=time.perf_counter)
     current_latencies: list[float] = field(default_factory=list)
-    
+
     # Accumulated results
     correct: int = 0
     errors: int = 0
     total_processed: int = 0
-    
+
     # Per-evaluator results for display
     evaluator_results: dict[str, dict[str, Any]] = field(default_factory=dict)
-    
+
     def reset_task(self) -> None:
         """Reset task-level counters for a new task."""
         self.current_total = 0
@@ -92,10 +94,11 @@ class LiveStats:
 class TaskResult:
     """
     Result from a single benchmark task execution.
-    
+
     Generic container for any benchmark result that needs
     latency tracking and error handling.
     """
+
     latency_ms: float
     is_correct: bool
     error: str | None = None
@@ -106,10 +109,11 @@ class TaskResult:
 class BenchmarkContext:
     """
     Execution context passed to benchmark methods.
-    
+
     Encapsulates all dependencies needed by benchmark execution,
     enabling clean function signatures and testability.
     """
+
     max_latency_ms: float
     concurrency: int
     warmup_requests: int = 3

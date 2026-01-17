@@ -152,7 +152,9 @@ class MarkdownReporter(BaseReporter):
             tradeoff_line = f"- 📌 **Lead vs #2:** ΔF1={delta:+.3f}"
             if best_p95 is not None and p95b is not None:
                 faster = "faster" if float(best_p95) < float(p95b) else "slower"
-                tradeoff_line += f", tail latency is **{faster}** (P95 {self._ms(best_p95)} vs {self._ms(p95b)})"
+                tradeoff_line += (
+                    f", tail latency is **{faster}** (P95 {self._ms(best_p95)} vs {self._ms(p95b)})"
+                )
 
         # Best latency strategy (by P95)
         p95_rows = [(s, p95) for (s, _f1, _a, _h, _p50, p95, _e) in rows if p95 is not None]
@@ -160,7 +162,9 @@ class MarkdownReporter(BaseReporter):
         if p95_rows:
             p95_rows.sort(key=lambda x: float(x[1]))
             fastest_s, fastest_p95 = p95_rows[0]
-            fastest_line = f"- ⚡ **Lowest tail latency (P95):** `{fastest_s}` (P95={self._ms(fastest_p95)})"
+            fastest_line = (
+                f"- ⚡ **Lowest tail latency (P95):** `{fastest_s}` (P95={self._ms(fastest_p95)})"
+            )
 
         return [
             "## Key Insights",
@@ -283,9 +287,9 @@ class MarkdownReporter(BaseReporter):
 
             badge = "🏆" if strat == best else ""
             lines.append(
-                f"| {i} | {badge} `{strat}` | {self._pct(getattr(cm,'accuracy',None))} | {self._pct(getattr(cm,'precision',None))} | "
-                f"{self._pct(getattr(cm,'recall',None))} | {self._fmt(getattr(cm,'f1_score',None),'.3f')} | {self._fmt(getattr(cm,'mcc',None),'.3f')} | "
-                f"{self._fmt(auc,'.3f')} | {self._pct(getattr(cm,'hallucination_pass_rate',None))} | {self._ms(p50)} | {self._ms(p95)} | {getattr(sr,'error_count',0)} |"
+                f"| {i} | {badge} `{strat}` | {self._pct(getattr(cm, 'accuracy', None))} | {self._pct(getattr(cm, 'precision', None))} | "
+                f"{self._pct(getattr(cm, 'recall', None))} | {self._fmt(getattr(cm, 'f1_score', None), '.3f')} | {self._fmt(getattr(cm, 'mcc', None), '.3f')} | "
+                f"{self._fmt(auc, '.3f')} | {self._pct(getattr(cm, 'hallucination_pass_rate', None))} | {self._ms(p50)} | {self._ms(p95)} | {getattr(sr, 'error_count', 0)} |"
             )
 
         lines.append("")
@@ -311,7 +315,9 @@ class MarkdownReporter(BaseReporter):
         selected = preferred if preferred else pngs
 
         lines = ["## Charts", ""]
-        lines.append("> Tip: These images are embedded if your Markdown renderer supports local relative paths.")
+        lines.append(
+            "> Tip: These images are embedded if your Markdown renderer supports local relative paths."
+        )
         lines.append("")
 
         for p in selected:
@@ -348,12 +354,14 @@ class MarkdownReporter(BaseReporter):
                 lines.append("|--------|-----|----|---------|---|")
 
                 # sort by n desc
-                domains = sorted(by_domain.keys(), key=lambda d: getattr(by_domain[d], "total", 0), reverse=True)
+                domains = sorted(
+                    by_domain.keys(), key=lambda d: getattr(by_domain[d], "total", 0), reverse=True
+                )
                 for domain in domains:
                     cm = by_domain[domain]
                     lines.append(
-                        f"| `{domain}` | {self._pct(getattr(cm,'accuracy',None))} | {self._fmt(getattr(cm,'f1_score',None),'.3f')} | "
-                        f"{self._pct(getattr(cm,'hallucination_pass_rate',None))} | {getattr(cm,'total',0)} |"
+                        f"| `{domain}` | {self._pct(getattr(cm, 'accuracy', None))} | {self._fmt(getattr(cm, 'f1_score', None), '.3f')} | "
+                        f"{self._pct(getattr(cm, 'hallucination_pass_rate', None))} | {getattr(cm, 'total', 0)} |"
                     )
                 lines.append("")
 
@@ -368,8 +376,8 @@ class MarkdownReporter(BaseReporter):
                     if diff in by_diff:
                         cm = by_diff[diff]
                         lines.append(
-                            f"| `{diff}` | {self._pct(getattr(cm,'accuracy',None))} | {self._fmt(getattr(cm,'f1_score',None),'.3f')} | "
-                            f"{self._pct(getattr(cm,'hallucination_pass_rate',None))} | {getattr(cm,'total',0)} |"
+                            f"| `{diff}` | {self._pct(getattr(cm, 'accuracy', None))} | {self._fmt(getattr(cm, 'f1_score', None), '.3f')} | "
+                            f"{self._pct(getattr(cm, 'hallucination_pass_rate', None))} | {getattr(cm, 'total', 0)} |"
                         )
                 lines.append("")
 
@@ -382,12 +390,12 @@ class MarkdownReporter(BaseReporter):
                 lines.append("| Type | Acc | F1 | Halluc. | n |")
                 lines.append("|------|-----|----|---------|---|")
                 lines.append(
-                    f"| `single` | {self._pct(getattr(single,'accuracy',None))} | {self._fmt(getattr(single,'f1_score',None),'.3f')} | "
-                    f"{self._pct(getattr(single,'hallucination_pass_rate',None))} | {getattr(single,'total',0)} |"
+                    f"| `single` | {self._pct(getattr(single, 'accuracy', None))} | {self._fmt(getattr(single, 'f1_score', None), '.3f')} | "
+                    f"{self._pct(getattr(single, 'hallucination_pass_rate', None))} | {getattr(single, 'total', 0)} |"
                 )
                 lines.append(
-                    f"| `multi` | {self._pct(getattr(multi,'accuracy',None))} | {self._fmt(getattr(multi,'f1_score',None),'.3f')} | "
-                    f"{self._pct(getattr(multi,'hallucination_pass_rate',None))} | {getattr(multi,'total',0)} |"
+                    f"| `multi` | {self._pct(getattr(multi, 'accuracy', None))} | {self._fmt(getattr(multi, 'f1_score', None), '.3f')} | "
+                    f"{self._pct(getattr(multi, 'hallucination_pass_rate', None))} | {getattr(multi, 'total', 0)} |"
                 )
                 lines.append("")
 
@@ -410,8 +418,8 @@ class MarkdownReporter(BaseReporter):
             cal = getattr(sr, "calibration", None)
             roc = getattr(sr, "roc", None)
             lines.append(
-                f"| `{strat}` | {self._fmt(getattr(cal,'brier_score',None),'.4f')} | {self._fmt(getattr(cal,'ece',None),'.4f')} | "
-                f"{self._fmt(getattr(cal,'mce',None),'.4f')} | {self._fmt(getattr(roc,'optimal_threshold',None),'.3f')} | {self._fmt(getattr(roc,'youden_j',None),'.3f')} |"
+                f"| `{strat}` | {self._fmt(getattr(cal, 'brier_score', None), '.4f')} | {self._fmt(getattr(cal, 'ece', None), '.4f')} | "
+                f"{self._fmt(getattr(cal, 'mce', None), '.4f')} | {self._fmt(getattr(roc, 'optimal_threshold', None), '.3f')} | {self._fmt(getattr(roc, 'youden_j', None), '.3f')} |"
             )
 
         lines.append("")
@@ -450,10 +458,10 @@ class MarkdownReporter(BaseReporter):
             for _, comp in comparisons.items():
                 sig = "✓" if getattr(comp, "is_significant", False) else "✗"
                 lines.append(
-                    f"| `{getattr(comp,'strategy_a',None)}` vs `{getattr(comp,'strategy_b',None)}` | "
-                    f"{self._fmt(getattr(comp,'mcnemar_chi2',None),'.2f')} | {self._fmt(getattr(comp,'mcnemar_p_value',None),'.4f')} | "
-                    f"{self._fmt(getattr(comp,'delong_z',None),'.2f')} | {self._fmt(getattr(comp,'delong_p_value',None),'.4f')} | "
-                    f"{self._fmt(getattr(comp,'auc_difference',None),'+.3f')} | {sig} |"
+                    f"| `{getattr(comp, 'strategy_a', None)}` vs `{getattr(comp, 'strategy_b', None)}` | "
+                    f"{self._fmt(getattr(comp, 'mcnemar_chi2', None), '.2f')} | {self._fmt(getattr(comp, 'mcnemar_p_value', None), '.4f')} | "
+                    f"{self._fmt(getattr(comp, 'delong_z', None), '.2f')} | {self._fmt(getattr(comp, 'delong_p_value', None), '.4f')} | "
+                    f"{self._fmt(getattr(comp, 'auc_difference', None), '+.3f')} | {sig} |"
                 )
         else:
             lines.extend(

@@ -118,7 +118,12 @@ class JSONReporter(BaseReporter):
         Convert to JSON-safe structures early, reducing reliance on default serializer.
         """
         # Dataclasses / dict-like
-        if is_dataclass(obj) or isinstance(obj, dict) or hasattr(obj, "__dict__") or hasattr(obj, "model_dump"):
+        if (
+            is_dataclass(obj)
+            or isinstance(obj, dict)
+            or hasattr(obj, "__dict__")
+            or hasattr(obj, "model_dump")
+        ):
             return self._to_mapping(obj)
 
         # Collections

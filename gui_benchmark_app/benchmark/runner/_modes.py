@@ -55,7 +55,7 @@ async def benchmark_single_evaluator(
 ) -> EvaluatorMetrics:
     """
     Run all benchmarks for a single evaluator.
-    
+
     Args:
         evaluator: Evaluator to benchmark
         display: Live display for progress
@@ -63,13 +63,13 @@ async def benchmark_single_evaluator(
         config: Benchmark configuration
         cache: Cache manager for flush operations
         max_latency_ms: Maximum latency threshold
-        
+
     Returns:
         EvaluatorMetrics with all results
     """
     metrics = EvaluatorMetrics(evaluator_name=evaluator.name)
     concurrency = _effective_concurrency(evaluator, config.concurrency)
-    
+
     # Warmup
     include_factscore = "factscore" in config.metrics
     if hasattr(display, "log_warning"):
@@ -80,7 +80,7 @@ async def benchmark_single_evaluator(
     if hasattr(display, "log_warning"):
         display.log_warning(f"Warmup finished for {evaluator.name}")
     cache.flush(f"after:warmup:{evaluator.name}")
-    
+
     # 1. Hallucination Detection
     if "hallucination" in config.metrics:
         start = time.perf_counter()
@@ -98,7 +98,7 @@ async def benchmark_single_evaluator(
         metrics.latency.latencies_ms.extend(latencies)
         cache.flush(f"after:hallucination:{evaluator.name}")
         logger.info(f"{evaluator.name} hallucination took {time.perf_counter() - start:.2f}s")
-    
+
     # 2. TruthfulQA
     if "truthfulqa" in config.metrics:
         start = time.perf_counter()
@@ -115,7 +115,7 @@ async def benchmark_single_evaluator(
         metrics.latency.latencies_ms.extend(latencies)
         cache.flush(f"after:truthfulqa:{evaluator.name}")
         logger.info(f"{evaluator.name} truthfulqa took {time.perf_counter() - start:.2f}s")
-    
+
     # 3. FActScore
     if "factscore" in config.metrics:
         start = time.perf_counter()
@@ -131,11 +131,11 @@ async def benchmark_single_evaluator(
         metrics.latency.latencies_ms.extend(latencies)
         cache.flush(f"after:factscore:{evaluator.name}")
         logger.info(f"{evaluator.name} factscore took {time.perf_counter() - start:.2f}s")
-    
+
     # Remove first latency (warmup artifact)
     if metrics.latency.latencies_ms:
         metrics.latency.latencies_ms.pop(0)
-    
+
     return metrics
 
 
@@ -162,7 +162,7 @@ async def run_standard_comparison(
 ) -> None:
     """
     Run standard evaluator comparison with live display.
-    
+
     Args:
         evaluators: Dict of evaluator name to instance
         report: Report to populate with results
@@ -175,11 +175,11 @@ async def run_standard_comparison(
         total_evaluators=len(evaluators),
         start_time=time.perf_counter(),
     )
-    
+
     with LiveBenchmarkDisplay(console, stats) as display:
         for evaluator in evaluators.values():
             display.set_evaluator(evaluator.name)
-            
+
             metrics = await benchmark_single_evaluator(
                 evaluator=evaluator,
                 display=display,
@@ -189,7 +189,7 @@ async def run_standard_comparison(
                 max_latency_ms=max_latency_ms,
             )
             report.add_evaluator(metrics)
-            
+
             display.complete_evaluator(
                 evaluator.name,
                 {
@@ -216,9 +216,9 @@ async def run_strategy_comparison(
 ) -> None:
     """
     Run OHI strategy comparison mode.
-    
+
     Tests each verification strategy separately to find the optimal one.
-    
+
     Args:
         evaluators: Dict of evaluator name to instance
         report: Report to populate with results
@@ -227,20 +227,22 @@ async def run_strategy_comparison(
         console: Rich console for output
         max_latency_ms: Maximum latency threshold
     """
-    console.print(Panel(
-        f"[bold yellow]OHI Strategy Comparison Mode[/bold yellow]\n"
-        f"Testing {len(config.ohi_strategies)} strategies",
-        border_style="yellow",
-    ))
-    
+    console.print(
+        Panel(
+            f"[bold yellow]OHI Strategy Comparison Mode[/bold yellow]\n"
+            f"Testing {len(config.ohi_strategies)} strategies",
+            border_style="yellow",
+        )
+    )
+
     non_ohi_count = sum(1 for name in evaluators if name != "ohi")
     total_evals = non_ohi_count + len(config.ohi_strategies)
-    
+
     stats = LiveStats(
         total_evaluators=total_evals,
         start_time=time.perf_counter(),
     )
-    
+
     with LiveBenchmarkDisplay(console, stats) as display:
         # Run non-OHI evaluators first
         for name, evaluator in evaluators.items():
@@ -264,18 +266,18 @@ async def run_strategy_comparison(
                         "p95": metrics.latency.p95,
                     },
                 )
-        
+
         # Run each OHI strategy
         if "ohi" in evaluators:
             from benchmark.evaluators import OHIEvaluator
-            
+
             for strategy in config.ohi_strategies:
                 display.set_evaluator(f"OHI ({strategy})")
-                
+
                 strategy_config = ComparisonBenchmarkConfig.from_env()
                 strategy_config.ohi_strategy = strategy
                 strategy_evaluator = OHIEvaluator(strategy_config)
-                
+
                 try:
                     if await strategy_evaluator.health_check():
                         metrics = await benchmark_single_evaluator(
@@ -316,11 +318,11 @@ async def run_cache_comparison(
 ) -> None:
     """
     Run cache comparison mode with cold vs warm testing.
-    
+
     Tests each evaluator twice:
     1. Cold cache: Cache cleared before run
     2. Warm cache: Cache populated from previous run
-    
+
     Args:
         evaluators: Dict of evaluator name to instance
         report: Report to populate with results
@@ -329,24 +331,25 @@ async def run_cache_comparison(
         console: Rich console for output
         max_latency_ms: Maximum latency threshold
     """
-    console.print(Panel(
-        "[bold yellow]Cache Testing Mode[/bold yellow]\n"
-        "Testing with cold vs warm cache",
-        border_style="yellow",
-    ))
-    
+    console.print(
+        Panel(
+            "[bold yellow]Cache Testing Mode[/bold yellow]\nTesting with cold vs warm cache",
+            border_style="yellow",
+        )
+    )
+
     stats = LiveStats(
         total_evaluators=len(evaluators) * 2,
         start_time=time.perf_counter(),
     )
-    
+
     with LiveBenchmarkDisplay(console, stats) as display:
         for evaluator in evaluators.values():
             # Cold cache test
             display.set_evaluator(f"{evaluator.name} (Cold)")
             deleted = cache.clear_ohi_keys()
             logger.info(f"Cleared {deleted} cache keys")
-            
+
             metrics_cold = await benchmark_single_evaluator(
                 evaluator=evaluator,
                 display=display,
@@ -366,10 +369,10 @@ async def run_cache_comparison(
                     "p95": metrics_cold.latency.p95,
                 },
             )
-            
+
             # Warm cache test
             display.set_evaluator(f"{evaluator.name} (Warm)")
-            
+
             metrics_warm = await benchmark_single_evaluator(
                 evaluator=evaluator,
                 display=display,
@@ -389,7 +392,7 @@ async def run_cache_comparison(
                     "p95": metrics_warm.latency.p95,
                 },
             )
-            
+
             # Log speedup
             if metrics_cold.latency.p50 > 0 and metrics_warm.latency.p50 > 0:
                 speedup = metrics_cold.latency.p50 / metrics_warm.latency.p50
@@ -397,7 +400,7 @@ async def run_cache_comparison(
                     f"Cache speedup for {evaluator.name}: {speedup:.2f}x "
                     f"(P50: {metrics_cold.latency.p50:.0f}ms → {metrics_warm.latency.p50:.0f}ms)"
                 )
-    
+
     # Print summary
     console.print(Rule("📊 Cache Impact Summary", style="cyan"))
     for name in evaluators:

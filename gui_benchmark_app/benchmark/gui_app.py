@@ -188,7 +188,7 @@ class BenchmarkWorker(QThread):
                 "cache_testing": config.cache_testing,
             },
         )
-        
+
         # Emit initial report
         self.report_updated.emit(report)
 
@@ -415,14 +415,14 @@ class BenchmarkWorker(QThread):
     ) -> None:
         """
         Run COMPLETE mode - research-grade comprehensive evaluation.
-        
+
         Loads all available datasets and performs exhaustive testing with
         statistical significance analysis.
         """
         from benchmark.datasets.hallucination_loader import HallucinationLoader
-        
+
         self.log_message.emit("🔬 COMPLETE MODE: Loading comprehensive datasets...")
-        
+
         # Load all datasets
         loader = HallucinationLoader(config.hallucination_dataset)
         try:
@@ -430,65 +430,71 @@ class BenchmarkWorker(QThread):
                 csv_path=config.hallucination_dataset,
                 samples_per_dataset=config.complete_samples_per_dataset,
             )
-            
+
             self.log_message.emit(
                 f"✓ Loaded {complete_dataset.total} cases from {len(complete_dataset.domains)} domains"
             )
-            self.log_message.emit(
-                f"  • Factual: {complete_dataset.factual_count}"
-            )
-            self.log_message.emit(
-                f"  • Hallucinations: {complete_dataset.hallucination_count}"
-            )
-            
+            self.log_message.emit(f"  • Factual: {complete_dataset.factual_count}")
+            self.log_message.emit(f"  • Hallucinations: {complete_dataset.hallucination_count}")
+
             # Update config to use complete dataset
             import tempfile
             import csv as csv_module
-            
+
             # Write combined dataset to temporary file
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', newline='', encoding='utf-8') as tmp:
+            with tempfile.NamedTemporaryFile(
+                mode="w", delete=False, suffix=".csv", newline="", encoding="utf-8"
+            ) as tmp:
                 writer = csv_module.DictWriter(
                     tmp,
-                    fieldnames=['id', 'domain', 'difficulty', 'label', 'text', 'notes', 'hallucination_type', 'source']
+                    fieldnames=[
+                        "id",
+                        "domain",
+                        "difficulty",
+                        "label",
+                        "text",
+                        "notes",
+                        "hallucination_type",
+                        "source",
+                    ],
                 )
                 writer.writeheader()
                 for case in complete_dataset.cases:
-                    writer.writerow({
-                        'id': case.id,
-                        'domain': case.domain,
-                        'difficulty': case.difficulty,
-                        'label': str(case.label),
-                        'text': case.text,
-                        'notes': case.notes,
-                        'hallucination_type': case.hallucination_type or '',
-                        'source': case.source,
-                    })
+                    writer.writerow(
+                        {
+                            "id": case.id,
+                            "domain": case.domain,
+                            "difficulty": case.difficulty,
+                            "label": str(case.label),
+                            "text": case.text,
+                            "notes": case.notes,
+                            "hallucination_type": case.hallucination_type or "",
+                            "source": case.source,
+                        }
+                    )
                 tmp_path = Path(tmp.name)
-            
+
             # Override config for complete mode
             config.hallucination_dataset = tmp_path
             config.hallucination_max_samples = max(
-                complete_dataset.total,
-                config.complete_min_verifications
+                complete_dataset.total, config.complete_min_verifications
             )
-            
+
             # Ensure all metrics are enabled
             config.metrics = ["hallucination", "truthfulqa", "factscore", "latency"]
-            
+
         except Exception as e:
             self.log_message.emit(f"⚠ Error loading complete datasets: {e}")
             self.log_message.emit("Falling back to standard mode...")
             await self._run_standard_comparison(evaluators, report, config, cache, display)
             return
-        
+
         # Run evaluation for each evaluator
         for evaluator in evaluators.values():
             display.set_evaluator(f"{evaluator.name} (COMPLETE)")
-            
-            self.log_message.emit(
-                f"🔬 Running comprehensive evaluation for {evaluator.name}..."
-            )
-            
+
+            self.log_message.emit(f"🔬 Running comprehensive evaluation for {evaluator.name}...")
+
             metrics = await benchmark_single_evaluator(
                 evaluator=evaluator,
                 display=display,
@@ -497,58 +503,60 @@ class BenchmarkWorker(QThread):
                 cache=cache,
                 max_latency_ms=10 * 60 * 1000,  # 10 min timeout for complete mode
             )
-            
+
             metrics.evaluator_name = f"{evaluator.name} (COMPLETE)"
             report.add_evaluator(metrics)
             display.complete_evaluator(
                 f"{evaluator.name} (COMPLETE)",
                 self._summary_payload(metrics),
             )
-            
+
             # Add complete mode metadata to report
-            if not hasattr(report, 'complete_mode_metadata'):
+            if not hasattr(report, "complete_mode_metadata"):
                 report.complete_mode_metadata = {}  # type: ignore
-            
+
             report.complete_mode_metadata[evaluator.name] = {  # type: ignore
-                'total_datasets': len(set(case.source for case in complete_dataset.cases)),
-                'total_cases': complete_dataset.total,
-                'factual_cases': complete_dataset.factual_count,
-                'hallucination_cases': complete_dataset.hallucination_count,
-                'domains': list(complete_dataset.domains),
-                'samples_per_dataset': config.complete_samples_per_dataset,
+                "total_datasets": len(set(case.source for case in complete_dataset.cases)),
+                "total_cases": complete_dataset.total,
+                "factual_cases": complete_dataset.factual_count,
+                "hallucination_cases": complete_dataset.hallucination_count,
+                "domains": list(complete_dataset.domains),
+                "samples_per_dataset": config.complete_samples_per_dataset,
             }
-            
+
             self.report_updated.emit(report)
-        
+
         # Generate comprehensive report with statistical analysis
         if config.complete_statistical_significance:
             self.log_message.emit("📊 Computing statistical significance...")
             report = self._add_statistical_analysis(report, config)
             self.report_updated.emit(report)
-            
+
             # Generate research-grade markdown report
             try:
                 from benchmark.reporters.research_report import ResearchReportGenerator
-                
+
                 self.log_message.emit("📝 Generating research-grade report...")
                 report_gen = ResearchReportGenerator(report, config.output_dir)
                 statements = report_gen.generate_performance_statements()
                 report_path = report_gen.save_report(statements)
-                
+
                 self.log_message.emit(f"✓ Research report saved: {report_path.name}")
-                
+
                 # Log executive summary
                 best = statements[0]
                 self.log_message.emit("")
                 self.log_message.emit("=== COMPLETE MODE RESULTS ===")
                 self.log_message.emit(f"Top System: {best.evaluator_name}")
-                self.log_message.emit(f"Accuracy: {best.primary_value:.1%} (95% CI: [{best.confidence_interval[0]:.1%}, {best.confidence_interval[1]:.1%}])")
+                self.log_message.emit(
+                    f"Accuracy: {best.primary_value:.1%} (95% CI: [{best.confidence_interval[0]:.1%}, {best.confidence_interval[1]:.1%}])"
+                )
                 self.log_message.emit(f"Recommendation: {best.recommendation[:100]}...")
                 self.log_message.emit("=" * 30)
-                
+
             except Exception as e:
                 self.log_message.emit(f"⚠ Error generating research report: {e}")
-        
+
         # Clean up temporary file
         try:
             tmp_path.unlink()
@@ -562,47 +570,47 @@ class BenchmarkWorker(QThread):
     ) -> ComparisonReport:
         """
         Add statistical significance testing to report.
-        
+
         Computes:
         - Bootstrap confidence intervals
         - Paired t-tests for accuracy comparisons
         - Effect sizes (Cohen's d)
         - McNemar's test for classification differences
         """
-        
-        if not hasattr(report, 'statistical_analysis'):
+
+        if not hasattr(report, "statistical_analysis"):
             report.statistical_analysis = {}  # type: ignore
-        
+
         # Get all evaluator results
         evaluator_names = list(report.evaluators.keys())
-        
+
         if len(evaluator_names) < 2:
             return report
-        
+
         # Perform pairwise comparisons
         comparisons = []
         for i, eval1 in enumerate(evaluator_names):
-            for eval2 in evaluator_names[i+1:]:
+            for eval2 in evaluator_names[i + 1 :]:
                 metrics1 = report.evaluators[eval1]
                 metrics2 = report.evaluators[eval2]
-                
+
                 # Get accuracy values
                 acc1 = metrics1.hallucination.accuracy
                 acc2 = metrics2.hallucination.accuracy
-                
+
                 # Compute effect size (Cohen's d)
                 # Using pooled standard deviation estimate
                 n1 = metrics1.hallucination.total
                 n2 = metrics2.hallucination.total
-                
+
                 if n1 > 0 and n2 > 0:
                     # Estimate standard deviations from accuracy
                     std1 = (acc1 * (1 - acc1)) ** 0.5
                     std2 = (acc2 * (1 - acc2)) ** 0.5
                     pooled_std = ((std1**2 + std2**2) / 2) ** 0.5
-                    
+
                     cohens_d = (acc1 - acc2) / pooled_std if pooled_std > 0 else 0.0
-                    
+
                     # Interpret effect size
                     if abs(cohens_d) < 0.2:
                         effect_interp = "negligible"
@@ -612,40 +620,42 @@ class BenchmarkWorker(QThread):
                         effect_interp = "medium"
                     else:
                         effect_interp = "large"
-                    
-                    comparisons.append({
-                        'evaluator_1': eval1,
-                        'evaluator_2': eval2,
-                        'accuracy_diff': acc1 - acc2,
-                        'cohens_d': cohens_d,
-                        'effect_size': effect_interp,
-                        'better': eval1 if acc1 > acc2 else eval2,
-                    })
-        
-        report.statistical_analysis['pairwise_comparisons'] = comparisons  # type: ignore
-        
+
+                    comparisons.append(
+                        {
+                            "evaluator_1": eval1,
+                            "evaluator_2": eval2,
+                            "accuracy_diff": acc1 - acc2,
+                            "cohens_d": cohens_d,
+                            "effect_size": effect_interp,
+                            "better": eval1 if acc1 > acc2 else eval2,
+                        }
+                    )
+
+        report.statistical_analysis["pairwise_comparisons"] = comparisons  # type: ignore
+
         # Add confidence intervals using bootstrap
         for eval_name, metrics in report.evaluators.items():
             acc = metrics.hallucination.accuracy
             n = metrics.hallucination.total
-            
+
             if n > 0:
                 # Wilson score interval for binomial proportion
                 z = 1.96  # 95% confidence
                 p = acc
                 denominator = 1 + z**2 / n
-                center = (p + z**2 / (2*n)) / denominator
-                margin = z * ((p * (1-p) / n + z**2 / (4*n**2)) ** 0.5) / denominator
-                
-                if not hasattr(report, 'confidence_intervals'):
+                center = (p + z**2 / (2 * n)) / denominator
+                margin = z * ((p * (1 - p) / n + z**2 / (4 * n**2)) ** 0.5) / denominator
+
+                if not hasattr(report, "confidence_intervals"):
                     report.confidence_intervals = {}  # type: ignore
-                
+
                 report.confidence_intervals[eval_name] = {  # type: ignore
-                    'accuracy_lower': max(0.0, center - margin),
-                    'accuracy_upper': min(1.0, center + margin),
-                    'confidence_level': 0.95,
+                    "accuracy_lower": max(0.0, center - margin),
+                    "accuracy_upper": min(1.0, center + margin),
+                    "confidence_level": 0.95,
                 }
-        
+
         return report
 
     async def _generate_outputs(
@@ -661,9 +671,7 @@ class BenchmarkWorker(QThread):
         charts_reporter = ChartsReporter(output_dir, dpi=config.chart_dpi)
         # Generate all individual comparison charts (not just dashboard)
         chart_files = charts_reporter.generate_comparison_charts(
-            report, 
-            prefix=f"{report.run_id}_",
-            consolidated=False
+            report, prefix=f"{report.run_id}_", consolidated=False
         )
         # Log each generated chart
         for chart_path in chart_files:
@@ -689,15 +697,17 @@ class BenchmarkWorker(QThread):
     @staticmethod
     def _summary_payload(metrics: Any) -> dict[str, Any]:
         # Derived metrics: faithfulness measures claim-evidence relevance
-        rag = metrics.hallucination.ragas_proxy_metrics() if hasattr(metrics, 'hallucination') else {}
+        rag = (
+            metrics.hallucination.ragas_proxy_metrics() if hasattr(metrics, "hallucination") else {}
+        )
         return {
             "accuracy": metrics.hallucination.accuracy,
             "f1": metrics.hallucination.f1_score,
             "hpr": metrics.hallucination.hallucination_pass_rate,
-            "aurc": getattr(metrics.hallucination, 'aurc', 0.0),
-            "eaurc": getattr(metrics.hallucination, 'eaurc', 0.0),
+            "aurc": getattr(metrics.hallucination, "aurc", 0.0),
+            "eaurc": getattr(metrics.hallucination, "eaurc", 0.0),
             # Evidence relevance: how well evidence supports the claim (TF-IDF based)
-            "evidence_relevance": float(rag.get('faithfulness', 0.0)) if rag else 0.0,
+            "evidence_relevance": float(rag.get("faithfulness", 0.0)) if rag else 0.0,
             "p50": metrics.latency.p50,
             "p95": metrics.latency.p95,
             "truthfulqa": metrics.truthfulqa.accuracy,
@@ -819,19 +829,19 @@ class BenchmarkWindow(QMainWindow):
             "• Statistical significance testing\n"
             "• Multi-domain analysis"
         )
-        
+
         # Complete mode parameters
         self.complete_samples = QSpinBox()
         self.complete_samples.setRange(50, 500)
         self.complete_samples.setValue(200)
         self.complete_samples.setSuffix(" per dataset")
         self.complete_samples.setEnabled(False)
-        
+
         # Enable/disable complete mode parameters based on checkbox
         self.complete_mode.toggled.connect(
             lambda checked: self.complete_samples.setEnabled(checked)
         )
-        
+
         # Disable other special modes when complete mode is enabled
         self.complete_mode.toggled.connect(
             lambda checked: self.ohi_all_strategies.setEnabled(not checked)
@@ -882,11 +892,11 @@ class BenchmarkWindow(QMainWindow):
 
         self.status_label = QLabel("Idle")
         layout.addWidget(self.status_label)
-        
+
         # Progress bars
         progress_group = QGroupBox("Progress")
         progress_layout = QVBoxLayout(progress_group)
-        
+
         # Overall progress bar
         overall_layout = QVBoxLayout()
         self.overall_progress_label = QLabel("Overall Progress: 0 / 0 evaluators")
@@ -898,7 +908,7 @@ class BenchmarkWindow(QMainWindow):
         overall_layout.addWidget(self.overall_progress_label)
         overall_layout.addWidget(self.overall_progress_bar)
         progress_layout.addLayout(overall_layout)
-        
+
         # Current run progress bar
         current_layout = QVBoxLayout()
         self.current_progress_label = QLabel("Current Run: 0 / 0 items")
@@ -910,7 +920,7 @@ class BenchmarkWindow(QMainWindow):
         current_layout.addWidget(self.current_progress_label)
         current_layout.addWidget(self.current_progress_bar)
         progress_layout.addLayout(current_layout)
-        
+
         layout.addWidget(progress_group)
         layout.addStretch(1)
 
@@ -947,10 +957,10 @@ class BenchmarkWindow(QMainWindow):
         self.ax_throughput = self.figure.add_subplot(2, 2, 3)
         self.ax_errors = self.figure.add_subplot(2, 2, 4)
 
-        self._line_latency, = self.ax_latency.plot([], [], color="#58a6ff", label="latency ms")
-        self._line_accuracy, = self.ax_accuracy.plot([], [], color="#7ee787", label="accuracy %")
-        self._line_throughput, = self.ax_throughput.plot([], [], color="#f778ba", label="req/s")
-        self._line_errors, = self.ax_errors.plot([], [], color="#ff7b72", label="errors")
+        (self._line_latency,) = self.ax_latency.plot([], [], color="#58a6ff", label="latency ms")
+        (self._line_accuracy,) = self.ax_accuracy.plot([], [], color="#7ee787", label="accuracy %")
+        (self._line_throughput,) = self.ax_throughput.plot([], [], color="#f778ba", label="req/s")
+        (self._line_errors,) = self.ax_errors.plot([], [], color="#ff7b72", label="errors")
 
         for ax, title in [
             (self.ax_latency, "Latency"),
@@ -1032,21 +1042,25 @@ class BenchmarkWindow(QMainWindow):
         controls = QHBoxLayout()
         controls.addWidget(QLabel("Scatter X"))
         self.scatter_x_combo = QComboBox()
-        self.scatter_x_combo.addItems([
-            "P95 latency (ms)",
-            "AURC (lower better)",
-            "Evidence Relevance",
-        ])
+        self.scatter_x_combo.addItems(
+            [
+                "P95 latency (ms)",
+                "AURC (lower better)",
+                "Evidence Relevance",
+            ]
+        )
         controls.addWidget(self.scatter_x_combo)
         controls.addSpacing(12)
         controls.addWidget(QLabel("Scatter Y"))
         self.scatter_y_combo = QComboBox()
-        self.scatter_y_combo.addItems([
-            "Accuracy (%)",
-            "F1 (%)",
-            "Safety (1-HPR)",
-            "Evidence Relevance",
-        ])
+        self.scatter_y_combo.addItems(
+            [
+                "Accuracy (%)",
+                "F1 (%)",
+                "Safety (1-HPR)",
+                "Evidence Relevance",
+            ]
+        )
         controls.addWidget(self.scatter_y_combo)
         controls.addStretch(1)
         layout.addLayout(controls)
@@ -1129,13 +1143,13 @@ class BenchmarkWindow(QMainWindow):
             "complete_mode": self.complete_mode.isChecked(),
             "complete_samples_per_dataset": self.complete_samples.value(),
         }
-        
+
         # Validate COMPLETE mode constraints
         if self.complete_mode.isChecked():
             # Ensure all metrics are enabled in COMPLETE mode
             overrides["metrics"] = ["hallucination", "truthfulqa", "factscore", "latency"]
             self.use_all_metrics.setChecked(True)
-            
+
             # Disable other special modes
             if self.ohi_all_strategies.isChecked() or self.cache_testing.isChecked():
                 self._append_log("⚠ Disabling other special modes for COMPLETE mode")
@@ -1150,7 +1164,7 @@ class BenchmarkWindow(QMainWindow):
         for key, value in overrides.items():
             if hasattr(self._current_config, key):
                 setattr(self._current_config, key, value)
-        
+
         self._worker = BenchmarkWorker(overrides)
         self._worker.stats_updated.connect(self._on_stats_update)
         self._worker.log_message.connect(self._append_log)
@@ -1200,7 +1214,7 @@ class BenchmarkWindow(QMainWindow):
     def _append_log(self, message: str) -> None:
         ts = time.strftime("%H:%M:%S")
         self.log_output.append(f"[{ts}] {message}")
-    
+
     def _on_report_updated(self, report: ComparisonReport) -> None:
         """Store the latest partial report for export."""
         self._current_report = report
@@ -1218,13 +1232,13 @@ class BenchmarkWindow(QMainWindow):
         accuracy = (correct / completed) * 100 if completed else 0.0
         latencies = stats.get("latencies", [])
         latency = latencies[-1] if latencies else 0.0
-        
+
         # Update progress bars
         total_evaluators = stats.get("total_evaluators", 0)
         completed_evaluators = stats.get("completed_evaluators", 0)
         current_evaluator = stats.get("current_evaluator", "")
         current_metric = stats.get("current_metric", "")
-        
+
         # Overall progress
         if total_evaluators > 0:
             self.overall_progress_bar.setMaximum(total_evaluators)
@@ -1235,7 +1249,7 @@ class BenchmarkWindow(QMainWindow):
         else:
             self.overall_progress_bar.setValue(0)
             self.overall_progress_label.setText("Overall Progress: 0 / 0 evaluators")
-        
+
         # Current run progress
         if total > 0:
             self.current_progress_bar.setMaximum(total)
@@ -1304,10 +1318,14 @@ class BenchmarkWindow(QMainWindow):
         self.results_table.setItem(row, 2, QTableWidgetItem(f"{metrics.get('f1', 0):.2%}"))
         self.results_table.setItem(row, 3, QTableWidgetItem(f"{metrics.get('hpr', 0):.2%}"))
         self.results_table.setItem(row, 4, QTableWidgetItem(f"{metrics.get('aurc', 0):.4f}"))
-        self.results_table.setItem(row, 5, QTableWidgetItem(f"{metrics.get('evidence_relevance', 0):.3f}"))
+        self.results_table.setItem(
+            row, 5, QTableWidgetItem(f"{metrics.get('evidence_relevance', 0):.3f}")
+        )
         self.results_table.setItem(row, 6, QTableWidgetItem(f"{metrics.get('p50', 0):.0f}ms"))
         self.results_table.setItem(row, 7, QTableWidgetItem(f"{metrics.get('p95', 0):.0f}ms"))
-        self.results_table.setItem(row, 8, QTableWidgetItem(f"{metrics.get('throughput', 0):.1f}/s"))
+        self.results_table.setItem(
+            row, 8, QTableWidgetItem(f"{metrics.get('throughput', 0):.1f}/s")
+        )
 
         # Right-align numeric columns
         for col in range(1, self.results_table.columnCount()):
@@ -1320,18 +1338,18 @@ class BenchmarkWindow(QMainWindow):
             # Enrich radar with derived metrics
             enriched = dict(summary_scores)
             # AURC is lower-better; map to (0,1] for radar
-            aurc = float(metrics.get('aurc', 0.0))
-            enriched['Selective (1/(1+AURC))'] = 1.0 / (1.0 + max(0.0, aurc))
-            enriched['Evidence Relevance'] = float(metrics.get('evidence_relevance', 0.0))
+            aurc = float(metrics.get("aurc", 0.0))
+            enriched["Selective (1/(1+AURC))"] = 1.0 / (1.0 + max(0.0, aurc))
+            enriched["Evidence Relevance"] = float(metrics.get("evidence_relevance", 0.0))
             self._evaluator_summaries[name] = enriched
             self._evaluator_meta[name] = {
-                'accuracy': float(metrics.get('accuracy', 0.0)),
-                'f1': float(metrics.get('f1', 0.0)),
-                'safety': 1.0 - float(metrics.get('hpr', 0.0)),
-                'p95': float(metrics.get('p95', 0.0)),
-                'throughput': float(metrics.get('throughput', 0.0)),
-                'aurc': float(metrics.get('aurc', 0.0)),
-                'evidence_relevance': float(metrics.get('evidence_relevance', 0.0)),
+                "accuracy": float(metrics.get("accuracy", 0.0)),
+                "f1": float(metrics.get("f1", 0.0)),
+                "safety": 1.0 - float(metrics.get("hpr", 0.0)),
+                "p95": float(metrics.get("p95", 0.0)),
+                "throughput": float(metrics.get("throughput", 0.0)),
+                "aurc": float(metrics.get("aurc", 0.0)),
+                "evidence_relevance": float(metrics.get("evidence_relevance", 0.0)),
             }
             self._update_insights_charts()
 
@@ -1499,14 +1517,14 @@ class BenchmarkWindow(QMainWindow):
             return
 
         radar_keys = [
-            'Accuracy',
-            'F1 Score',
-            'Safety (1-HPR)',
-            'TruthfulQA',
-            'FActScore',
-            'Speed (1/P95)',
-            'Selective (1/(1+AURC))',
-            'Evidence Relevance',
+            "Accuracy",
+            "F1 Score",
+            "Safety (1-HPR)",
+            "TruthfulQA",
+            "FActScore",
+            "Speed (1/P95)",
+            "Selective (1/(1+AURC))",
+            "Evidence Relevance",
         ]
 
         angles = [i / len(radar_keys) * 2 * 3.14159265 for i in range(len(radar_keys))]
@@ -1525,33 +1543,41 @@ class BenchmarkWindow(QMainWindow):
         self.ax_radar.legend(loc="upper right", bbox_to_anchor=(1.2, 1.1), fontsize=8)
 
         # Scatter: user-selectable axes (includes AURC/BEIR/RAGAS/ALCE signals)
-        x_choice = self.scatter_x_combo.currentText() if hasattr(self, 'scatter_x_combo') else 'P95 latency (ms)'
-        y_choice = self.scatter_y_combo.currentText() if hasattr(self, 'scatter_y_combo') else 'Accuracy (%)'
+        x_choice = (
+            self.scatter_x_combo.currentText()
+            if hasattr(self, "scatter_x_combo")
+            else "P95 latency (ms)"
+        )
+        y_choice = (
+            self.scatter_y_combo.currentText()
+            if hasattr(self, "scatter_y_combo")
+            else "Accuracy (%)"
+        )
 
         def x_val(meta: dict) -> float:
-            if x_choice.startswith('P95'):
-                return float(meta.get('p95', 0.0))
-            if x_choice.startswith('AURC'):
-                return float(meta.get('aurc', 0.0))
-            if x_choice.startswith('Evidence'):
-                return float(meta.get('evidence_relevance', 0.0))
-            return float(meta.get('p95', 0.0))
+            if x_choice.startswith("P95"):
+                return float(meta.get("p95", 0.0))
+            if x_choice.startswith("AURC"):
+                return float(meta.get("aurc", 0.0))
+            if x_choice.startswith("Evidence"):
+                return float(meta.get("evidence_relevance", 0.0))
+            return float(meta.get("p95", 0.0))
 
         def y_val(meta: dict) -> float:
-            if y_choice.startswith('Accuracy'):
-                return float(meta.get('accuracy', 0.0)) * 100
-            if y_choice.startswith('F1'):
-                return float(meta.get('f1', 0.0)) * 100
-            if y_choice.startswith('Safety'):
-                return float(meta.get('safety', 0.0)) * 100
-            if y_choice.startswith('Evidence'):
-                return float(meta.get('evidence_relevance', 0.0)) * 100
-            return float(meta.get('accuracy', 0.0)) * 100
+            if y_choice.startswith("Accuracy"):
+                return float(meta.get("accuracy", 0.0)) * 100
+            if y_choice.startswith("F1"):
+                return float(meta.get("f1", 0.0)) * 100
+            if y_choice.startswith("Safety"):
+                return float(meta.get("safety", 0.0)) * 100
+            if y_choice.startswith("Evidence"):
+                return float(meta.get("evidence_relevance", 0.0)) * 100
+            return float(meta.get("accuracy", 0.0)) * 100
 
         for name, meta in self._evaluator_meta.items():
             x = x_val(meta)
             y = y_val(meta)
-            size = max(40.0, float(meta.get('throughput', 0.0)) * 12)
+            size = max(40.0, float(meta.get("throughput", 0.0)) * 12)
             self.ax_scatter.scatter(x, y, s=size, alpha=0.7)
             self.ax_scatter.text(x, y, name, fontsize=8)
 
@@ -1561,21 +1587,21 @@ class BenchmarkWindow(QMainWindow):
         self.ax_scatter.grid(True, alpha=0.2)
 
         self.insights_canvas.draw_idle()
-    
+
     def _export_current_state(self) -> None:
         """Export the current benchmark state to files."""
         if not self._current_report:
             self._append_log("No report data available to export.")
             return
-        
+
         try:
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             filename = f"partial_{timestamp}"
-            
+
             config = self._current_config or ComparisonBenchmarkConfig.from_env()
             output_dir = config.output_dir
             output_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # Export JSON
             json_path = output_dir / f"{filename}_report.json"
             json_payload = self._current_report.to_dict()
@@ -1583,16 +1609,14 @@ class BenchmarkWindow(QMainWindow):
             json_payload["note"] = "This is a partial report from an incomplete benchmark run"
             json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
             self._append_log(f"✓ Exported JSON: {json_path.name}")
-            
+
             # Export charts if we have any evaluator data
             if self._current_report.evaluators:
                 charts_reporter = ChartsReporter(output_dir, dpi=config.chart_dpi)
                 try:
                     # Generate all individual comparison charts (not just dashboard)
                     chart_files = charts_reporter.generate_comparison_charts(
-                        self._current_report,
-                        prefix=f"{filename}_",
-                        consolidated=False
+                        self._current_report, prefix=f"{filename}_", consolidated=False
                     )
                     self._append_log(f"✓ Exported {len(chart_files)} charts:")
                     # Display list of all generated chart filenames
@@ -1600,10 +1624,10 @@ class BenchmarkWindow(QMainWindow):
                         self._append_log(f"  - {chart_path.name}")
                 except Exception as chart_error:
                     self._append_log(f"⚠ Chart generation failed: {chart_error}")
-            
+
             self._append_log(f"✓ Current state exported to: {output_dir}")
             self._refresh_reports_list()
-            
+
         except Exception as exc:
             self._append_log(f"✗ Export failed: {type(exc).__name__}: {exc}")
 

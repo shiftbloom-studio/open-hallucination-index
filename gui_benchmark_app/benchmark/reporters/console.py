@@ -59,7 +59,9 @@ class ConsoleReporter(BaseReporter):
         self.display_summary(report, results)
         return self.console.export_html()
 
-    def display_summary(self, report: "BenchmarkReport", results: list["ResultMetric"] | None = None) -> None:
+    def display_summary(
+        self, report: "BenchmarkReport", results: list["ResultMetric"] | None = None
+    ) -> None:
         """Display full benchmark summary to console."""
         results = results or []
 
@@ -96,7 +98,9 @@ class ConsoleReporter(BaseReporter):
         errors = sum(1 for r in results if getattr(r, "has_error", False)) if results else None
 
         left_lines = []
-        left_lines.append(f"[bold green]✔ Benchmark Complete[/bold green]  [dim]run[/dim] [bold]{run_id}[/bold]")
+        left_lines.append(
+            f"[bold green]✔ Benchmark Complete[/bold green]  [dim]run[/dim] [bold]{run_id}[/bold]"
+        )
         meta_bits = []
         if dataset_size is not None:
             meta_bits.append(f"[dim]dataset[/dim] {dataset_size}")
@@ -156,11 +160,31 @@ class ConsoleReporter(BaseReporter):
         cards = []
         cards.append(self._kpi_card("🏆 Best Strategy", best or "N/A", style="bold cyan"))
         cards.append(self._kpi_card("✅ Valid / Total", f"{valid} / {total}" if total else "N/A"))
-        cards.append(self._kpi_card("⚡ Overall Throughput", f"{overall_rps:.3f} req/s" if overall_rps else "N/A"))
-        cards.append(self._kpi_card("🧪 Best F1", self._fmt_float(f1, ".3f"), style="bold green" if f1 and f1 >= 0.8 else "bold"))
-        cards.append(self._kpi_card("🎯 Best Acc", self._fmt_pct(acc), style="green" if acc and acc >= 0.8 else ""))
+        cards.append(
+            self._kpi_card(
+                "⚡ Overall Throughput", f"{overall_rps:.3f} req/s" if overall_rps else "N/A"
+            )
+        )
+        cards.append(
+            self._kpi_card(
+                "🧪 Best F1",
+                self._fmt_float(f1, ".3f"),
+                style="bold green" if f1 and f1 >= 0.8 else "bold",
+            )
+        )
+        cards.append(
+            self._kpi_card(
+                "🎯 Best Acc", self._fmt_pct(acc), style="green" if acc and acc >= 0.8 else ""
+            )
+        )
         cards.append(self._kpi_card("🧠 MCC", self._fmt_float(mcc, ".3f")))
-        cards.append(self._kpi_card("🧨 Halluc.%", self._fmt_pct(halluc), style="red" if halluc and halluc >= 0.1 else ""))
+        cards.append(
+            self._kpi_card(
+                "🧨 Halluc.%",
+                self._fmt_pct(halluc),
+                style="red" if halluc and halluc >= 0.1 else "",
+            )
+        )
         cards.append(self._kpi_card("⏱️ P50 / P95", f"{self._fmt_ms(p50)} / {self._fmt_ms(p95)}"))
         cards.append(self._kpi_card("📉 Avg Latency", self._fmt_ms(avg)))
 
@@ -202,11 +226,15 @@ class ConsoleReporter(BaseReporter):
         (a, f1a, p95a, erra), (b, f1b, p95b, errb) = rows[0], rows[1]
 
         delta = f1a - f1b
-        parts = [f"[bold]Insight:[/bold] [cyan]{a}[/cyan] leads [cyan]{b}[/cyan] by [bold]{delta:+.3f}[/bold] F1."]
+        parts = [
+            f"[bold]Insight:[/bold] [cyan]{a}[/cyan] leads [cyan]{b}[/cyan] by [bold]{delta:+.3f}[/bold] F1."
+        ]
 
         if p95a is not None and p95b is not None:
             faster = "faster" if p95a < p95b else "slower"
-            parts.append(f"Tail latency (P95) is [bold]{faster}[/bold] ({p95a:.0f}ms vs {p95b:.0f}ms).")
+            parts.append(
+                f"Tail latency (P95) is [bold]{faster}[/bold] ({p95a:.0f}ms vs {p95b:.0f}ms)."
+            )
 
         if erra or errb:
             parts.append(f"Errors: {a}={erra}, {b}={errb}.")
@@ -347,7 +375,9 @@ class ConsoleReporter(BaseReporter):
         table.add_column("n", justify="right", style="dim")
 
         # Sort domains by n desc
-        domains = sorted(by_domain.keys(), key=lambda d: getattr(by_domain[d], "total", 0), reverse=True)
+        domains = sorted(
+            by_domain.keys(), key=lambda d: getattr(by_domain[d], "total", 0), reverse=True
+        )
         for domain in domains:
             cm = by_domain[domain]
             halluc = getattr(cm, "hallucination_pass_rate", None)
@@ -497,7 +527,9 @@ class ConsoleReporter(BaseReporter):
             return "yellow"
         return "green"
 
-    def save(self, report: "BenchmarkReport", results: list["ResultMetric"], filename: str | None = None) -> Path:
+    def save(
+        self, report: "BenchmarkReport", results: list["ResultMetric"], filename: str | None = None
+    ) -> Path:
         """Save console output as HTML."""
         self.display_summary(report, results)
 
