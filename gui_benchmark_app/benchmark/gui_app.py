@@ -1292,6 +1292,7 @@ class BenchmarkWindow(QMainWindow):
                 "p95": latency,
                 "throughput": throughput,
             }
+            # Include all metrics including new ones for live radar display
             self._evaluator_summaries[current_eval] = {
                 "Accuracy": accuracy / 100.0,
                 "Precision": accuracy / 100.0,
@@ -1301,6 +1302,11 @@ class BenchmarkWindow(QMainWindow):
                 "TruthfulQA": accuracy / 100.0,
                 "FActScore": accuracy / 100.0,
                 "Speed (1/P95)": min(1.0, 1000.0 / latency) if latency > 0 else 0.0,
+                # New metrics - show estimated values during live run
+                "Selective (1/(1+AURC))": accuracy / 100.0,  # Proxy during live
+                "Retrieval (nDCG@10)": accuracy / 100.0,  # Proxy during live
+                "RAG faithfulness": accuracy / 100.0,  # Proxy during live
+                "Citation rate": 1.0 if accuracy > 50 else 0.5,  # Proxy during live
             }
             self._update_insights_charts()
 
@@ -1530,6 +1536,7 @@ class BenchmarkWindow(QMainWindow):
             'Selective (1/(1+AURC))',
             'Retrieval (nDCG@10)',
             'RAG faithfulness',
+            'Citation rate',
         ]
 
         angles = [i / len(radar_keys) * 2 * 3.14159265 for i in range(len(radar_keys))]
