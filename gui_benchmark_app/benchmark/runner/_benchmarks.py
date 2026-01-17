@@ -63,6 +63,44 @@ def _safe_evidence(result: EvaluatorResult, limit: int = 5) -> list[dict[str, An
     return evidence_payload
 
 
+def _extract_response_text(result: Any, *, max_chars: int = 6000) -> str:
+    """Best-effort extraction of a textual model response.
+
+    Some evaluators keep the full raw model output (e.g. `raw_response`) or
+    a cleaned explanation/rationale. We keep this optional and capped.
+    """
+    for attr in (
+        "response_text",
+        "raw_response",
+        "explanation",
+        "rationale",
+        "analysis",
+        "text",
+    ):
+        value = getattr(result, attr, None)
+        if isinstance(value, str) and value.strip():
+            text = value.strip()
+            return text[:max_chars]
+    return ""
+
+
+def _parse_relevant_sources(value: Any) -> list[str]:
+    """Parse one or many relevant source IDs from dataset fields."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(v).strip() for v in value if str(v).strip()]
+    text = str(value).strip()
+    if not text:
+        return []
+    # common separators for multi-source fields
+    for sep in (";", "|", ","):
+        if sep in text:
+            parts = [p.strip() for p in text.split(sep)]
+            return [p for p in parts if p]
+    return [text]
+
+
 def _should_stop(display: Any) -> bool:
     checker = getattr(display, "should_stop", None)
     return bool(callable(checker) and checker())
@@ -213,7 +251,9 @@ async def run_hallucination_benchmark(
     except FileNotFoundError:
         dataset = loader.load_from_huggingface(max_samples=max_samples)
     
-    metrics = HallucinationMetrics(total=dataset.total)
+    # Track metrics only for the samples we actually evaluated.
+    # (This stays accurate even with max_samples or filtered loaders.)
+    metrics = HallucinationMetrics()
     latencies: list[float] = []
     
     display.start_task(
@@ -260,20 +300,50 @@ async def run_hallucination_benchmark(
             # Compare prediction to ground truth
             predicted = result.predicted_label
             expected = case.label
-            
-            is_correct = False
-            if predicted and expected:
-                metrics.true_positives += 1
-                metrics.correct += 1
-                is_correct = True
-            elif not predicted and not expected:
-                metrics.true_negatives += 1
-                metrics.correct += 1
-                is_correct = True
-            elif predicted and not expected:
-                metrics.false_positives += 1
-            else:
-                metrics.false_negatives += 1
+
+            # Collect auxiliary signals for AURC / BEIR-style retrieval / ALCE-style citation stats
+            confidence = float(result.trust_score) if result.trust_score is not None else 0.0
+            if not (confidence == confidence):  # NaN guard
+                confidence = 0.0
+
+            retrieved_sources = [str(ev.source) for ev in (result.evidence or []) if getattr(ev, "source", None)]
+            relevant_sources = _parse_relevant_sources(getattr(case, "source", None))
+            response_text = _extract_response_text(result)
+            evidence_count = len(result.evidence or [])
+
+            # RAG signals (optional): question/answer/contexts/ground-truth text
+            # These fields are *derived* from existing case/result data and do not change inputs.
+            question = str(getattr(case, "question", None) or getattr(case, "query", None) or case.text)
+            answer = str(getattr(result, "answer", None) or getattr(result, "generated_answer", None) or response_text)
+            contexts = [
+                str(getattr(ev, "text", None) or getattr(ev, "snippet", None) or "")
+                for ev in (result.evidence or [])
+                if (getattr(ev, "text", None) or getattr(ev, "snippet", None))
+            ]
+            # Cap for speed + memory
+            contexts = contexts[:8]
+            ground_truth = str(
+                getattr(case, "ground_truth", None)
+                or getattr(case, "reference", None)
+                or getattr(case, "answer", None)
+                or ""
+            )
+
+            metrics.add_sample(
+                expected_is_fact=bool(expected),
+                predicted_is_fact=bool(predicted),
+                confidence=confidence,
+                retrieved_sources=retrieved_sources,
+                relevant_sources=relevant_sources,
+                response_text=response_text,
+                evidence_count=evidence_count,
+                question=question,
+                answer=answer,
+                contexts=contexts if contexts else [],
+                ground_truth=ground_truth,
+            )
+
+            is_correct = bool(predicted == expected)
             
             display.advance(1, latency_ms=result.latency_ms)
             has_error = result.error is not None
@@ -296,6 +366,7 @@ async def run_hallucination_benchmark(
                     "trust_score": result.trust_score,
                     "latency_ms": result.latency_ms,
                     "error": result.error,
+                    "response_text": _extract_response_text(result),
                     "meta": {
                         "case_id": case.id,
                         "domain": case.domain,
