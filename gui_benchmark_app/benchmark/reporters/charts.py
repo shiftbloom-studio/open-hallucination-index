@@ -44,13 +44,13 @@ if TYPE_CHECKING:
 
 # Modern color palette (accessible & print-friendly)
 CHART_COLORS = {
-    "primary": "#2563eb",      # Blue
-    "secondary": "#7c3aed",    # Purple
-    "success": "#059669",      # Green
-    "warning": "#d97706",      # Orange
-    "danger": "#dc2626",       # Red
-    "accent": "#0891b2",       # Cyan
-    "neutral": "#6b7280",      # Gray
+    "primary": "#2563eb",  # Blue
+    "secondary": "#7c3aed",  # Purple
+    "success": "#059669",  # Green
+    "warning": "#d97706",  # Orange
+    "danger": "#dc2626",  # Red
+    "accent": "#0891b2",  # Cyan
+    "neutral": "#6b7280",  # Gray
 }
 
 STRATEGY_COLORS = [
@@ -133,8 +133,7 @@ class ChartsReporter(BaseReporter):
             for s in strategies
         }
         results_by_strategy_all = {
-            s: [r for r in results if getattr(r, "strategy", "unknown") == s]
-            for s in strategies
+            s: [r for r in results if getattr(r, "strategy", "unknown") == s] for s in strategies
         }
 
         # Remove strategies that are truly empty across all results
@@ -167,11 +166,15 @@ class ChartsReporter(BaseReporter):
         if c5:
             chart_files.append(c5)
 
-        c6 = self._create_latency_percentile_curves(results_by_strategy_valid, strategies, report, prefix)
+        c6 = self._create_latency_percentile_curves(
+            results_by_strategy_valid, strategies, report, prefix
+        )
         if c6:
             chart_files.append(c6)
 
-        c7 = self._create_latency_quantile_heatmap(results_by_strategy_valid, strategies, report, prefix)
+        c7 = self._create_latency_quantile_heatmap(
+            results_by_strategy_valid, strategies, report, prefix
+        )
         if c7:
             chart_files.append(c7)
 
@@ -255,7 +258,7 @@ class ChartsReporter(BaseReporter):
                 first = next(iter(evaluators.values()))
                 if hasattr(first, "hallucination") and hasattr(first.hallucination, "total"):
                     claims = first.hallucination.total
-            
+
             run_id = getattr(report, "run_id", "n/a")
             # Timestamp if available
             ts = getattr(report, "timestamp", "")
@@ -273,16 +276,16 @@ class ChartsReporter(BaseReporter):
             if threshold is not None:
                 parts.append(f"Threshold: {threshold}")
             return " | ".join(parts)
-        
+
         return ""
 
     def _meta_line(self, report: BenchmarkReport) -> str:
         # Legacy / text-in-axis backup
-        # We now prefer _save_fig footer, so this can return empty 
+        # We now prefer _save_fig footer, so this can return empty
         # to avoid duplication, OR we keep it if it's used inside axes.
         # Given we are adding a footer, we interpret the user request as
-        # "extend" not "replace and break layout". 
-        # However, double info is ugly. 
+        # "extend" not "replace and break layout".
+        # However, double info is ugly.
         # We will keep this method but make it return "" so caller logic
         # simplifies to just chart specific info.
         return ""
@@ -384,7 +387,12 @@ class ChartsReporter(BaseReporter):
                     color="#374151",
                     ha="center",
                     va="bottom",
-                    bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.85, edgecolor="#e5e7eb"),
+                    bbox=dict(
+                        boxstyle="round,pad=0.25",
+                        facecolor="white",
+                        alpha=0.85,
+                        edgecolor="#e5e7eb",
+                    ),
                 )
 
             ax.set_title("Response Latency Distribution by Strategy", fontsize=16, pad=18)
@@ -453,7 +461,9 @@ class ChartsReporter(BaseReporter):
 
             # Labels / annotations
             y_max = max(throughputs) if throughputs else 1.0
-            for i, (bar, tp, p50, p95, avg) in enumerate(zip(bars, throughputs, p50_latencies, p95_latencies, avg_latencies)):
+            for i, (bar, tp, p50, p95, avg) in enumerate(
+                zip(bars, throughputs, p50_latencies, p95_latencies, avg_latencies)
+            ):
                 h = bar.get_height()
                 ax.annotate(
                     f"{tp:.2f} req/s",
@@ -482,7 +492,9 @@ class ChartsReporter(BaseReporter):
             ax.set_ylabel("Throughput (requests/second)", fontsize=12)
 
             ax.set_xticks(x)
-            ax.set_xticklabels([self._format_strategy_name(s) for s in strategies], rotation=12, ha="right")
+            ax.set_xticklabels(
+                [self._format_strategy_name(s) for s in strategies], rotation=12, ha="right"
+            )
 
             ax.set_ylim(0, y_max * 1.25)
 
@@ -533,7 +545,14 @@ class ChartsReporter(BaseReporter):
         except ImportError:
             return None
 
-        all_lat = np.concatenate([self._latencies_for(results_by_strategy.get(s, [])) for s in strategies if results_by_strategy.get(s)], axis=0)
+        all_lat = np.concatenate(
+            [
+                self._latencies_for(results_by_strategy.get(s, []))
+                for s in strategies
+                if results_by_strategy.get(s)
+            ],
+            axis=0,
+        )
         if all_lat.size == 0:
             return None
 
@@ -577,10 +596,24 @@ class ChartsReporter(BaseReporter):
             if capped_all.size:
                 p50 = float(np.median(capped_all))
                 p95 = float(np.percentile(capped_all, 95))
-                ax.axvline(p50, color=CHART_COLORS["success"], linestyle="--", linewidth=2, label=f"Overall P50 {p50:.0f}ms")
-                ax.axvline(p95, color=CHART_COLORS["danger"], linestyle="--", linewidth=2, label=f"Overall P95 {p95:.0f}ms")
+                ax.axvline(
+                    p50,
+                    color=CHART_COLORS["success"],
+                    linestyle="--",
+                    linewidth=2,
+                    label=f"Overall P50 {p50:.0f}ms",
+                )
+                ax.axvline(
+                    p95,
+                    color=CHART_COLORS["danger"],
+                    linestyle="--",
+                    linewidth=2,
+                    label=f"Overall P95 {p95:.0f}ms",
+                )
 
-            ax.set_title("Response Time Distribution (Histogram + Smoothed Counts)", fontsize=16, pad=18)
+            ax.set_title(
+                "Response Time Distribution (Histogram + Smoothed Counts)", fontsize=16, pad=18
+            )
             ax.set_xlabel("Latency (ms)", fontsize=12)
             ax.set_ylabel("Frequency", fontsize=12)
             ax.set_xlim(0, cap * 1.02)
@@ -658,14 +691,24 @@ class ChartsReporter(BaseReporter):
                 q25 = float(np.percentile(arr, 25))
                 q75 = float(np.percentile(arr, 75))
                 ax.vlines(i + 1, q25, q75, color="#111827", linewidth=2.2, alpha=0.9)
-                ax.scatter([i + 1], [float(np.median(arr))], s=28, color="white", edgecolors="#111827", linewidths=0.8, zorder=3)
+                ax.scatter(
+                    [i + 1],
+                    [float(np.median(arr))],
+                    s=28,
+                    color="white",
+                    edgecolors="#111827",
+                    linewidths=0.8,
+                    zorder=3,
+                )
 
             ax.set_title("Latency Distribution (Violin + IQR)", fontsize=16, pad=18)
             ax.set_xlabel("Verification Strategy", fontsize=12)
             ax.set_ylabel("Latency (ms)", fontsize=12)
 
             ax.set_xticks(np.arange(1, len(strategies) + 1))
-            ax.set_xticklabels([self._format_strategy_name(s) for s in strategies], rotation=12, ha="right")
+            ax.set_xticklabels(
+                [self._format_strategy_name(s) for s in strategies], rotation=12, ha="right"
+            )
 
             ax.text(
                 0.5,
@@ -697,7 +740,14 @@ class ChartsReporter(BaseReporter):
             return None
 
         # Use global cap to keep plot readable
-        all_lat = np.concatenate([self._latencies_for(results_by_strategy.get(s, [])) for s in strategies if results_by_strategy.get(s)], axis=0)
+        all_lat = np.concatenate(
+            [
+                self._latencies_for(results_by_strategy.get(s, []))
+                for s in strategies
+                if results_by_strategy.get(s)
+            ],
+            axis=0,
+        )
         if all_lat.size == 0:
             return None
         cap = float(np.percentile(all_lat, 99))
@@ -715,7 +765,14 @@ class ChartsReporter(BaseReporter):
                     continue
                 y = np.arange(1, arr.size + 1) / arr.size
                 color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
-                ax.plot(arr, y, color=color, linewidth=2.4, alpha=0.95, label=f"{self._format_strategy_name(s)} (n={arr.size})")
+                ax.plot(
+                    arr,
+                    y,
+                    color=color,
+                    linewidth=2.4,
+                    alpha=0.95,
+                    label=f"{self._format_strategy_name(s)} (n={arr.size})",
+                )
 
             ax.set_title("Latency ECDF by Strategy (capped at P99)", fontsize=16, pad=18)
             ax.set_xlabel("Latency (ms)", fontsize=12)
@@ -762,7 +819,15 @@ class ChartsReporter(BaseReporter):
                     continue
                 qs = [float(np.percentile(arr, p)) for p in percentiles]
                 color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
-                ax.plot(percentiles, qs, marker="o", linewidth=2.4, color=color, alpha=0.95, label=f"{self._format_strategy_name(s)} (n={arr.size})")
+                ax.plot(
+                    percentiles,
+                    qs,
+                    marker="o",
+                    linewidth=2.4,
+                    color=color,
+                    alpha=0.95,
+                    label=f"{self._format_strategy_name(s)} (n={arr.size})",
+                )
                 any_data = True
 
             if not any_data:
@@ -833,7 +898,15 @@ class ChartsReporter(BaseReporter):
             # Annotate cells
             for i in range(mat.shape[0]):
                 for j in range(mat.shape[1]):
-                    ax.text(j, i, f"{mat[i, j]:.0f}", ha="center", va="center", fontsize=10, color="#111827")
+                    ax.text(
+                        j,
+                        i,
+                        f"{mat[i, j]:.0f}",
+                        ha="center",
+                        va="center",
+                        fontsize=10,
+                        color="#111827",
+                    )
 
             # Colorbar
             cbar = fig.colorbar(im, ax=ax, fraction=0.035, pad=0.02)
@@ -895,11 +968,27 @@ class ChartsReporter(BaseReporter):
             # IQR whiskers
             ax.hlines(y, q25, q75, color="#111827", linewidth=2.2, alpha=0.9)
             # Median dots
-            ax.scatter(med, y, s=70, color=CHART_COLORS["primary"], edgecolors="#111827", linewidths=0.8, zorder=3)
+            ax.scatter(
+                med,
+                y,
+                s=70,
+                color=CHART_COLORS["primary"],
+                edgecolors="#111827",
+                linewidths=0.8,
+                zorder=3,
+            )
 
             # Labels
             for i, (m, nn) in enumerate(zip(med, n)):
-                ax.text(m, i, f"  {m:.0f}ms (n={nn})", va="center", ha="left", fontsize=10, color="#111827")
+                ax.text(
+                    m,
+                    i,
+                    f"  {m:.0f}ms (n={nn})",
+                    va="center",
+                    ha="left",
+                    fontsize=10,
+                    color="#111827",
+                )
 
             ax.set_yticks(y)
             ax.set_yticklabels(names)
@@ -954,7 +1043,9 @@ class ChartsReporter(BaseReporter):
 
             for i, (s, tp, p95, n) in enumerate(points):
                 color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
-                ax.scatter(tp, p95, s=120, color=color, alpha=0.9, edgecolors="#111827", linewidths=0.9)
+                ax.scatter(
+                    tp, p95, s=120, color=color, alpha=0.9, edgecolors="#111827", linewidths=0.9
+                )
                 ax.annotate(
                     f"{self._format_strategy_name(s)}\n(n={n})",
                     xy=(tp, p95),
@@ -963,7 +1054,12 @@ class ChartsReporter(BaseReporter):
                     fontsize=10,
                     ha="left",
                     va="bottom",
-                    bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.85, edgecolor="#e5e7eb"),
+                    bbox=dict(
+                        boxstyle="round,pad=0.25",
+                        facecolor="white",
+                        alpha=0.85,
+                        edgecolor="#e5e7eb",
+                    ),
                 )
 
             ax.set_title("Throughput vs Tail Latency (P95) Frontier", fontsize=16, pad=18)
@@ -1009,7 +1105,10 @@ class ChartsReporter(BaseReporter):
 
         strategies = sorted(by_strategy.keys())
         totals = np.array([len(by_strategy[s]) for s in strategies], dtype=float)
-        errs = np.array([sum(1 for r in by_strategy[s] if getattr(r, "has_error", False)) for s in strategies], dtype=float)
+        errs = np.array(
+            [sum(1 for r in by_strategy[s] if getattr(r, "has_error", False)) for s in strategies],
+            dtype=float,
+        )
 
         if errs.sum() <= 0:
             return None
@@ -1033,7 +1132,7 @@ class ChartsReporter(BaseReporter):
             for i, (bar, r, e, t) in enumerate(zip(bars, rates, errs, totals)):
                 h = bar.get_height()
                 ax.annotate(
-                    f"{r*100:.2f}%",
+                    f"{r * 100:.2f}%",
                     xy=(bar.get_x() + bar.get_width() / 2, h),
                     xytext=(0, 6),
                     textcoords="offset points",
@@ -1057,7 +1156,9 @@ class ChartsReporter(BaseReporter):
             ax.set_xlabel("Verification Strategy", fontsize=12)
             ax.set_ylabel("Error Rate (%)", fontsize=12)
             ax.set_xticks(x)
-            ax.set_xticklabels([self._format_strategy_name(s) for s in strategies], rotation=12, ha="right")
+            ax.set_xticklabels(
+                [self._format_strategy_name(s) for s in strategies], rotation=12, ha="right"
+            )
             ax.set_ylim(0, max(rates * 100.0) * 1.25)
 
             # Footnote added by _save_fig
@@ -1098,7 +1199,6 @@ class ChartsReporter(BaseReporter):
     # =========================================================================
     # COMPARISON CHARTS (Multi-Evaluator)
     # =========================================================================
-
 
     def generate_comparison_charts(
         self,
@@ -1160,7 +1260,6 @@ class ChartsReporter(BaseReporter):
 
         return chart_files
 
-
     def _create_comparison_dashboard(
         self,
         comparison_report: ComparisonReport,
@@ -1202,15 +1301,18 @@ class ChartsReporter(BaseReporter):
             ax_rag = fig.add_subplot(gs[2, 1])
             self._draw_rag_retrieval_citation_on_axis(ax_rag, evaluators)
 
-            fig.suptitle("OHI Benchmark Comparison Dashboard", fontsize=20, fontweight='bold', y=0.985)
+            fig.suptitle(
+                "OHI Benchmark Comparison Dashboard", fontsize=20, fontweight="bold", y=0.985
+            )
 
             # Footer added by _save_fig
             # Manual header removed to avoid duplication, or can be kept if distinct info needed.
             # But standardizing on footer is better for "all images".
 
             plt.tight_layout(rect=[0, 0.02, 1, 0.94])
-            return self._save_fig(fig, f"{prefix}comparison_dashboard.png", report=comparison_report)
-
+            return self._save_fig(
+                fig, f"{prefix}comparison_dashboard.png", report=comparison_report
+            )
 
     def _draw_radar_on_axis(self, ax, evaluators: dict) -> None:
         """Draw radar chart. Uses base metrics + optional AURC/BEIR/ALCE/RAG signals if present."""
@@ -1222,15 +1324,38 @@ class ChartsReporter(BaseReporter):
             ("Safety", lambda m: float(1.0 - m.hallucination.hallucination_pass_rate)),
             ("TruthfulQA", lambda m: float(m.truthfulqa.accuracy)),
             ("FActScore", lambda m: float(m.factscore.avg_factscore)),
-            ("Speed", lambda m: float(min(1.0, 1000.0 / m.latency.p95) if getattr(m.latency, 'p95', 0) > 0 else 0.0)),
+            (
+                "Speed",
+                lambda m: float(
+                    min(1.0, 1000.0 / m.latency.p95) if getattr(m.latency, "p95", 0) > 0 else 0.0
+                ),
+            ),
         ]
 
         # Optional extras (only show if any evaluator has non-trivial values)
         extra_specs = [
-            ("Selective", lambda m: float(1.0 / (1.0 + float(getattr(m.hallucination, "aurc", 0.0)))) if getattr(m.hallucination, "aurc", None) is not None else 0.0),
-            ("nDCG@10", lambda m: float((m.hallucination.retrieval_metrics(ks=(10,)) or {}).get("ndcg@10", 0.0))),
-            ("CiteRate", lambda m: float((m.hallucination.alce_metrics() or {}).get("citation_rate", 0.0))),
-            ("Faithful", lambda m: float((m.hallucination.ragas_proxy_metrics() or {}).get("faithfulness", 0.0))),
+            (
+                "Selective",
+                lambda m: float(1.0 / (1.0 + float(getattr(m.hallucination, "aurc", 0.0))))
+                if getattr(m.hallucination, "aurc", None) is not None
+                else 0.0,
+            ),
+            (
+                "nDCG@10",
+                lambda m: float(
+                    (m.hallucination.retrieval_metrics(ks=(10,)) or {}).get("ndcg@10", 0.0)
+                ),
+            ),
+            (
+                "CiteRate",
+                lambda m: float((m.hallucination.alce_metrics() or {}).get("citation_rate", 0.0)),
+            ),
+            (
+                "Faithful",
+                lambda m: float(
+                    (m.hallucination.ragas_proxy_metrics() or {}).get("faithfulness", 0.0)
+                ),
+            ),
         ]
 
         labels = list(base_labels)
@@ -1250,21 +1375,27 @@ class ChartsReporter(BaseReporter):
             values = [min(1.0, max(0.0, v)) for v in values]
             values += values[:1]
             color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
-            ax.plot(angles, values, 'o-', linewidth=2.2, label=self._format_strategy_name(name), color=color)
+            ax.plot(
+                angles,
+                values,
+                "o-",
+                linewidth=2.2,
+                label=self._format_strategy_name(name),
+                color=color,
+            )
             ax.fill(angles, values, alpha=0.18, color=color)
 
         ax.set_xticks(angles[:-1])
         ax.set_xticklabels(metrics_labels, size=9)
         ax.set_ylim(0, 1.0)
         ax.set_title("Multi-Metric Overview", fontsize=12, pad=10)
-        ax.legend(loc='upper right', bbox_to_anchor=(1.25, 1.0), fontsize=9)
-
+        ax.legend(loc="upper right", bbox_to_anchor=(1.25, 1.0), fontsize=9)
 
     def _draw_grouped_bar_on_axis(self, ax, evaluators: dict) -> None:
         """Draw grouped bar chart for key metrics + optional new families."""
         evaluator_names = list(evaluators.keys())
         if not evaluator_names:
-            ax.text(0.5, 0.5, "No evaluators", ha='center', va='center', transform=ax.transAxes)
+            ax.text(0.5, 0.5, "No evaluators", ha="center", va="center", transform=ax.transAxes)
             return
 
         # Base (always)
@@ -1278,10 +1409,28 @@ class ChartsReporter(BaseReporter):
 
         # Optional extra bars
         opt = [
-            ("Selective", lambda m: float(1.0 / (1.0 + getattr(m.hallucination, 'aurc', 0.0))) if getattr(m.hallucination, 'aurc', None) is not None else 0.0),
-            ("nDCG@10", lambda m: float((m.hallucination.retrieval_metrics(ks=(10,)) or {}).get('ndcg@10', 0.0))),
-            ("CiteRate", lambda m: float((m.hallucination.alce_metrics() or {}).get('citation_rate', 0.0))),
-            ("Faithful", lambda m: float((m.hallucination.ragas_proxy_metrics() or {}).get('faithfulness', 0.0))),
+            (
+                "Selective",
+                lambda m: float(1.0 / (1.0 + getattr(m.hallucination, "aurc", 0.0)))
+                if getattr(m.hallucination, "aurc", None) is not None
+                else 0.0,
+            ),
+            (
+                "nDCG@10",
+                lambda m: float(
+                    (m.hallucination.retrieval_metrics(ks=(10,)) or {}).get("ndcg@10", 0.0)
+                ),
+            ),
+            (
+                "CiteRate",
+                lambda m: float((m.hallucination.alce_metrics() or {}).get("citation_rate", 0.0)),
+            ),
+            (
+                "Faithful",
+                lambda m: float(
+                    (m.hallucination.ragas_proxy_metrics() or {}).get("faithfulness", 0.0)
+                ),
+            ),
         ]
         for label, fn in opt:
             vals = [fn(evaluators[n]) for n in evaluator_names]
@@ -1297,14 +1446,22 @@ class ChartsReporter(BaseReporter):
             values = [min(1.0, max(0.0, float(fn(m)))) for _, fn in specs]
             color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
             offset = (i - len(evaluator_names) / 2 + 0.5) * width
-            ax.bar(x + offset, values, width * 0.92, label=self._format_strategy_name(name), color=color, edgecolor="#111827", linewidth=0.6)
+            ax.bar(
+                x + offset,
+                values,
+                width * 0.92,
+                label=self._format_strategy_name(name),
+                color=color,
+                edgecolor="#111827",
+                linewidth=0.6,
+            )
 
         ax.set_xticks(x)
         ax.set_xticklabels(metric_labels, fontsize=10)
         ax.set_ylim(0, 1.15)
         ax.set_ylabel("Score (higher is better)", fontsize=10)
         ax.set_title("Key + Extended Metrics", fontsize=12, pad=10)
-        ax.legend(fontsize=9, loc='upper right')
+        ax.legend(fontsize=9, loc="upper right")
 
     def _draw_latency_boxplot_on_axis(self, ax, evaluators: dict) -> None:
         """Draw latency boxplot on provided axis."""
@@ -1316,11 +1473,18 @@ class ChartsReporter(BaseReporter):
                 labels.append(self._format_strategy_name(name))
 
         if not latencies:
-            ax.text(0.5, 0.5, "No latency data", ha='center', va='center', transform=ax.transAxes)
+            ax.text(0.5, 0.5, "No latency data", ha="center", va="center", transform=ax.transAxes)
             return
 
-        bp = ax.boxplot(latencies, labels=labels, patch_artist=True, showfliers=True,
-                        flierprops=dict(marker='o', markerfacecolor=CHART_COLORS["danger"], markersize=3, alpha=0.3))
+        bp = ax.boxplot(
+            latencies,
+            labels=labels,
+            patch_artist=True,
+            showfliers=True,
+            flierprops=dict(
+                marker="o", markerfacecolor=CHART_COLORS["danger"], markersize=3, alpha=0.3
+            ),
+        )
 
         for i, patch in enumerate(bp["boxes"]):
             color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
@@ -1333,15 +1497,19 @@ class ChartsReporter(BaseReporter):
         # Annotate P50/P95
         for i, lat in enumerate(latencies):
             p50, p95 = np.median(lat), np.percentile(lat, 95)
-            ax.annotate(f"P50:{p50:.0f}ms P95:{p95:.0f}ms", xy=(i + 1, p95),
-                        fontsize=8, ha='center', va='bottom')
-    
+            ax.annotate(
+                f"P50:{p50:.0f}ms P95:{p95:.0f}ms",
+                xy=(i + 1, p95),
+                fontsize=8,
+                ha="center",
+                va="bottom",
+            )
 
     def _draw_heatmap_on_axis(self, ax, evaluators: dict, fig) -> None:
         """Draw heatmap (normalized scores). Includes optional AURC/BEIR/ALCE/RAG signals if present."""
         evaluator_names = list(evaluators.keys())
         if not evaluator_names:
-            ax.text(0.5, 0.5, "No evaluators", ha='center', va='center', transform=ax.transAxes)
+            ax.text(0.5, 0.5, "No evaluators", ha="center", va="center", transform=ax.transAxes)
             return
 
         # Build dynamic metric columns (all higher-is-better)
@@ -1353,14 +1521,37 @@ class ChartsReporter(BaseReporter):
             ("Safe", lambda m: float(1.0 - m.hallucination.hallucination_pass_rate)),
             ("TQA", lambda m: float(m.truthfulqa.accuracy)),
             ("Fact", lambda m: float(m.factscore.avg_factscore)),
-            ("Spd", lambda m: float(min(1.0, 1000.0 / m.latency.p95) if getattr(m.latency, 'p95', 0) > 0 else 0.0)),
+            (
+                "Spd",
+                lambda m: float(
+                    min(1.0, 1000.0 / m.latency.p95) if getattr(m.latency, "p95", 0) > 0 else 0.0
+                ),
+            ),
         ]
 
         optional = [
-            ("Sel", lambda m: float(1.0 / (1.0 + getattr(m.hallucination, 'aurc', 0.0))) if getattr(m.hallucination, 'aurc', None) is not None else 0.0),
-            ("nDCG10", lambda m: float((m.hallucination.retrieval_metrics(ks=(10,)) or {}).get('ndcg@10', 0.0))),
-            ("Cite", lambda m: float((m.hallucination.alce_metrics() or {}).get('citation_rate', 0.0))),
-            ("Faith", lambda m: float((m.hallucination.ragas_proxy_metrics() or {}).get('faithfulness', 0.0))),
+            (
+                "Sel",
+                lambda m: float(1.0 / (1.0 + getattr(m.hallucination, "aurc", 0.0)))
+                if getattr(m.hallucination, "aurc", None) is not None
+                else 0.0,
+            ),
+            (
+                "nDCG10",
+                lambda m: float(
+                    (m.hallucination.retrieval_metrics(ks=(10,)) or {}).get("ndcg@10", 0.0)
+                ),
+            ),
+            (
+                "Cite",
+                lambda m: float((m.hallucination.alce_metrics() or {}).get("citation_rate", 0.0)),
+            ),
+            (
+                "Faith",
+                lambda m: float(
+                    (m.hallucination.ragas_proxy_metrics() or {}).get("faithfulness", 0.0)
+                ),
+            ),
         ]
         for lab, fn in optional:
             vals = [fn(evaluators[n]) for n in evaluator_names]
@@ -1375,7 +1566,7 @@ class ChartsReporter(BaseReporter):
             data.append(row)
 
         mat = np.array(data, dtype=float)
-        im = ax.imshow(mat, aspect='auto', cmap='RdYlGn', vmin=0, vmax=1)
+        im = ax.imshow(mat, aspect="auto", cmap="RdYlGn", vmin=0, vmax=1)
 
         ax.set_xticks(np.arange(len(metrics)))
         ax.set_xticklabels(metrics, fontsize=9, rotation=0)
@@ -1386,7 +1577,16 @@ class ChartsReporter(BaseReporter):
             for j in range(len(metrics)):
                 val = mat[i, j]
                 color = "white" if val < 0.45 else "#111827"
-                ax.text(j, i, f"{val:.0%}", ha="center", va="center", fontsize=8, fontweight="bold", color=color)
+                ax.text(
+                    j,
+                    i,
+                    f"{val:.0%}",
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    fontweight="bold",
+                    color=color,
+                )
 
         ax.set_title("Performance Heatmap", fontsize=12, pad=10)
         ax.grid(False)
@@ -1396,22 +1596,29 @@ class ChartsReporter(BaseReporter):
         """Plot risk-coverage curves (selective prediction). Uses confidence_scores + correct_flags streams."""
         any_stream = False
         for i, (name, m) in enumerate(evaluators.items()):
-            conf = getattr(m.hallucination, 'confidence_scores', None)
-            corr = getattr(m.hallucination, 'correct_flags', None)
+            conf = getattr(m.hallucination, "confidence_scores", None)
+            corr = getattr(m.hallucination, "correct_flags", None)
             if not conf or not corr or len(conf) != len(corr) or len(conf) < 5:
                 continue
             any_stream = True
             conf_arr = np.asarray(conf, dtype=float)
             corr_arr = np.asarray(corr, dtype=bool)
-            order = np.argsort(-conf_arr, kind='mergesort')
+            order = np.argsort(-conf_arr, kind="mergesort")
             corr_s = corr_arr[order]
             n = corr_s.size
-            coverage = (np.arange(1, n + 1) / n)
+            coverage = np.arange(1, n + 1) / n
             risk = np.cumsum(~corr_s) / np.arange(1, n + 1)
             color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
-            ax.plot(coverage, risk, color=color, linewidth=2.2, alpha=0.95, label=f"{self._format_strategy_name(name)}")
+            ax.plot(
+                coverage,
+                risk,
+                color=color,
+                linewidth=2.2,
+                alpha=0.95,
+                label=f"{self._format_strategy_name(name)}",
+            )
 
-            aurc = getattr(m.hallucination, 'aurc', None)
+            aurc = getattr(m.hallucination, "aurc", None)
             if aurc is None:
                 # Approx AURC
                 aurc = float(np.trapezoid(risk, coverage))
@@ -1425,7 +1632,14 @@ class ChartsReporter(BaseReporter):
             )
 
         if not any_stream:
-            ax.text(0.5, 0.5, "No confidence/correctness streams for Risk-Coverage", ha='center', va='center', transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No confidence/correctness streams for Risk-Coverage",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             ax.set_title("Risk-Coverage (AURC)", fontsize=12, pad=10)
             ax.set_xlabel("Coverage")
             ax.set_ylabel("Risk (error rate)")
@@ -1436,22 +1650,40 @@ class ChartsReporter(BaseReporter):
         ax.set_ylabel("Risk (error rate on kept)", fontsize=10)
         ax.set_xlim(0, 1.0)
         ax.set_ylim(0, 1.0)
-        ax.grid(True, linestyle='--', alpha=0.35)
-        ax.legend(fontsize=9, loc='upper right')
+        ax.grid(True, linestyle="--", alpha=0.35)
+        ax.legend(fontsize=9, loc="upper right")
 
     def _draw_rag_retrieval_citation_on_axis(self, ax, evaluators: dict) -> None:
         """One compact panel for RAG-ish metrics: retrieval, citations, faithfulness."""
         names = list(evaluators.keys())
         if not names:
-            ax.text(0.5, 0.5, "No evaluators", ha='center', va='center', transform=ax.transAxes)
+            ax.text(0.5, 0.5, "No evaluators", ha="center", va="center", transform=ax.transAxes)
             return
 
         # Choose a small set of high-signal metrics (0-1, higher is better)
         metric_specs = [
-            ("nDCG@10", lambda m: float((m.hallucination.retrieval_metrics(ks=(10,)) or {}).get('ndcg@10', 0.0))),
-            ("Recall@10", lambda m: float((m.hallucination.retrieval_metrics(ks=(10,)) or {}).get('recall@10', 0.0))),
-            ("CiteRate", lambda m: float((m.hallucination.alce_metrics() or {}).get('citation_rate', 0.0))),
-            ("Faithful", lambda m: float((m.hallucination.ragas_proxy_metrics() or {}).get('faithfulness', 0.0))),
+            (
+                "nDCG@10",
+                lambda m: float(
+                    (m.hallucination.retrieval_metrics(ks=(10,)) or {}).get("ndcg@10", 0.0)
+                ),
+            ),
+            (
+                "Recall@10",
+                lambda m: float(
+                    (m.hallucination.retrieval_metrics(ks=(10,)) or {}).get("recall@10", 0.0)
+                ),
+            ),
+            (
+                "CiteRate",
+                lambda m: float((m.hallucination.alce_metrics() or {}).get("citation_rate", 0.0)),
+            ),
+            (
+                "Faithful",
+                lambda m: float(
+                    (m.hallucination.ragas_proxy_metrics() or {}).get("faithfulness", 0.0)
+                ),
+            ),
         ]
 
         # Hide the whole chart if everything is empty
@@ -1459,7 +1691,14 @@ class ChartsReporter(BaseReporter):
         for _, fn in metric_specs:
             all_vals.extend([fn(evaluators[n]) for n in names])
         if not any(v > 0 for v in all_vals):
-            ax.text(0.5, 0.5, "No retrieval/citation/RAG signals", ha='center', va='center', transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No retrieval/citation/RAG signals",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             ax.set_title("RAG Metrics", fontsize=12, pad=10)
             return
 
@@ -1471,15 +1710,23 @@ class ChartsReporter(BaseReporter):
             values = [min(1.0, max(0.0, fn(m))) for _, fn in metric_specs]
             color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
             offset = (i - len(names) / 2 + 0.5) * width
-            ax.bar(x + offset, values, width * 0.92, color=color, alpha=0.9, edgecolor="#111827", linewidth=0.5, label=self._format_strategy_name(name))
+            ax.bar(
+                x + offset,
+                values,
+                width * 0.92,
+                color=color,
+                alpha=0.9,
+                edgecolor="#111827",
+                linewidth=0.5,
+                label=self._format_strategy_name(name),
+            )
 
         ax.set_xticks(x)
         ax.set_xticklabels([m[0] for m in metric_specs], fontsize=10)
         ax.set_ylim(0, 1.15)
         ax.set_ylabel("Score", fontsize=10)
         ax.set_title("Retrieval / Citations / Faithfulness", fontsize=12, pad=10)
-        ax.legend(fontsize=9, loc='upper right')
-
+        ax.legend(fontsize=9, loc="upper right")
 
     def _create_comparison_risk_coverage(
         self,
@@ -1497,14 +1744,18 @@ class ChartsReporter(BaseReporter):
             return None
 
         # quick check
-        if not any(getattr(m.hallucination, 'confidence_scores', None) for m in evaluators.values()):
+        if not any(
+            getattr(m.hallucination, "confidence_scores", None) for m in evaluators.values()
+        ):
             return None
 
         with self._mpl_style():
             fig, ax = plt.subplots(figsize=(12.8, 7.2))
             self._draw_risk_coverage_on_axis(ax, evaluators)
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_risk_coverage.png", report=comparison_report)
+            return self._save_fig(
+                fig, f"{prefix}comparison_risk_coverage.png", report=comparison_report
+            )
 
     def _create_comparison_rag_retrieval_citation(
         self,
@@ -1524,11 +1775,11 @@ class ChartsReporter(BaseReporter):
         # quick check
         any_vals = False
         for m in evaluators.values():
-            if (m.hallucination.retrieval_metrics(ks=(10,)) or {}).get('ndcg@10', 0.0) > 0:
+            if (m.hallucination.retrieval_metrics(ks=(10,)) or {}).get("ndcg@10", 0.0) > 0:
                 any_vals = True
-            if (m.hallucination.alce_metrics() or {}).get('citation_rate', 0.0) > 0:
+            if (m.hallucination.alce_metrics() or {}).get("citation_rate", 0.0) > 0:
                 any_vals = True
-            if (m.hallucination.ragas_proxy_metrics() or {}).get('faithfulness', 0.0) > 0:
+            if (m.hallucination.ragas_proxy_metrics() or {}).get("faithfulness", 0.0) > 0:
                 any_vals = True
         if not any_vals:
             return None
@@ -1537,8 +1788,9 @@ class ChartsReporter(BaseReporter):
             fig, ax = plt.subplots(figsize=(12.8, 7.2))
             self._draw_rag_retrieval_citation_on_axis(ax, evaluators)
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_rag_retrieval_citation.png", report=comparison_report)
-
+            return self._save_fig(
+                fig, f"{prefix}comparison_rag_retrieval_citation.png", report=comparison_report
+            )
 
     def _create_comparison_radar(
         self,
@@ -1547,7 +1799,7 @@ class ChartsReporter(BaseReporter):
     ) -> Path | None:
         """
         Create radar chart comparing all evaluators across metrics.
-        
+
         This is the PRIMARY comparison visualization showing all metrics
         at once for each evaluator.
         """
@@ -1562,10 +1814,16 @@ class ChartsReporter(BaseReporter):
 
         # Collect summary scores for each evaluator
         metrics_labels = [
-            "Accuracy", "Precision", "Recall", "F1 Score",
-            "Safety", "TruthfulQA", "FActScore", "Speed"
+            "Accuracy",
+            "Precision",
+            "Recall",
+            "F1 Score",
+            "Safety",
+            "TruthfulQA",
+            "FActScore",
+            "Speed",
         ]
-        
+
         with self._mpl_style():
             fig, ax = plt.subplots(figsize=(12, 10), subplot_kw=dict(polar=True))
 
@@ -1589,7 +1847,7 @@ class ChartsReporter(BaseReporter):
                 values += values[:1]  # Complete the loop
 
                 color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
-                ax.plot(angles, values, 'o-', linewidth=2.5, label=name, color=color)
+                ax.plot(angles, values, "o-", linewidth=2.5, label=name, color=color)
                 ax.fill(angles, values, alpha=0.25, color=color)
 
             ax.set_xticks(angles[:-1])
@@ -1597,18 +1855,14 @@ class ChartsReporter(BaseReporter):
             ax.set_ylim(0, 1.0)
             ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
             ax.set_yticklabels(["0.2", "0.4", "0.6", "0.8", "1.0"], size=9)
-            ax.grid(True, linestyle='--', alpha=0.7)
+            ax.grid(True, linestyle="--", alpha=0.7)
 
             ax.set_title(
-                "Multi-Evaluator Performance Comparison",
-                fontsize=16, fontweight='bold', pad=20
+                "Multi-Evaluator Performance Comparison", fontsize=16, fontweight="bold", pad=20
             )
 
             # Legend
-            ax.legend(
-                loc='upper right', bbox_to_anchor=(1.3, 1.1),
-                fontsize=11, framealpha=0.95
-            )
+            ax.legend(loc="upper right", bbox_to_anchor=(1.3, 1.1), fontsize=11, framealpha=0.95)
 
             plt.tight_layout()
             return self._save_fig(fig, f"{prefix}comparison_radar.png", report=comparison_report)
@@ -1630,7 +1884,7 @@ class ChartsReporter(BaseReporter):
 
         metrics = ["Accuracy", "F1 Score", "Safety", "TruthfulQA", "FActScore"]
         evaluator_names = list(evaluators.keys())
-        
+
         with self._mpl_style():
             fig, ax = plt.subplots(figsize=(14, 8))
 
@@ -1648,41 +1902,56 @@ class ChartsReporter(BaseReporter):
                     scores.get("TruthfulQA", 0),
                     scores.get("FActScore", 0),
                 ]
-                
+
                 color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
                 bars = ax.bar(
-                    x + offset + i * width, values, width,
+                    x + offset + i * width,
+                    values,
+                    width,
                     label=self._format_strategy_name(name),
-                    color=color, edgecolor="#111827", linewidth=0.8
+                    color=color,
+                    edgecolor="#111827",
+                    linewidth=0.8,
                 )
 
                 # Add value labels
                 for bar, val in zip(bars, values, strict=True):
                     ax.annotate(
-                        f'{val:.1%}',
+                        f"{val:.1%}",
                         xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
-                        xytext=(0, 3), textcoords="offset points",
-                        ha='center', va='bottom', fontsize=9, fontweight='bold'
+                        xytext=(0, 3),
+                        textcoords="offset points",
+                        ha="center",
+                        va="bottom",
+                        fontsize=9,
+                        fontweight="bold",
                     )
 
-            ax.set_xlabel('Metric', fontsize=12)
-            ax.set_ylabel('Score', fontsize=12)
-            ax.set_title('Evaluator Performance Comparison', fontsize=16, pad=18)
+            ax.set_xlabel("Metric", fontsize=12)
+            ax.set_ylabel("Score", fontsize=12)
+            ax.set_title("Evaluator Performance Comparison", fontsize=16, pad=18)
             ax.set_xticks(x)
             ax.set_xticklabels(metrics, fontsize=11)
             ax.set_ylim(0, 1.15)
-            ax.legend(fontsize=11, loc='upper right')
+            ax.legend(fontsize=11, loc="upper right")
 
             # Winner highlight
             winner = comparison_report.get_ranking("f1_score")[0]
             ax.text(
-                0.02, 0.98, f"🏆 Winner: {winner}",
-                transform=ax.transAxes, fontsize=12, fontweight='bold',
-                verticalalignment='top', color=CHART_COLORS["success"]
+                0.02,
+                0.98,
+                f"🏆 Winner: {winner}",
+                transform=ax.transAxes,
+                fontsize=12,
+                fontweight="bold",
+                verticalalignment="top",
+                color=CHART_COLORS["success"],
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_grouped_bar.png", report=comparison_report)
+            return self._save_fig(
+                fig, f"{prefix}comparison_grouped_bar.png", report=comparison_report
+            )
 
     def _create_comparison_latency_boxplot(
         self,
@@ -1714,9 +1983,13 @@ class ChartsReporter(BaseReporter):
             fig, ax = plt.subplots(figsize=(12, 7))
 
             bp = ax.boxplot(
-                latencies, labels=labels, patch_artist=True,
+                latencies,
+                labels=labels,
+                patch_artist=True,
                 showfliers=True,
-                flierprops=dict(marker='o', markerfacecolor=CHART_COLORS["danger"], markersize=3.5, alpha=0.35),
+                flierprops=dict(
+                    marker="o", markerfacecolor=CHART_COLORS["danger"], markersize=3.5, alpha=0.35
+                ),
                 medianprops=dict(color="white", linewidth=2.2),
                 whiskerprops=dict(color="#374151", linewidth=1.3),
                 capprops=dict(color="#374151", linewidth=1.3),
@@ -1742,8 +2015,16 @@ class ChartsReporter(BaseReporter):
                     f"P50: {p50:.0f}ms\nP95: {p95:.0f}ms",
                     xy=(i + 1, p95),
                     xytext=(i + 1, p95 + y_pad),
-                    fontsize=10, color="#374151", ha="center", va="bottom",
-                    bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.85, edgecolor="#e5e7eb"),
+                    fontsize=10,
+                    color="#374151",
+                    ha="center",
+                    va="bottom",
+                    bbox=dict(
+                        boxstyle="round,pad=0.25",
+                        facecolor="white",
+                        alpha=0.85,
+                        edgecolor="#e5e7eb",
+                    ),
                 )
 
             ax.set_title("Latency Distribution Comparison", fontsize=16, pad=18)
@@ -1753,14 +2034,21 @@ class ChartsReporter(BaseReporter):
             # Find fastest
             fastest_idx = min(range(len(latencies)), key=lambda i: np.median(latencies[i]))
             ax.text(
-                0.98, 0.98, f"⚡ Fastest: {labels[fastest_idx]}",
-                transform=ax.transAxes, fontsize=11, fontweight='bold',
-                verticalalignment='top', horizontalalignment='right',
-                color=CHART_COLORS["success"]
+                0.98,
+                0.98,
+                f"⚡ Fastest: {labels[fastest_idx]}",
+                transform=ax.transAxes,
+                fontsize=11,
+                fontweight="bold",
+                verticalalignment="top",
+                horizontalalignment="right",
+                color=CHART_COLORS["success"],
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_latency_boxplot.png", report=comparison_report)
+            return self._save_fig(
+                fig, f"{prefix}comparison_latency_boxplot.png", report=comparison_report
+            )
 
     def _create_comparison_heatmap(
         self,
@@ -1777,7 +2065,16 @@ class ChartsReporter(BaseReporter):
         if not evaluators:
             return None
 
-        metrics = ["Accuracy", "Precision", "Recall", "F1", "Safety", "TruthfulQA", "FActScore", "Speed"]
+        metrics = [
+            "Accuracy",
+            "Precision",
+            "Recall",
+            "F1",
+            "Safety",
+            "TruthfulQA",
+            "FActScore",
+            "Speed",
+        ]
         evaluator_names = list(evaluators.keys())
 
         data = []
@@ -1801,19 +2098,30 @@ class ChartsReporter(BaseReporter):
         with self._mpl_style():
             fig, ax = plt.subplots(figsize=(14, 5))
 
-            im = ax.imshow(mat, aspect='auto', cmap='RdYlGn', vmin=0, vmax=1)
+            im = ax.imshow(mat, aspect="auto", cmap="RdYlGn", vmin=0, vmax=1)
 
             ax.set_xticks(np.arange(len(metrics)))
             ax.set_xticklabels(metrics, fontsize=11)
             ax.set_yticks(np.arange(len(evaluator_names)))
-            ax.set_yticklabels([self._format_strategy_name(n) for n in evaluator_names], fontsize=11)
+            ax.set_yticklabels(
+                [self._format_strategy_name(n) for n in evaluator_names], fontsize=11
+            )
 
             # Annotate cells
             for i in range(len(evaluator_names)):
                 for j in range(len(metrics)):
                     val = mat[i, j]
                     color = "white" if val < 0.5 else "#111827"
-                    ax.text(j, i, f"{val:.1%}", ha="center", va="center", fontsize=10, fontweight="bold", color=color)
+                    ax.text(
+                        j,
+                        i,
+                        f"{val:.1%}",
+                        ha="center",
+                        va="center",
+                        fontsize=10,
+                        fontweight="bold",
+                        color=color,
+                    )
 
             cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02)
             cbar.set_label("Score (0-1)", fontsize=11)
@@ -1878,9 +2186,16 @@ class ChartsReporter(BaseReporter):
             for i, score_list in enumerate(scores):
                 mean_val = float(np.mean(score_list))
                 ax.text(
-                    i + 1, mean_val + 0.05, f"μ={mean_val:.1%}",
-                    ha="center", va="bottom", fontsize=10, fontweight="bold"
+                    i + 1,
+                    mean_val + 0.05,
+                    f"μ={mean_val:.1%}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=10,
+                    fontweight="bold",
                 )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_factscore_violin.png", report=comparison_report)
+            return self._save_fig(
+                fig, f"{prefix}comparison_factscore_violin.png", report=comparison_report
+            )

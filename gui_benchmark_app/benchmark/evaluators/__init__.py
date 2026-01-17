@@ -41,14 +41,14 @@ __all__ = [
 def get_evaluator(name: str, config):
     """
     Factory function to create evaluator by name.
-    
+
     Args:
         name: Evaluator name (ohi, ohi_local, ohi_max, gpt4, vector_rag, graph_rag)
         config: ComparisonBenchmarkConfig instance
-        
+
     Returns:
         Evaluator instance
-        
+
     OHI Tiers:
         - ohi_local: Only local sources (Neo4j + Qdrant) - tier="local"
         - ohi: Default tier with MCP fallback - tier="default"
@@ -77,7 +77,7 @@ def get_evaluator(name: str, config):
             tier="max",  # All sources including all MCP
             target_sources_override=20,
         )
-    
+
     if name == "ohi":
         return OHIEvaluator(
             config,
@@ -86,10 +86,10 @@ def get_evaluator(name: str, config):
             tier="default",  # Local first, MCP fallback
             target_sources_override=8,
         )
-    
+
     if name == "gpt4":
         return GPT4Evaluator(config)
-    
+
     raise ValueError(
         f"Unknown evaluator: {name}. Available: ohi, ohi_local, ohi_max, gpt4, vector_rag, graph_rag"
     )

@@ -69,7 +69,9 @@ class CSVReporter(BaseReporter):
         df = self._results_df(report, results)
         return df.to_csv(index=False, encoding="utf-8")
 
-    def save(self, report: BenchmarkReport, results: list[ResultMetric], filename: str | None = None) -> Path:
+    def save(
+        self, report: BenchmarkReport, results: list[ResultMetric], filename: str | None = None
+    ) -> Path:
         """
         Save results to CSV files.
 
@@ -91,28 +93,48 @@ class CSVReporter(BaseReporter):
         # Extra exports (best effort; never fail overall save)
         try:
             df_run = self._run_metadata_df(report, results)
-            df_run.to_csv(self.output_dir / f"{base}_run_metadata.{self.file_extension}", index=False, encoding="utf-8", newline="")
+            df_run.to_csv(
+                self.output_dir / f"{base}_run_metadata.{self.file_extension}",
+                index=False,
+                encoding="utf-8",
+                newline="",
+            )
         except Exception:
             pass
 
         try:
             df_strat = self._strategy_summary_df(report)
             if not df_strat.empty:
-                df_strat.to_csv(self.output_dir / f"{base}_strategy_summary.{self.file_extension}", index=False, encoding="utf-8", newline="")
+                df_strat.to_csv(
+                    self.output_dir / f"{base}_strategy_summary.{self.file_extension}",
+                    index=False,
+                    encoding="utf-8",
+                    newline="",
+                )
         except Exception:
             pass
 
         try:
             df_dom = self._domain_summary_df(report)
             if not df_dom.empty:
-                df_dom.to_csv(self.output_dir / f"{base}_domain_summary.{self.file_extension}", index=False, encoding="utf-8", newline="")
+                df_dom.to_csv(
+                    self.output_dir / f"{base}_domain_summary.{self.file_extension}",
+                    index=False,
+                    encoding="utf-8",
+                    newline="",
+                )
         except Exception:
             pass
 
         try:
             df_comp = self._comparisons_df(report)
             if not df_comp.empty:
-                df_comp.to_csv(self.output_dir / f"{base}_comparisons.{self.file_extension}", index=False, encoding="utf-8", newline="")
+                df_comp.to_csv(
+                    self.output_dir / f"{base}_comparisons.{self.file_extension}",
+                    index=False,
+                    encoding="utf-8",
+                    newline="",
+                )
         except Exception:
             pass
 
@@ -148,7 +170,9 @@ class CSVReporter(BaseReporter):
 
         return df
 
-    def _run_metadata_df(self, report: BenchmarkReport, results: list[ResultMetric]) -> pd.DataFrame:
+    def _run_metadata_df(
+        self, report: BenchmarkReport, results: list[ResultMetric]
+    ) -> pd.DataFrame:
         total = len(results)
         errors = sum(1 for r in results if getattr(r, "has_error", False))
         valid = total - errors
@@ -247,7 +271,9 @@ class CSVReporter(BaseReporter):
 
         # Nice ordering: strategy then largest domains first
         if "total" in df.columns:
-            df = df.sort_values(by=["strategy", "total"], ascending=[True, False], na_position="last")
+            df = df.sort_values(
+                by=["strategy", "total"], ascending=[True, False], na_position="last"
+            )
 
         return df
 

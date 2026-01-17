@@ -1,4 +1,5 @@
 """Unit tests for benchmark evaluators."""
+
 from __future__ import annotations
 
 import pytest
@@ -95,9 +96,7 @@ class TestOHIEvaluator:
 
             evaluator = OHIEvaluator(api_url="http://localhost:8080")
             evaluator.client = AsyncMock()
-            evaluator.client.post.return_value.json.return_value = (
-                sample_verification_response
-            )
+            evaluator.client.post.return_value.json.return_value = sample_verification_response
 
             result = await evaluator.evaluate("Python was created in 1991")
             assert result is not None

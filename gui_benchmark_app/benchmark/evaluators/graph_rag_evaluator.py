@@ -198,9 +198,7 @@ class GraphRAGEvaluator(BaseEvaluator):
                     evaluator=self.name,
                 )
 
-            results = await asyncio.to_thread(
-                self._query_graph, terms, self.graph_config.top_k
-            )
+            results = await asyncio.to_thread(self._query_graph, terms, self.graph_config.top_k)
 
             latency_ms = (time.perf_counter() - start_time) * 1000
 
@@ -217,9 +215,7 @@ class GraphRAGEvaluator(BaseEvaluator):
             for r in results:
                 node = r["node"]
                 node_text = self._node_text(node).lower()
-                matched_terms = {
-                    t for t in terms if t and t in node_text
-                }
+                matched_terms = {t for t in terms if t and t in node_text}
                 coverage = len(matched_terms) / max(1, len(terms))
                 scored_results.append(
                     {
@@ -277,9 +273,7 @@ class GraphRAGEvaluator(BaseEvaluator):
                 metadata={
                     "terms": terms,
                     "top_k": self.graph_config.top_k,
-                    "retrieval": (
-                        "fulltext" if self.graph_config.use_fulltext else "keyword"
-                    ),
+                    "retrieval": ("fulltext" if self.graph_config.use_fulltext else "keyword"),
                 },
             )
 
@@ -311,7 +305,8 @@ class GraphRAGEvaluator(BaseEvaluator):
                     text=sentence,
                     source_text=text,
                     index=index,
-                    verified=result.verdict in {
+                    verified=result.verdict
+                    in {
                         VerificationVerdict.SUPPORTED,
                         VerificationVerdict.PARTIAL,
                     },
