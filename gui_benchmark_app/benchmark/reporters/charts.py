@@ -38,7 +38,7 @@ import numpy as np
 from benchmark.reporters.base import BaseReporter
 
 if TYPE_CHECKING:
-    from benchmark.comparison_benchmark import ComparisonReport, EvaluatorMetrics
+    from benchmark.comparison_benchmark import ComparisonReport
     from benchmark.models import BenchmarkReport, ResultMetric
 
 
@@ -1204,7 +1204,6 @@ class ChartsReporter(BaseReporter):
 
             fig.suptitle("OHI Benchmark Comparison Dashboard", fontsize=20, fontweight='bold', y=0.985)
 
-            run_id = getattr(comparison_report, "run_id", "")
             # Footer added by _save_fig
             # Manual header removed to avoid duplication, or can be kept if distinct info needed.
             # But standardizing on footer is better for "all images".
@@ -1240,7 +1239,7 @@ class ChartsReporter(BaseReporter):
             if any(v > 0 for v in vals):
                 labels.append((lab, fn))
 
-        metrics_labels = [l for l, _ in labels]
+        metrics_labels = [label for label, _ in labels]
         num_metrics = len(metrics_labels)
         angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
         angles += angles[:1]
@@ -1554,7 +1553,6 @@ class ChartsReporter(BaseReporter):
         """
         try:
             import matplotlib.pyplot as plt
-            from matplotlib.patches import Patch
         except ImportError:
             return None
 

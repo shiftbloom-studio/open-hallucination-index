@@ -1,7 +1,7 @@
 # Agent Guide for Open Hallucination Index
 
-This file summarizes how to build, lint, test, and style code in this repository.
-It is intended for agentic coding tools working across the monorepo.
+This guide is for agentic coding tools working in this monorepo. It covers how to build,
+lint, test, and follow the code style rules for each subproject.
 
 ## Repository layout
 
@@ -26,7 +26,8 @@ It is intended for agentic coding tools working across the monorepo.
 - Format: `ruff format .`
 - Type check: `mypy .`
 - Run all tests: `pytest` (coverage and `tests/` config live in `src/api/pyproject.toml`)
-- Single test (when tests exist under `src/api/tests`): `pytest tests/test_example.py::test_name -v`
+- Run a single test file: `pytest tests/test_example.py -v`
+- Run a single test by name: `pytest tests/test_example.py::test_name -v`
 
 ### Frontend (Next.js) - `src/frontend`
 
@@ -58,8 +59,9 @@ It is intended for agentic coding tools working across the monorepo.
 - Lint: `ruff check .`
 - Format: `ruff format .`
 - Type check: `mypy .`
-- Tests: `pytest`
-- Single test: `pytest tests/test_config.py::test_config_defaults`
+- Run all tests: `pytest`
+- Run a single test file: `pytest tests/test_config.py -v`
+- Run a single test by name: `pytest tests/test_config.py::test_config_defaults -v`
 
 ### Ingestion pipeline - `gui_ingestion_app/ingestion`
 
@@ -69,8 +71,9 @@ It is intended for agentic coding tools working across the monorepo.
 - Lint: `ruff check .`
 - Format: `ruff format .`
 - Type check: `mypy .`
-- Tests: `pytest`
-- Single test: `pytest tests/test_pipeline.py::test_chunking`
+- Run all tests: `pytest`
+- Run a single test file: `pytest tests/test_pipeline.py -v`
+- Run a single test by name: `pytest tests/test_pipeline.py::test_chunking -v`
 
 ## Code style and conventions
 
@@ -144,6 +147,8 @@ It is intended for agentic coding tools working across the monorepo.
 
 ## Operational notes
 
+- Primary environment is Docker on Windows with containers running locally.
+- On macOS, some services (for example `vllm`) do not run; work without running Docker tests.
 - API depends on Neo4j, Qdrant, Redis, and LLM services.
 - Frontend proxy uses `DEFAULT_API_URL` and `DEFAULT_API_KEY`.
 - MCP server exposes `/health`, `/sse`, `/messages`, `/stats`.

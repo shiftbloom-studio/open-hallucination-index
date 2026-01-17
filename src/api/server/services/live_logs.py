@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from collections import deque
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import AsyncGenerator
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ class LogType(str, Enum):
 class LogEntry:
     """A single log entry."""
     id: str = field(default_factory=lambda: str(uuid4()))
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     level: LogLevel = LogLevel.INFO
     log_type: LogType = LogType.REQUEST
     method: str = ""
@@ -102,9 +101,9 @@ class LiveLogService:
     to all connected SSE clients.
     """
 
-    _instance: "LiveLogService | None" = None
+    _instance: LiveLogService | None = None
 
-    def __new__(cls) -> "LiveLogService":
+    def __new__(cls) -> LiveLogService:
         """Singleton pattern."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -123,7 +122,7 @@ class LiveLogService:
         # Stats
         self._total_requests = 0
         self._total_errors = 0
-        self._start_time = datetime.now(timezone.utc)
+        self._start_time = datetime.now(UTC)
 
         logger.info("LiveLogService initialized")
 
@@ -151,7 +150,7 @@ class LiveLogService:
             for queue in dead_subscribers:
                 self._subscribers.discard(queue)
 
-    async def subscribe(self) -> AsyncGenerator[LogEntry, None]:
+    async def subscribe(self) -> AsyncGenerator[LogEntry]:
         """Subscribe to live log updates."""
         queue: asyncio.Queue[LogEntry] = asyncio.Queue(maxsize=100)
 
@@ -168,7 +167,7 @@ class LiveLogService:
                 try:
                     entry = await asyncio.wait_for(queue.get(), timeout=30.0)
                     yield entry
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Send heartbeat
                     yield LogEntry(
                         level=LogLevel.DEBUG,
@@ -185,7 +184,7 @@ class LiveLogService:
 
     def get_stats(self) -> dict:
         """Get logging statistics."""
-        uptime = (datetime.now(timezone.utc) - self._start_time).total_seconds()
+        uptime = (datetime.now(UTC) - self._start_time).total_seconds()
         return {
             "total_requests": self._total_requests,
             "total_errors": self._total_errors,
