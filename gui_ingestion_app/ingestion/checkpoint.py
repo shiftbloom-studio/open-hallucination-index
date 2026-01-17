@@ -38,10 +38,12 @@ class CheckpointManager:
         checkpoint_file: str | None = None,
         collection: str = "wikipedia_hybrid",
         auto_save: bool = True,
+        auto_save_interval: int = 100,  # Save every N batches instead of every batch
     ):
         self.checkpoint_file = Path(checkpoint_file or self.DEFAULT_CHECKPOINT_FILE)
         self.collection = collection
         self.auto_save = auto_save
+        self.auto_save_interval = max(1, auto_save_interval)  # Minimum 1
 
         # Checkpoint state
         self.processed_ids: set[int] = set()
@@ -53,6 +55,9 @@ class CheckpointManager:
 
         # Parts tracking
         self.processed_parts: set[int] = set()
+
+        # Batch counter for throttled saves
+        self._batch_counter: int = 0
 
         # Register atexit handler for emergency saves
         atexit.register(self._emergency_save)
@@ -126,10 +131,11 @@ class CheckpointManager:
         }
 
         # Write atomically using temp file
+        # Use compact JSON (no indent) for faster serialization with large ID sets
         temp_file = self.checkpoint_file.with_suffix(".tmp")
         try:
             with open(temp_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+                json.dump(data, f, separators=(",", ":"))  # Compact format, ~2-3x smaller
 
             # Atomic rename
             temp_file.replace(self.checkpoint_file)
@@ -170,8 +176,13 @@ class CheckpointManager:
         self.articles_processed += len(article_ids)
         self.chunks_created += chunk_count
 
+        # Throttled auto-save: only save every N batches to avoid I/O bottleneck
+        # with large processed_ids sets (can be millions of IDs)
         if self.auto_save:
-            self.save()
+            self._batch_counter += 1
+            if self._batch_counter >= self.auto_save_interval:
+                self.save()
+                self._batch_counter = 0
 
     def record_part_complete(self, part_index: int) -> None:
         """Record that a dump part has been fully processed."""

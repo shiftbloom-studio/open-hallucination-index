@@ -486,6 +486,9 @@ class IngestionPipeline:
         if not batch:
             return
 
+        # Backpressure: avoid stacking too many pending uploads
+        self._throttle_pending_uploads()
+
         # Upload to both stores asynchronously
         qdrant_event = self.qdrant.upload_batch_async(batch)
         neo4j_event = self.neo4j.upload_batch_async(batch)
@@ -505,17 +508,40 @@ class IngestionPipeline:
         self._pending_uploads.append(result)
 
         # Clean up completed uploads and record in checkpoint
+        self._drain_completed_uploads()
+
+    def _drain_completed_uploads(self) -> None:
+        """Record and remove completed uploads from the pending list."""
         completed = []
         for r in self._pending_uploads:
             if r.qdrant_event.is_set() and r.neo4j_event.is_set() and not r.checkpoint_recorded:
-                # Both uploads completed successfully - record in checkpoint
                 with self._checkpoint_lock:
                     self.checkpoint.record_batch(r.article_ids, r.chunk_count)
                 r.checkpoint_recorded = True
                 completed.append(r)
-        
-        # Remove fully completed batches
-        self._pending_uploads = [r for r in self._pending_uploads if r not in completed]
+
+        if completed:
+            self._pending_uploads = [r for r in self._pending_uploads if r not in completed]
+
+    def _throttle_pending_uploads(self) -> None:
+        """Apply backpressure to avoid unbounded pending upload growth."""
+        max_pending = getattr(self.config, "max_pending_batches", 0)
+        if not max_pending or max_pending <= 0:
+            return
+
+        while (
+            len(self._pending_uploads) >= max_pending
+            and not self._shutdown
+            and not self._stop_event.is_set()
+        ):
+            self._drain_completed_uploads()
+            if len(self._pending_uploads) < max_pending:
+                break
+
+            # Wait briefly for the oldest batch to finish
+            oldest = self._pending_uploads[0]
+            oldest.qdrant_event.wait(timeout=1.0)
+            oldest.neo4j_event.wait(timeout=1.0)
 
     def _wait_for_uploads(self, timeout: float = 60.0) -> None:
         """
@@ -556,9 +582,11 @@ class IngestionPipeline:
         self.qdrant.flush()
         self.neo4j.flush()
 
-        # Retry failed batches
-        if failed_batches:
+        # Retry failed batches with proper re-queuing for multiple attempts
+        while failed_batches:
             logger.info(f"🔄 Retrying {len(failed_batches)} failed batches...")
+            still_failed = []
+            
             for result in failed_batches:
                 result.upload_attempts += 1
                 logger.info(
@@ -575,17 +603,20 @@ class IngestionPipeline:
                 
                 if qdrant_done and neo4j_done:
                     successful_batches.append(result)
-                    logger.info(f"✅ Batch retry succeeded")
+                    logger.info("✅ Batch retry succeeded")
                 else:
                     if result.upload_attempts < result.max_attempts:
                         logger.warning(
                             f"⚠️ Retry failed, will try again "
                             f"({result.upload_attempts}/{result.max_attempts})"
                         )
+                        still_failed.append(result)  # Re-queue for another retry
                     else:
                         logger.error(
                             f"❌ Batch upload failed permanently after {result.max_attempts} attempts"
                         )
+            
+            failed_batches = still_failed  # Continue with remaining failed batches
 
         # Record successful uploads in checkpoint (only after verification!)
         if successful_batches:
@@ -630,8 +661,8 @@ class IngestionPipeline:
         self.qdrant.close()
         self.neo4j.close()
 
-        self._preprocess_executor.shutdown(wait=False)
-        self._dump_executor.shutdown(wait=False)
+        self._preprocess_executor.shutdown(wait=True, cancel_futures=True)
+        self._dump_executor.shutdown(wait=True, cancel_futures=True)
 
     def get_stats(self) -> PipelineStats:
         """Get current pipeline statistics."""

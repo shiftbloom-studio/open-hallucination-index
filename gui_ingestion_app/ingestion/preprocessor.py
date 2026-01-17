@@ -19,7 +19,7 @@ import html
 import logging
 import math
 import re
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -209,17 +209,24 @@ class BM25Tokenizer:
         self.avg_doc_length = avg_doc_length
         self.idf_scores: dict[str, float] = {}
         self.doc_count = 0
-        self._token_hash_cache: dict[str, int] = {}
+        # Use OrderedDict for LRU eviction instead of plain dict
+        self._token_hash_cache: OrderedDict[str, int] = OrderedDict()
         self._cache_limit = 100000
 
     def _hash_token(self, token: str) -> int:
-        """Hash token to vocabulary index for sparse vector."""
+        """Hash token to vocabulary index for sparse vector with LRU caching."""
         if token in self._token_hash_cache:
+            # Move to end (most recently used) for LRU ordering
+            self._token_hash_cache.move_to_end(token)
             return self._token_hash_cache[token]
 
         hash_val = int(hashlib.md5(token.encode()).hexdigest(), 16) % self.vocab_size
-        if len(self._token_hash_cache) < self._cache_limit:
-            self._token_hash_cache[token] = hash_val
+        
+        # Evict oldest entries if cache is full (LRU eviction)
+        while len(self._token_hash_cache) >= self._cache_limit:
+            self._token_hash_cache.popitem(last=False)  # Remove oldest (first) item
+        
+        self._token_hash_cache[token] = hash_val
         return hash_val
 
     def tokenize(self, text: str) -> list[str]:
@@ -289,6 +296,15 @@ class BM25Tokenizer:
         for token, df in doc_freq.items():
             idf = math.log((self.doc_count - df + 0.5) / (df + 0.5) + 1)
             self.idf_scores[token] = max(idf, 0.0)
+
+        # Prune IDF vocabulary to prevent unbounded memory growth
+        # Keep only top vocab_size tokens by IDF score (higher = more discriminative)
+        # Use 50% buffer before pruning to avoid frequent resizes
+        if len(self.idf_scores) > self.vocab_size * 1.5:
+            sorted_tokens = sorted(
+                self.idf_scores.items(), key=lambda x: x[1], reverse=True
+            )
+            self.idf_scores = dict(sorted_tokens[: self.vocab_size])
 
 
 # =============================================================================
@@ -1108,11 +1124,22 @@ class AdvancedTextPreprocessor:
         chunk_start = 0
         current_section = "Introduction"
 
-        # Find which section each character position belongs to
-        section_map: dict[int, str] = {}
-        for section in article.sections:
-            for pos in range(section.start_pos, section.end_pos):
-                section_map[pos] = section.title
+        # Build lightweight section ranges (avoid per-character map)
+        section_ranges = [(s.start_pos, s.end_pos, s.title) for s in article.sections]
+        section_index = 0
+        raw_len = len(article.text)
+        clean_len = max(len(clean_text), 1)
+
+        def _section_for_clean_pos(mid_pos: int) -> str:
+            nonlocal section_index
+            if not section_ranges or raw_len <= 0:
+                return "Introduction"
+            raw_pos = int((mid_pos / clean_len) * raw_len)
+            while section_index < len(section_ranges) and raw_pos >= section_ranges[section_index][1]:
+                section_index += 1
+            if section_index < len(section_ranges):
+                return section_ranges[section_index][2]
+            return section_ranges[-1][2]
 
         char_pos = 0
 
@@ -1125,9 +1152,9 @@ class AdvancedTextPreprocessor:
                 chunk_text = " ".join(current_chunk)
                 chunk_end = char_pos
 
-                # Determine section for this chunk
+                # Determine section for this chunk (approximate mapping)
                 mid_pos = (chunk_start + chunk_end) // 2
-                current_section = section_map.get(mid_pos, "Introduction")
+                current_section = _section_for_clean_pos(mid_pos)
 
                 chunk_id = f"{article.id}_{len(chunks)}"
                 contextualized = f"{article.title} - {current_section}: {chunk_text}"

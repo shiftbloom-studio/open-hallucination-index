@@ -23,7 +23,7 @@ import time
 from queue import Empty, Queue
 
 from neo4j import GraphDatabase
-from neo4j.exceptions import TransientError
+from neo4j.exceptions import ConfigurationError, TransientError
 
 from ingestion.models import ProcessedArticle
 
@@ -164,88 +164,98 @@ class Neo4jGraphStore:
 
     def _init_schema(self):
         """Initialize constraints and indexes for optimal performance."""
-        with self.driver.session(database=self.database) as session:
-            # Constraints (also create indexes)
-            constraints = [
-                "CREATE CONSTRAINT article_id IF NOT EXISTS FOR (a:Article) REQUIRE a.id IS UNIQUE",
-                "CREATE CONSTRAINT category_name IF NOT EXISTS FOR (c:Category) REQUIRE c.name IS UNIQUE",
-                "CREATE CONSTRAINT entity_name IF NOT EXISTS FOR (e:Entity) REQUIRE e.name IS UNIQUE",
-                "CREATE CONSTRAINT location_name IF NOT EXISTS FOR (l:Location) REQUIRE l.name IS UNIQUE",
-                "CREATE CONSTRAINT occupation_name IF NOT EXISTS FOR (o:Occupation) REQUIRE o.name IS UNIQUE",
-                "CREATE CONSTRAINT nationality_name IF NOT EXISTS FOR (n:Nationality) REQUIRE n.name IS UNIQUE",
-                # NEW: Constraints for new node types
-                "CREATE CONSTRAINT person_name IF NOT EXISTS FOR (p:Person) REQUIRE p.name IS UNIQUE",
-                "CREATE CONSTRAINT edu_name IF NOT EXISTS FOR (e:EducationalInstitution) REQUIRE e.name IS UNIQUE",
-                "CREATE CONSTRAINT org_name IF NOT EXISTS FOR (o:Organization) REQUIRE o.name IS UNIQUE",
-                "CREATE CONSTRAINT award_name IF NOT EXISTS FOR (a:Award) REQUIRE a.name IS UNIQUE",
-                "CREATE CONSTRAINT work_name IF NOT EXISTS FOR (w:CreativeWork) REQUIRE w.name IS UNIQUE",
-                "CREATE CONSTRAINT genre_name IF NOT EXISTS FOR (g:Genre) REQUIRE g.name IS UNIQUE",
-                "CREATE CONSTRAINT industry_name IF NOT EXISTS FOR (i:Industry) REQUIRE i.name IS UNIQUE",
-                "CREATE CONSTRAINT country_name IF NOT EXISTS FOR (c:Country) REQUIRE c.name IS UNIQUE",
-                "CREATE CONSTRAINT type_name IF NOT EXISTS FOR (t:Type) REQUIRE t.name IS UNIQUE",
-                # NEW: Wikidata entity constraint
-                "CREATE CONSTRAINT wikidata_qid IF NOT EXISTS FOR (w:WikidataEntity) REQUIRE w.qid IS UNIQUE",
-            ]
+        try:
+            with self.driver.session(
+                database=self.database,
+                notifications_min_severity="WARNING",
+            ) as session:
+                self._run_schema_setup(session)
+        except (ConfigurationError, TypeError):
+            with self.driver.session(database=self.database) as session:
+                self._run_schema_setup(session)
 
-            for constraint in constraints:
-                try:
-                    session.run(constraint)  # type: ignore[arg-type]
-                except Exception as e:
-                    if "already exists" not in str(e).lower():
-                        logger.debug(f"Constraint: {e}")
+    def _run_schema_setup(self, session):
+        # Constraints (also create indexes)
+        constraints = [
+            "CREATE CONSTRAINT article_id IF NOT EXISTS FOR (a:Article) REQUIRE a.id IS UNIQUE",
+            "CREATE CONSTRAINT category_name IF NOT EXISTS FOR (c:Category) REQUIRE c.name IS UNIQUE",
+            "CREATE CONSTRAINT entity_name IF NOT EXISTS FOR (e:Entity) REQUIRE e.name IS UNIQUE",
+            "CREATE CONSTRAINT location_name IF NOT EXISTS FOR (l:Location) REQUIRE l.name IS UNIQUE",
+            "CREATE CONSTRAINT occupation_name IF NOT EXISTS FOR (o:Occupation) REQUIRE o.name IS UNIQUE",
+            "CREATE CONSTRAINT nationality_name IF NOT EXISTS FOR (n:Nationality) REQUIRE n.name IS UNIQUE",
+            # NEW: Constraints for new node types
+            "CREATE CONSTRAINT person_name IF NOT EXISTS FOR (p:Person) REQUIRE p.name IS UNIQUE",
+            "CREATE CONSTRAINT edu_name IF NOT EXISTS FOR (e:EducationalInstitution) REQUIRE e.name IS UNIQUE",
+            "CREATE CONSTRAINT org_name IF NOT EXISTS FOR (o:Organization) REQUIRE o.name IS UNIQUE",
+            "CREATE CONSTRAINT award_name IF NOT EXISTS FOR (a:Award) REQUIRE a.name IS UNIQUE",
+            "CREATE CONSTRAINT work_name IF NOT EXISTS FOR (w:CreativeWork) REQUIRE w.name IS UNIQUE",
+            "CREATE CONSTRAINT genre_name IF NOT EXISTS FOR (g:Genre) REQUIRE g.name IS UNIQUE",
+            "CREATE CONSTRAINT industry_name IF NOT EXISTS FOR (i:Industry) REQUIRE i.name IS UNIQUE",
+            "CREATE CONSTRAINT country_name IF NOT EXISTS FOR (c:Country) REQUIRE c.name IS UNIQUE",
+            "CREATE CONSTRAINT type_name IF NOT EXISTS FOR (t:Type) REQUIRE t.name IS UNIQUE",
+            # NEW: Wikidata entity constraint
+            "CREATE CONSTRAINT wikidata_qid IF NOT EXISTS FOR (w:WikidataEntity) REQUIRE w.qid IS UNIQUE",
+        ]
 
-            # Full-text indexes for search
-            fulltext_indexes = [
-                "CREATE FULLTEXT INDEX article_search IF NOT EXISTS FOR (a:Article) ON EACH [a.title, a.first_paragraph]",
-                "CREATE FULLTEXT INDEX entity_search IF NOT EXISTS FOR (e:Entity) ON EACH [e.name]",
-                # NEW: Full-text on Wikidata descriptions
-                "CREATE FULLTEXT INDEX wikidata_search IF NOT EXISTS FOR (w:WikidataEntity) ON EACH [w.qid, w.label]",
-            ]
-
-            for index in fulltext_indexes:
-                try:
-                    session.run(index)  # type: ignore[arg-type]
-                except Exception as e:
-                    if "already exists" not in str(e).lower():
-                        logger.debug(f"Fulltext index: {e}")
-
-            # Regular indexes for common lookups
-            indexes = [
-                "CREATE INDEX article_title IF NOT EXISTS FOR (a:Article) ON (a.title)",
-                "CREATE INDEX article_infobox IF NOT EXISTS FOR (a:Article) ON (a.infobox_type)",
-                "CREATE INDEX article_word_count IF NOT EXISTS FOR (a:Article) ON (a.word_count)",
-                # NEW: Wikidata ID index on articles
-                "CREATE INDEX article_wikidata IF NOT EXISTS FOR (a:Article) ON (a.wikidata_id)",
-                # NEW: Quality score index for ranking
-                "CREATE INDEX article_quality IF NOT EXISTS FOR (a:Article) ON (a.quality_score)",
-                # NEW: Geographic type index
-                "CREATE INDEX article_geo_type IF NOT EXISTS FOR (a:Article) ON (a.geo_type)",
-                # NEW: Disambiguation index
-                "CREATE INDEX article_disambig IF NOT EXISTS FOR (a:Article) ON (a.is_disambiguation)",
-                # NEW: Redirect index
-                "CREATE INDEX article_redirect IF NOT EXISTS FOR (a:Article) ON (a.is_redirect)",
-                # NEW: Instance type index for filtering by entity type
-                "CREATE INDEX article_instance IF NOT EXISTS FOR (a:Article) ON (a.instance_of)",
-            ]
-
-            for index in indexes:
-                try:
-                    session.run(index)  # type: ignore[arg-type]
-                except Exception as e:
-                    if "already exists" not in str(e).lower():
-                        logger.debug(f"Index: {e}")
-
-            # Point index for geographic queries (if Neo4j version supports it)
+        for constraint in constraints:
             try:
-                session.run(
-                    "CREATE POINT INDEX article_location IF NOT EXISTS "
-                    "FOR (a:Article) ON (a.location_point)"
-                )
-                logger.info("✅ Created geographic point index")
+                session.run(constraint)  # type: ignore[arg-type]
             except Exception as e:
-                logger.debug(f"Point index not supported or already exists: {e}")
+                if "already exists" not in str(e).lower():
+                    logger.debug(f"Constraint: {e}")
 
-            logger.info("✅ Neo4j schema initialized with enhanced indexes")
+        # Full-text indexes for search
+        fulltext_indexes = [
+            "CREATE FULLTEXT INDEX article_search IF NOT EXISTS FOR (a:Article) ON EACH [a.title, a.first_paragraph]",
+            "CREATE FULLTEXT INDEX entity_search IF NOT EXISTS FOR (e:Entity) ON EACH [e.name]",
+            # NEW: Full-text on Wikidata descriptions
+            "CREATE FULLTEXT INDEX wikidata_search IF NOT EXISTS FOR (w:WikidataEntity) ON EACH [w.qid, w.label]",
+        ]
+
+        for index in fulltext_indexes:
+            try:
+                session.run(index)  # type: ignore[arg-type]
+            except Exception as e:
+                if "already exists" not in str(e).lower():
+                    logger.debug(f"Fulltext index: {e}")
+
+        # Regular indexes for common lookups
+        indexes = [
+            "CREATE INDEX article_title IF NOT EXISTS FOR (a:Article) ON (a.title)",
+            "CREATE INDEX article_infobox IF NOT EXISTS FOR (a:Article) ON (a.infobox_type)",
+            "CREATE INDEX article_word_count IF NOT EXISTS FOR (a:Article) ON (a.word_count)",
+            # NEW: Wikidata ID index on articles
+            "CREATE INDEX article_wikidata IF NOT EXISTS FOR (a:Article) ON (a.wikidata_id)",
+            # NEW: Quality score index for ranking
+            "CREATE INDEX article_quality IF NOT EXISTS FOR (a:Article) ON (a.quality_score)",
+            # NEW: Geographic type index
+            "CREATE INDEX article_geo_type IF NOT EXISTS FOR (a:Article) ON (a.geo_type)",
+            # NEW: Disambiguation index
+            "CREATE INDEX article_disambig IF NOT EXISTS FOR (a:Article) ON (a.is_disambiguation)",
+            # NEW: Redirect index
+            "CREATE INDEX article_redirect IF NOT EXISTS FOR (a:Article) ON (a.is_redirect)",
+            # NEW: Instance type index for filtering by entity type
+            "CREATE INDEX article_instance IF NOT EXISTS FOR (a:Article) ON (a.instance_of)",
+        ]
+
+        for index in indexes:
+            try:
+                session.run(index)  # type: ignore[arg-type]
+            except Exception as e:
+                if "already exists" not in str(e).lower():
+                    logger.debug(f"Index: {e}")
+
+        # Point index for geographic queries (if Neo4j version supports it)
+        try:
+            session.run(
+                "CREATE POINT INDEX article_location IF NOT EXISTS "
+                "FOR (a:Article) ON (a.location_point)"
+            )
+            logger.info("✅ Created geographic point index")
+        except Exception as e:
+            logger.debug(f"Point index not supported or already exists: {e}")
+
+        logger.info("✅ Neo4j schema initialized with enhanced indexes")
 
     def _check_connection(self) -> bool:
         """
@@ -495,6 +505,22 @@ class Neo4jGraphStore:
         if not batch_data:
             return
 
+        # Single-pass field detection to avoid repeated any() iterations
+        # This scans once instead of 20+ times for conditional queries
+        fields_present: set[str] = set()
+        conditional_fields = [
+            "disambiguation", "location", "occupation", "nationality",
+            "spouse", "children", "parents", "education", "employer",
+            "awards", "author_of", "genre", "influenced_by", "influenced",
+            "founded_by", "headquarters", "industry", "country", "part_of",
+            "predecessor", "successor", "instance_of", "capital_of",
+            "wikidata_id", "redirect_target",
+        ]
+        for d in batch_data:
+            for field in conditional_fields:
+                if d.get(field):
+                    fields_present.add(field)
+
         with self.driver.session(database=self.database) as session:
             # 1. Create/update Article nodes with enhanced metadata
             article_query = """
@@ -594,7 +620,7 @@ class Neo4jGraphStore:
             self._run_with_retry(session, see_also_query, batch_data, "See also relationships")
 
             # 6. Disambiguation relationships
-            if any(d.get("disambiguation") for d in batch_data):
+            if "disambiguation" in fields_present:
                 disambig_query = """
                 UNWIND $batch AS data
                 MATCH (source:Article {id: data.id})
@@ -608,7 +634,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, disambig_query, batch_data, "Disambiguation relationships")
 
             # 7. Location relationships
-            if any(d.get("location") for d in batch_data):
+            if "location" in fields_present:
                 location_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -619,7 +645,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, location_query, batch_data, "Location relationships")
 
             # 8. Occupation relationships
-            if any(d.get("occupation") for d in batch_data):
+            if "occupation" in fields_present:
                 occupation_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -630,7 +656,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, occupation_query, batch_data, "Occupation relationships")
 
             # 9. Nationality relationships
-            if any(d.get("nationality") for d in batch_data):
+            if "nationality" in fields_present:
                 nationality_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -664,7 +690,7 @@ class Neo4jGraphStore:
             # =================================================================
 
             # 11. Spouse relationships (MARRIED_TO)
-            if any(d.get("spouse") for d in batch_data):
+            if "spouse" in fields_present:
                 spouse_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -675,7 +701,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, spouse_query, batch_data, "Spouse relationships")
 
             # 12. Children relationships (PARENT_OF)
-            if any(d.get("children") for d in batch_data):
+            if "children" in fields_present:
                 children_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -687,7 +713,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, children_query, batch_data, "Children relationships")
 
             # 13. Parent relationships (CHILD_OF)
-            if any(d.get("parents") for d in batch_data):
+            if "parents" in fields_present:
                 parents_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -699,7 +725,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, parents_query, batch_data, "Parents relationships")
 
             # 14. Education relationships (EDUCATED_AT)
-            if any(d.get("education") for d in batch_data):
+            if "education" in fields_present:
                 education_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -711,7 +737,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, education_query, batch_data, "Education relationships")
 
             # 15. Employer relationships (EMPLOYED_BY)
-            if any(d.get("employer") for d in batch_data):
+            if "employer" in fields_present:
                 employer_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -723,7 +749,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, employer_query, batch_data, "Employer relationships")
 
             # 16. Award relationships (WON_AWARD)
-            if any(d.get("awards") for d in batch_data):
+            if "awards" in fields_present:
                 awards_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -735,7 +761,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, awards_query, batch_data, "Awards relationships")
 
             # 17. Author relationships (AUTHORED)
-            if any(d.get("author_of") for d in batch_data):
+            if "author_of" in fields_present:
                 author_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -747,7 +773,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, author_query, batch_data, "Author relationships")
 
             # 18. Genre relationships (HAS_GENRE)
-            if any(d.get("genre") for d in batch_data):
+            if "genre" in fields_present:
                 genre_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -759,7 +785,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, genre_query, batch_data, "Genre relationships")
 
             # 19. Influenced by relationships (INFLUENCED_BY)
-            if any(d.get("influenced_by") for d in batch_data):
+            if "influenced_by" in fields_present:
                 influenced_by_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -772,7 +798,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, influenced_by_query, batch_data, "Influenced by relationships")
 
             # 20. Influenced relationships (INFLUENCED)
-            if any(d.get("influenced") for d in batch_data):
+            if "influenced" in fields_present:
                 influenced_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -785,7 +811,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, influenced_query, batch_data, "Influenced relationships")
 
             # 21. Founded by relationships (FOUNDED_BY)
-            if any(d.get("founded_by") for d in batch_data):
+            if "founded_by" in fields_present:
                 founded_by_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -796,7 +822,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, founded_by_query, batch_data, "Founded by relationships")
 
             # 22. Headquarters relationships (HEADQUARTERED_IN)
-            if any(d.get("headquarters") for d in batch_data):
+            if "headquarters" in fields_present:
                 headquarters_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -807,7 +833,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, headquarters_query, batch_data, "Headquarters relationships")
 
             # 23. Industry relationships (IN_INDUSTRY)
-            if any(d.get("industry") for d in batch_data):
+            if "industry" in fields_present:
                 industry_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -818,7 +844,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, industry_query, batch_data, "Industry relationships")
 
             # 24. Country relationships (IN_COUNTRY)
-            if any(d.get("country") for d in batch_data):
+            if "country" in fields_present:
                 country_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -829,7 +855,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, country_query, batch_data, "Country relationships")
 
             # 25. Part of relationships (PART_OF) - geographic hierarchy
-            if any(d.get("part_of") for d in batch_data):
+            if "part_of" in fields_present:
                 part_of_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -840,7 +866,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, part_of_query, batch_data, "Part of relationships")
 
             # 26. Predecessor relationships (PRECEDED_BY)
-            if any(d.get("predecessor") for d in batch_data):
+            if "predecessor" in fields_present:
                 predecessor_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -852,7 +878,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, predecessor_query, batch_data, "Predecessor relationships")
 
             # 27. Successor relationships (SUCCEEDED_BY)
-            if any(d.get("successor") for d in batch_data):
+            if "successor" in fields_present:
                 successor_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -864,7 +890,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, successor_query, batch_data, "Successor relationships")
 
             # 28. Instance of relationships (INSTANCE_OF) - type classification
-            if any(d.get("instance_of") for d in batch_data):
+            if "instance_of" in fields_present:
                 instance_of_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -875,7 +901,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, instance_of_query, batch_data, "Instance of relationships")
 
             # 29. Capital of relationships (CAPITAL_OF) - capital cities
-            if any(d.get("capital_of") for d in batch_data):
+            if "capital_of" in fields_present:
                 capital_of_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -890,7 +916,7 @@ class Neo4jGraphStore:
             # =================================================================
 
             # 30. Wikidata entity relationships (HAS_WIKIDATA)
-            if any(d.get("wikidata_id") for d in batch_data):
+            if "wikidata_id" in fields_present:
                 wikidata_query = """
                 UNWIND $batch AS data
                 MATCH (a:Article {id: data.id})
@@ -901,7 +927,7 @@ class Neo4jGraphStore:
                 self._run_with_retry(session, wikidata_query, batch_data, "Wikidata relationships")
 
             # 31. Redirect relationships (REDIRECTS_TO)
-            if any(d.get("redirect_target") for d in batch_data):
+            if "redirect_target" in fields_present:
                 redirect_query = """
                 UNWIND $batch AS data
                 MATCH (source:Article {id: data.id})

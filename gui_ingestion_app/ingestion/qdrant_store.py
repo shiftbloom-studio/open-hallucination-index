@@ -159,6 +159,14 @@ class QdrantHybridStore:
         else:
             logger.info("💻 Using CPU for embeddings")
 
+        # Avoid multiple embedding threads on a single GPU to reduce contention
+        if self.device == "cuda" and embedding_workers > 1:
+            logger.warning(
+                "⚠️ Multiple embedding workers on GPU can cause CPU contention. "
+                "Forcing embedding_workers=1."
+            )
+            embedding_workers = 1
+
         self.model = SentenceTransformer(embedding_model, device=self.device)
 
         # BM25 tokenizer for sparse vectors
