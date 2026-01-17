@@ -43,7 +43,7 @@ export abstract class BaseSource implements KnowledgeSource {
   abstract search(query: string, limit?: number): Promise<SearchResult[]>;
   
   protected sanitizeQuery(query: string): string {
-    return query.replace(/[^\w\s\-\.]/g, " ").trim().slice(0, 200);
+    return query.replace(/[^\w\s\-.]/g, " ").trim().slice(0, 200);
   }
 
   protected compactQuery(query: string, maxWords = 6): string {

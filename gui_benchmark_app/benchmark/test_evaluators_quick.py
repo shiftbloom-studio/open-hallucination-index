@@ -16,14 +16,14 @@ import asyncio
 import sys
 from pathlib import Path
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+
 # Add parent directory to path so benchmark module can be imported
 _benchmark_dir = Path(__file__).parent
 sys.path.insert(0, str(_benchmark_dir.parent))  # Add parent so 'benchmark' is importable
 sys.path.insert(0, str(_benchmark_dir))  # Also add benchmark dir itself
-
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 
 
 console = Console()

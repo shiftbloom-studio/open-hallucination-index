@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import os
 import shutil
 import sys
@@ -570,7 +569,6 @@ class BenchmarkWorker(QThread):
         - Effect sizes (Cohen's d)
         - McNemar's test for classification differences
         """
-        from scipy import stats
         
         if not hasattr(report, 'statistical_analysis'):
             report.statistical_analysis = {}  # type: ignore
@@ -1229,7 +1227,6 @@ class BenchmarkWindow(QMainWindow):
         
         # Overall progress
         if total_evaluators > 0:
-            overall_percent = int((completed_evaluators / total_evaluators) * 100)
             self.overall_progress_bar.setMaximum(total_evaluators)
             self.overall_progress_bar.setValue(completed_evaluators)
             self.overall_progress_label.setText(
@@ -1241,7 +1238,6 @@ class BenchmarkWindow(QMainWindow):
         
         # Current run progress
         if total > 0:
-            current_percent = int((completed / total) * 100)
             self.current_progress_bar.setMaximum(total)
             self.current_progress_bar.setValue(completed)
             metric_label = f" - {current_metric}" if current_metric else ""

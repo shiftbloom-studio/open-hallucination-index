@@ -290,6 +290,8 @@ class AdaptiveEvidenceCollector:
         claim: Claim,
         mcp_sources: list[MCPKnowledgeSource] | None = None,
         target_evidence_count: int | None = None,
+        *,
+        allow_early_exit: bool = True,
     ) -> CollectionResult:
         """
         Collect evidence for a claim using adaptive tiered approach.
@@ -328,7 +330,7 @@ class AdaptiveEvidenceCollector:
         )
 
         # Check if local evidence is sufficient
-        if accumulator.is_sufficient(
+        if allow_early_exit and accumulator.is_sufficient(
             effective_min_evidence,
             self._min_weighted_value,
             self._high_confidence,
@@ -341,7 +343,11 @@ class AdaptiveEvidenceCollector:
         # === TIER 2: MCP sources (selected based on claim) ===
         tier2_start = time.perf_counter()
         tier2_evidence, pending_count = await self._collect_mcp(
-            claim, mcp_sources, accumulator, min_evidence=effective_min_evidence
+            claim,
+            mcp_sources,
+            accumulator,
+            min_evidence=effective_min_evidence,
+            allow_early_exit=allow_early_exit,
         )
         tier2_latency = (time.perf_counter() - tier2_start) * 1000
         tier_latencies["mcp"] = tier2_latency
@@ -421,6 +427,8 @@ class AdaptiveEvidenceCollector:
         mcp_sources: list[MCPKnowledgeSource] | None,
         accumulator: AccumulatorState,
         min_evidence: int | None = None,
+        *,
+        allow_early_exit: bool = True,
     ) -> tuple[list[Evidence], int]:
         """
         Collect evidence from MCP sources with early exit.
@@ -498,7 +506,7 @@ class AdaptiveEvidenceCollector:
                     logger.debug(f"MCP source {source_name} error: {e}")
 
             # Check if we have sufficient evidence
-            if accumulator.is_sufficient(
+            if allow_early_exit and accumulator.is_sufficient(
                 effective_min,
                 self._min_weighted_value,
                 self._high_confidence,
