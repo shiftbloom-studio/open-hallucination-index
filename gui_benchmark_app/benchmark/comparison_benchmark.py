@@ -508,7 +508,12 @@ def compute_alce_style_metrics(
         if contexts_by_sample is not None and idx < len(contexts_by_sample):
             ctx = contexts_by_sample[idx] or []
             if ctx and sentences:
-                # quick tf-idf: fit on all contexts + sentences once per response
+                # TF-IDF vectorization per response.
+                # NOTE: This could be optimized by batching all responses/contexts upfront
+                # (similar to compute_ragas_proxy_metrics), but the current per-response
+                # approach is simpler and handles variable contexts per sample more naturally.
+                # For typical benchmark sizes (100s-1000s of responses), the performance
+                # difference is negligible.
                 try:
                     from sklearn.feature_extraction.text import TfidfVectorizer
                     from sklearn.metrics.pairwise import cosine_similarity
