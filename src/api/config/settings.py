@@ -127,10 +127,10 @@ class APISettings(BaseSettings):
     port: int = Field(default=8080)
     workers: int = Field(default=1, ge=1)
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
-    # API key for public access (optional, leave empty to disable)
+    # API key for public access and admin dashboard (optional, leave empty to disable)
     api_key: str = Field(
         default="",
-        description="API key for authentication. Leave empty to disable auth.",
+        description="API key for authentication and admin access. Leave empty to disable auth.",
     )
     # Rate limiting
     rate_limit_per_minute: int = Field(default=60, ge=1)

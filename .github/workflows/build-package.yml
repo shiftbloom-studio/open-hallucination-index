@@ -1,0 +1,135 @@
+name: Build & Package
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -----------------------------------------------------------------------------
+  # Docker Build - API
+  # -----------------------------------------------------------------------------
+  docker-api:
+    name: Build Docker (API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/api/Dockerfile
+          push: false
+          tags: ohi-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # -----------------------------------------------------------------------------
+  # Docker Build - MCP Server
+  # -----------------------------------------------------------------------------
+  docker-mcp:
+    name: Build Docker (MCP Server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build MCP Server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/mcp-server/Dockerfile
+          push: false
+          tags: ohi-mcp-server:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # -----------------------------------------------------------------------------
+  # Package - GUI Benchmark App
+  # -----------------------------------------------------------------------------
+  package-benchmark:
+    name: Package Benchmark App
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create ZIP artifact
+        run: |
+          cd gui_benchmark_app
+          zip -r ../gui_benchmark_app.zip . \
+            -x "*.pyc" \
+            -x "__pycache__/*" \
+            -x "*.egg-info/*" \
+            -x ".venv/*" \
+            -x "*.egg"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-benchmark-app
+          path: gui_benchmark_app.zip
+          retention-days: 14
+
+  # -----------------------------------------------------------------------------
+  # Package - GUI Ingestion App
+  # -----------------------------------------------------------------------------
+  package-ingestion:
+    name: Package Ingestion App
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create ZIP artifact
+        run: |
+          cd gui_ingestion_app
+          zip -r ../gui_ingestion_app.zip . \
+            -x "*.pyc" \
+            -x "__pycache__/*" \
+            -x "*.egg-info/*" \
+            -x ".venv/*" \
+            -x "*.egg" \
+            -x "build/*"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-ingestion-app
+          path: gui_ingestion_app.zip
+          retention-days: 14
+
+  # -----------------------------------------------------------------------------
+  # Package - Frontend (ready for npm install && npm run dev)
+  # -----------------------------------------------------------------------------
+  package-frontend:
+    name: Package Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create ZIP artifact
+        run: |
+          cd src/frontend
+          zip -r ../../frontend.zip . \
+            -x "node_modules/*" \
+            -x ".next/*" \
+            -x ".turbo/*" \
+            -x "coverage/*"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend
+          path: frontend.zip
+          retention-days: 14

@@ -80,6 +80,9 @@ class ToolAggregator {
     // Security
     this.handlers.set("search_vulnerabilities", this.searchVulnerabilities.bind(this));
     this.handlers.set("get_vulnerability", this.getVulnerability.bind(this));
+
+    // OHI API
+    this.handlers.set("ohi_check_balance", this.ohiCheckBalance.bind(this));
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
@@ -392,6 +395,58 @@ class ToolAggregator {
       results: result ? [result] : [],
       error: result ? undefined : "Vulnerability not found",
     };
+  }
+
+  // ============ OHI API ============
+
+  private async ohiCheckBalance(args: Record<string, unknown>): Promise<ToolResult> {
+    const apiKey = args.api_key as string;
+    const apiUrl = (args.api_url as string) || "http://ohi-api:8080";
+
+    if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length === 0) {
+      return {
+        success: false,
+        error: "The 'api_key' parameter is required and must be a non-empty string.",
+      };
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/admin/balance`, {
+        method: "GET",
+        headers: {
+          "X-API-Key": apiKey,
+          "Accept": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        return {
+          success: false,
+          error: errorData.detail || `HTTP ${response.status}: ${response.statusText}`,
+        };
+      }
+
+      const data = await response.json();
+      return {
+        success: true,
+        results: [],
+        metadata: {
+          tokens_remaining: data.tokens_remaining,
+          tokens_used: data.tokens_used,
+          token_limit: data.token_limit,
+          type: data.type,
+          key_name: data.key_name,
+          expires_at: data.expires_at,
+          is_active: data.is_active,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to connect to OHI API",
+      };
+    }
   }
 
   // ============ Helpers ============

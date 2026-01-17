@@ -368,6 +368,24 @@ const tools: Tool[] = [
       required: ["id"],
     },
   },
+  {
+    name: "ohi_check_balance",
+    description: "Check the token balance and status of an OHI API key. Returns tokens remaining, usage, key type, and expiration status.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        api_key: {
+          type: "string",
+          description: "The OHI API key to check balance for"
+        },
+        api_url: {
+          type: "string",
+          description: "OHI API base URL (default: http://ohi-api:8080)",
+        },
+      },
+      required: ["api_key"],
+    },
+  },
 ];
 
 // Create MCP server
