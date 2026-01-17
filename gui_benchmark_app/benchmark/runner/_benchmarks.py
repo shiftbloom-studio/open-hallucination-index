@@ -39,6 +39,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Context/evidence cap per sample for RAG evaluation metrics
+MAX_CONTEXTS_PER_SAMPLE = 8  # Balance between coverage and performance
+
 
 class StopRequested(RuntimeError):
     pass
@@ -313,16 +316,16 @@ async def run_hallucination_benchmark(
             evidence_count = len(result.evidence or [])
 
             # RAG signals (optional): question/answer/contexts/ground-truth text
-            # These fields are *derived* from existing case/result data and do not change inputs.
+            # These fields are derived from the evaluation result and case and do not modify the underlying data.
             question = str(getattr(case, "question", None) or getattr(case, "query", None) or case.text)
             answer = str(getattr(result, "answer", None) or getattr(result, "generated_answer", None) or response_text)
             contexts = [
-                str(getattr(ev, "text", None) or getattr(ev, "snippet", None) or "")
+                str(text)
                 for ev in (result.evidence or [])
-                if (getattr(ev, "text", None) or getattr(ev, "snippet", None))
+                if (text := (getattr(ev, "text", None) or getattr(ev, "snippet", None)))
             ]
-            # Cap for speed + memory
-            contexts = contexts[:8]
+            # Cap contexts for speed + memory (balance between coverage and performance)
+            contexts = contexts[:MAX_CONTEXTS_PER_SAMPLE]
             ground_truth = str(
                 getattr(case, "ground_truth", None)
                 or getattr(case, "reference", None)
@@ -340,7 +343,7 @@ async def run_hallucination_benchmark(
                 evidence_count=evidence_count,
                 question=question,
                 answer=answer,
-                contexts=contexts if contexts else [],
+                contexts=contexts,
                 ground_truth=ground_truth,
             )
 
