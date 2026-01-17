@@ -9,6 +9,13 @@ High-performance evidence collection with:
 4. Background completion for cache warming
 5. Latency tracking per source
 
+Enhanced with Wikipedia ingestion metadata:
+6. Ingestion quality_score integration (article importance)
+7. PageRank-based importance bonus
+8. Disambiguation/redirect page penalties
+9. Wikidata and geographic coordinate bonuses
+10. Incoming link popularity weighting
+
 This is the core latency optimization component that minimizes
 response time while maximizing evidence quality.
 """
@@ -105,10 +112,20 @@ class EvidenceQuality:
     quality_score: float  # 0.0-1.0
     source_reliability: float  # 0.0-1.0 based on source type
     weighted_value: float  # Combined quality score
+    classification_confidence: float | None = None
 
     @classmethod
     def assess(cls, evidence: Evidence) -> EvidenceQuality:
-        """Assess evidence quality."""
+        """
+        Assess evidence quality.
+        
+        Enhanced to leverage metadata from Wikipedia ingestion:
+        - quality_score: Pre-computed article importance (0-1)
+        - pagerank: Link-based importance score
+        - is_disambiguation: Penalize disambiguation pages
+        - is_redirect: Penalize redirect pages
+        - has_wikidata: Bonus for Wikidata-linked articles
+        """
         # Base quality from similarity score
         base_quality = evidence.similarity_score or 0.5
 
@@ -141,8 +158,65 @@ class EvidenceQuality:
             match_bonus = 0.15
         elif evidence.match_type == "partial":
             match_bonus = 0.05
+        elif evidence.match_type == "wikidata_lookup":
+            match_bonus = 0.12  # Wikidata matches are authoritative
+        elif evidence.match_type == "quality_filtered":
+            match_bonus = 0.10  # Pre-filtered for quality
+        elif evidence.match_type == "enhanced_quality":
+            match_bonus = 0.10
+        elif evidence.match_type == "geographic_proximity":
+            match_bonus = 0.05  # Geo matches are contextual
 
         quality_score = min(1.0, base_quality + match_bonus)
+        classification_confidence = evidence.classification_confidence
+        if classification_confidence is not None:
+            quality_score = min(1.0, (quality_score + classification_confidence) / 2.0)
+
+        # =================================================================
+        # NEW: Incorporate ingestion metadata from structured_data
+        # =================================================================
+        if evidence.structured_data:
+            sd = evidence.structured_data
+            
+            # Use pre-computed quality_score from ingestion if available
+            ingestion_quality = sd.get("quality_score")
+            if ingestion_quality is not None and isinstance(ingestion_quality, (int, float)):
+                # Blend ingestion quality with computed quality
+                quality_score = (quality_score * 0.6) + (float(ingestion_quality) * 0.4)
+            
+            # Pagerank bonus (logarithmic scale)
+            pagerank = sd.get("pagerank")
+            if pagerank is not None and isinstance(pagerank, (int, float)) and pagerank > 0:
+                # Small bonus for high-pagerank articles
+                import math
+                pr_bonus = min(0.1, math.log10(pagerank * 1000000 + 1) / 60)
+                quality_score = min(1.0, quality_score + pr_bonus)
+            
+            # Penalty for disambiguation pages
+            if sd.get("is_disambiguation") is True:
+                quality_score *= 0.6  # 40% penalty
+                source_reliability *= 0.7
+            
+            # Penalty for redirect pages (shouldn't happen but guard)
+            if sd.get("is_redirect") is True:
+                quality_score *= 0.5  # 50% penalty
+                source_reliability *= 0.5
+            
+            # Bonus for Wikidata-linked articles
+            if sd.get("wikidata_id") or sd.get("has_wikidata") is True:
+                quality_score = min(1.0, quality_score + 0.05)
+            
+            # Bonus for articles with coordinates (well-defined entities)
+            if sd.get("has_coordinates") is True:
+                quality_score = min(1.0, quality_score + 0.03)
+            
+            # Incoming links bonus (popularity indicator)
+            incoming_links = sd.get("incoming_links")
+            if incoming_links is not None and isinstance(incoming_links, int) and incoming_links > 100:
+                import math
+                links_bonus = min(0.08, math.log10(incoming_links + 1) / 50)
+                quality_score = min(1.0, quality_score + links_bonus)
+
         weighted_value = quality_score * source_reliability
 
         return cls(
@@ -150,6 +224,7 @@ class EvidenceQuality:
             quality_score=quality_score,
             source_reliability=source_reliability,
             weighted_value=weighted_value,
+            classification_confidence=classification_confidence,
         )
 
 
@@ -159,6 +234,9 @@ class AccumulatorState:
 
     evidence: list[Evidence] = field(default_factory=list)
     quality_scores: list[EvidenceQuality] = field(default_factory=list)
+    supporting_evidence: list[Evidence] = field(default_factory=list)
+    refuting_evidence: list[Evidence] = field(default_factory=list)
+    classification_enabled: bool = False
     total_weighted_value: float = 0.0
     high_confidence_count: int = 0
     sources_queried: set[str] = field(default_factory=set)
@@ -173,6 +251,13 @@ class AccumulatorState:
         quality = EvidenceQuality.assess(ev)
         self.evidence.append(ev)
         self.quality_scores.append(quality)
+
+        if quality.classification_confidence is not None:
+            if quality.classification_confidence >= 0.6:
+                self.supporting_evidence.append(ev)
+            elif quality.classification_confidence <= 0.4:
+                self.refuting_evidence.append(ev)
+
         self.total_weighted_value += quality.weighted_value
 
         if quality.weighted_value >= 0.75:
@@ -184,25 +269,38 @@ class AccumulatorState:
         """Add batch of evidence and return total weighted value added."""
         return sum(self.add(ev) for ev in evidence_list)
 
+    def record_classification(self, supporting: list[Evidence], refuting: list[Evidence]) -> None:
+        """Record supporting and refuting evidence classification results."""
+        self.classification_enabled = True
+        self.supporting_evidence.extend(supporting)
+        self.refuting_evidence.extend(refuting)
+
     def is_sufficient(
         self,
         min_evidence: int = 3,
         min_weighted_value: float = 2.0,
         high_confidence_threshold: int = 2,
+        *,
+        require_count_only: bool = False,
     ) -> bool:
         """
         Check if accumulated evidence is sufficient.
 
         Uses quality-weighted assessment:
-        - Need minimum count OR high weighted value
-        - Having high-confidence evidence reduces requirements
+        - Need minimum count of supporting/refuting evidence
+        - Or high-confidence evidence reduces requirements
         """
-        # Early exit if we have enough high-confidence evidence
-        if self.high_confidence_count >= high_confidence_threshold:
+        # Check count threshold using non-neutral evidence when classification is enabled
+        classified_count = len(self.supporting_evidence) + len(self.refuting_evidence)
+        evidence_count = classified_count if self.classification_enabled else len(self.evidence)
+        if evidence_count >= min_evidence:
             return True
 
-        # Check count threshold
-        if len(self.evidence) >= min_evidence:
+        if require_count_only:
+            return False
+
+        # Early exit if we have enough high-confidence evidence
+        if self.high_confidence_count >= high_confidence_threshold:
             return True
 
         # Check weighted value threshold
@@ -215,13 +313,15 @@ class CollectionResult:
 
     claim_id: str
     evidence: list[Evidence]
-    quality_scores: list[EvidenceQuality]
-    total_weighted_value: float
-    latency_ms: float
-    tier_latencies: dict[str, float]
-    sources_queried: list[str]
-    early_exit: bool
-    background_tasks_pending: int
+    quality_scores: list[EvidenceQuality] = field(default_factory=list)
+    total_weighted_value: float = 0.0
+    latency_ms: float = 0.0
+    tier_latencies: dict[str, float] = field(default_factory=dict)
+    sources_queried: list[str] = field(default_factory=list)
+    early_exit: bool = False
+    background_tasks_pending: int = 0
+    supporting_evidence: list[Evidence] = field(default_factory=list)
+    refuting_evidence: list[Evidence] = field(default_factory=list)
 
 
 class AdaptiveEvidenceCollector:
@@ -292,6 +392,7 @@ class AdaptiveEvidenceCollector:
         target_evidence_count: int | None = None,
         *,
         allow_early_exit: bool = True,
+        classifier: Callable[[list[Evidence]], Coroutine[Any, Any, tuple[list[Evidence], list[Evidence]]]] | None = None,
     ) -> CollectionResult:
         """
         Collect evidence for a claim using adaptive tiered approach.
@@ -300,6 +401,7 @@ class AdaptiveEvidenceCollector:
             claim: The claim to find evidence for.
             mcp_sources: Optional MCP sources (uses selector if not provided).
             target_evidence_count: Optional target number of evidence items to find.
+            classifier: Optional classifier returning (supporting, refuting) evidence.
 
         Returns:
             CollectionResult with evidence and metrics.
@@ -310,11 +412,14 @@ class AdaptiveEvidenceCollector:
 
         # === TIER 1: Local sources (Neo4j + Qdrant) ===
         tier1_start = time.perf_counter()
-        tier1_evidence = await self._collect_local(claim)
+        tier1_evidence = await self._collect_local(claim, accumulator)
         tier1_latency = (time.perf_counter() - tier1_start) * 1000
         tier_latencies["local"] = tier1_latency
 
         accumulator.add_batch(tier1_evidence)
+        if classifier and tier1_evidence:
+            supporting, refuting = await classifier(tier1_evidence)
+            accumulator.record_classification(supporting, refuting)
         accumulator.tier_complete.add(CollectionTier.LOCAL)
 
         logger.debug(
@@ -334,6 +439,7 @@ class AdaptiveEvidenceCollector:
             effective_min_evidence,
             self._min_weighted_value,
             self._high_confidence,
+            require_count_only=bool(target_evidence_count is not None),
         ):
             logger.debug("Early exit after Tier 1 (local sources sufficient)")
             return self._build_result(
@@ -348,11 +454,11 @@ class AdaptiveEvidenceCollector:
             accumulator,
             min_evidence=effective_min_evidence,
             allow_early_exit=allow_early_exit,
+            classifier=classifier,
         )
         tier2_latency = (time.perf_counter() - tier2_start) * 1000
         tier_latencies["mcp"] = tier2_latency
 
-        accumulator.add_batch(tier2_evidence)
         accumulator.tier_complete.add(CollectionTier.MCP)
 
         logger.debug(
@@ -371,7 +477,7 @@ class AdaptiveEvidenceCollector:
             pending_count=pending_count,
         )
 
-    async def _collect_local(self, claim: Claim) -> list[Evidence]:
+    async def _collect_local(self, claim: Claim, accumulator: AccumulatorState) -> list[Evidence]:
         """Collect evidence from local sources (Neo4j + Qdrant)."""
         tasks: list[asyncio.Task[list[Evidence]]] = []
         task_names: list[str] = []
@@ -412,10 +518,14 @@ class AdaptiveEvidenceCollector:
 
         # Collect results
         evidence: list[Evidence] = []
+        task_name_map = dict(zip(tasks, task_names, strict=False))
         for task in done:
             try:
                 result = task.result()
                 evidence.extend(result)
+                source_name = task_name_map.get(task)
+                if source_name:
+                    accumulator.sources_queried.add(source_name)
             except Exception as e:
                 logger.debug(f"Local source error: {e}")
 
@@ -429,6 +539,7 @@ class AdaptiveEvidenceCollector:
         min_evidence: int | None = None,
         *,
         allow_early_exit: bool = True,
+        classifier: Callable[[list[Evidence]], Coroutine[Any, Any, tuple[list[Evidence], list[Evidence]]]] | None = None,
     ) -> tuple[list[Evidence], int]:
         """
         Collect evidence from MCP sources with early exit.
@@ -497,10 +608,22 @@ class AdaptiveEvidenceCollector:
                 try:
                     result = task.result()
                     evidence.extend(result)
+                    accumulator.sources_queried.add(source_name)
 
                     # Add to accumulator for sufficiency check
                     for ev in result:
                         accumulator.add(ev)
+
+                    if classifier:
+                        supporting, refuting = await classifier(result)
+                        accumulator.record_classification(supporting, refuting)
+
+                    if result:
+                        for callback in self._persist_callbacks:
+                            try:
+                                await callback(result)
+                            except Exception as e:
+                                logger.debug(f"Persist callback failed: {e}")
 
                 except Exception as e:
                     logger.debug(f"MCP source {source_name} error: {e}")
@@ -510,6 +633,7 @@ class AdaptiveEvidenceCollector:
                 effective_min,
                 self._min_weighted_value,
                 self._high_confidence,
+                require_count_only=bool(min_evidence is not None),
             ):
                 logger.debug(
                     f"Early exit during MCP collection: {len(evidence)} evidence, "
@@ -598,6 +722,8 @@ class AdaptiveEvidenceCollector:
         return CollectionResult(
             claim_id=str(claim.id),
             evidence=accumulator.evidence,
+            supporting_evidence=accumulator.supporting_evidence,
+            refuting_evidence=accumulator.refuting_evidence,
             quality_scores=accumulator.quality_scores,
             total_weighted_value=accumulator.total_weighted_value,
             latency_ms=total_latency,

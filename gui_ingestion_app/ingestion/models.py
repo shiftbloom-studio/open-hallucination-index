@@ -160,6 +160,40 @@ class WikiArticle:
     # Classification
     instance_of: str | None = None  # Type classification (person, city, company, etc.)
 
+    # =========================================================================
+    # NEW: Enhanced metadata from SQL dumps (pre-computed by Wikipedia)
+    # =========================================================================
+
+    # Wikidata integration - links to structured knowledge base
+    wikidata_id: str | None = None  # Q-ID like 'Q42' for Douglas Adams
+
+    # Geographic coordinates (from geo_tags.sql.gz)
+    latitude: float | None = None
+    longitude: float | None = None
+    geo_type: str | None = None  # 'city', 'country', 'landmark', 'mountain', etc.
+    geo_country_code: str | None = None  # ISO country code like 'US', 'GB'
+    geo_dimension: int | None = None  # Size in meters (useful for zoom level)
+
+    # Page metadata (from page.sql.gz)
+    is_redirect: bool = False
+    redirect_target: str | None = None  # Title of target page if redirect
+    page_length: int = 0  # Article length in bytes (proxy for importance)
+    is_disambiguation: bool = False  # Disambiguation page flag
+
+    # Category hierarchy (enhanced from categorylinks.sql.gz)
+    parent_categories: set[str] = field(default_factory=set)  # Direct parent categories
+    category_depth: int | None = None  # Depth in category tree (lower = more general)
+
+    # Link statistics (from pagelinks.sql.gz)
+    incoming_link_count: int = 0  # Number of pages linking TO this page
+    outgoing_link_count: int = 0  # Number of pages this page links to
+
+    # Quality indicators
+    has_infobox: bool = False
+    has_coordinates: bool = False
+    has_wikidata: bool = False
+    quality_score: float = 0.0  # Computed importance/quality score (0-1)
+
 
 @dataclass
 class ProcessedChunk:

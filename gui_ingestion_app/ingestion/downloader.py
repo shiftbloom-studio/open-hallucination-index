@@ -628,3 +628,150 @@ class LocalFileParser:
                 f"✅ Parsed {file_path.name}: {articles_yielded} articles, "
                 f"{articles_skipped} skipped"
             )
+
+
+# =============================================================================
+# SQL DUMP DOWNLOADER
+# =============================================================================
+
+
+# Available SQL dump files for enhanced metadata
+SQL_DUMP_FILES = {
+    "page_props": "enwiki-latest-page_props.sql.gz",      # Wikidata IDs (~443MB)
+    "geo_tags": "enwiki-latest-geo_tags.sql.gz",          # Coordinates (~51MB)
+    "categorylinks": "enwiki-latest-categorylinks.sql.gz", # Categories (~2.3GB)
+    "page": "enwiki-latest-page.sql.gz",                  # Page metadata (~2.3GB)
+    "redirect": "enwiki-latest-redirect.sql.gz",          # Redirects (~variable)
+    "category": "enwiki-latest-category.sql.gz",          # Category stats (~34MB)
+}
+
+# Recommended for most use cases (smaller, high value)
+SQL_DUMP_RECOMMENDED = ["page_props", "geo_tags", "page", "category"]
+
+
+def download_sql_dumps(
+    download_dir: Path,
+    files: list[str] | None = None,
+    verify_sizes: bool = True,
+) -> dict[str, Path]:
+    """
+    Download Wikipedia SQL dump files for enhanced metadata.
+
+    Args:
+        download_dir: Directory to download files to
+        files: List of file keys to download (from SQL_DUMP_FILES).
+               If None, downloads recommended files.
+        verify_sizes: Verify downloaded file sizes against server
+
+    Returns:
+        Dict mapping file keys to local paths
+    """
+    if files is None:
+        files = SQL_DUMP_RECOMMENDED
+
+    download_dir.mkdir(parents=True, exist_ok=True)
+    downloaded: dict[str, Path] = {}
+
+    session = requests.Session()
+    retry_strategy = Retry(total=5, backoff_factor=2)
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    for file_key in files:
+        if file_key not in SQL_DUMP_FILES:
+            logger.warning(f"Unknown SQL dump file: {file_key}")
+            continue
+
+        filename = SQL_DUMP_FILES[file_key]
+        url = urljoin(DUMPS_URL, filename)
+        local_path = download_dir / filename
+
+        # Check if already downloaded
+        if local_path.exists():
+            local_size = local_path.stat().st_size
+            if local_size > 0:
+                if verify_sizes:
+                    try:
+                        head_resp = session.head(url, timeout=30)
+                        expected_size = int(head_resp.headers.get("content-length", 0))
+                        if local_size >= expected_size * 0.99:
+                            logger.info(f"✅ {filename} already downloaded ({local_size:,} bytes)")
+                            downloaded[file_key] = local_path
+                            continue
+                    except Exception as e:
+                        logger.debug(f"Could not verify {filename}: {e}")
+                else:
+                    logger.info(f"✅ {filename} already exists ({local_size:,} bytes)")
+                    downloaded[file_key] = local_path
+                    continue
+
+        # Download the file
+        logger.info(f"📥 Downloading {filename}...")
+        try:
+            with session.get(url, stream=True, timeout=(30, 600)) as resp:
+                resp.raise_for_status()
+                total_size = int(resp.headers.get("content-length", 0))
+
+                with open(local_path, "wb") as f:
+                    downloaded_bytes = 0
+                    last_log = time.time()
+
+                    for chunk in resp.iter_content(chunk_size=2 * 1024 * 1024):
+                        if shutdown_requested:
+                            logger.warning(f"Download interrupted: {filename}")
+                            break
+                        if chunk:
+                            f.write(chunk)
+                            downloaded_bytes += len(chunk)
+
+                            # Log progress every 30 seconds
+                            if time.time() - last_log > 30:
+                                if total_size > 0:
+                                    pct = 100 * downloaded_bytes / total_size
+                                    logger.info(
+                                        f"  {filename}: {downloaded_bytes / (1024**2):.1f} MB "
+                                        f"({pct:.1f}%)"
+                                    )
+                                else:
+                                    logger.info(
+                                        f"  {filename}: {downloaded_bytes / (1024**2):.1f} MB"
+                                    )
+                                last_log = time.time()
+
+            logger.info(f"✅ Downloaded {filename} ({downloaded_bytes:,} bytes)")
+            downloaded[file_key] = local_path
+
+        except Exception as e:
+            logger.error(f"Failed to download {filename}: {e}")
+            if local_path.exists():
+                local_path.unlink()
+
+    session.close()
+    return downloaded
+
+
+def get_sql_dump_status(download_dir: Path) -> dict[str, dict]:
+    """
+    Check status of SQL dump files in download directory.
+
+    Returns:
+        Dict with file key -> {exists, size_mb, path} for each SQL dump
+    """
+    status = {}
+    for file_key, filename in SQL_DUMP_FILES.items():
+        local_path = download_dir / filename
+        if local_path.exists():
+            size_mb = local_path.stat().st_size / (1024 * 1024)
+            status[file_key] = {
+                "exists": True,
+                "size_mb": round(size_mb, 1),
+                "path": local_path,
+            }
+        else:
+            status[file_key] = {
+                "exists": False,
+                "size_mb": 0,
+                "path": local_path,
+            }
+    return status

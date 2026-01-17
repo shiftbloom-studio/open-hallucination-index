@@ -20,7 +20,7 @@ const packages = [
     priceId: "price_1Smg720Fe33yJBCMhA1J38L9",
     features: [
       "10 OHI Tokens",
-      "Up to 1,000 characters verified",
+      "Up to 600 characters verified",
       "Full API access",
       "Tokens never expire",
       "Priority email support",
@@ -36,7 +36,7 @@ const packages = [
     priceId: "price_1Smg720Fe33yJBCMTj24emv8",
     features: [
       "100 OHI Tokens",
-      "Up to 10,000 characters verified",
+      "Up to 6,600 characters verified",
       "Full API access",
       "Tokens never expire",
       "Priority email support",
@@ -54,7 +54,7 @@ const packages = [
     priceId: "price_1Smg720Fe33yJBCMo2AsQSxv",
     features: [
       "500 OHI Tokens",
-      "Up to 50,000 characters verified",
+      "Up to 33,300 characters verified",
       "Full API access",
       "Tokens never expire",
       "Priority email support",
@@ -71,7 +71,7 @@ const faqData = [
   {
     question: "What is an OHI Token?",
     answer:
-      "An OHI Token allows you to verify up to 100 characters of text using our hallucination detection system. Each verification request consumes tokens based on the content length. Expert mode (with extensive evidence sources) costs 2 tokens per 100 characters.",
+      "An OHI Token allows you to verify up to 100 characters of text using our hallucination detection system. Each verification request consumes tokens based on the content length. Expert mode (with extensive evidence sources) costs 2 tokens per 100 characters, and detailed evidence adds 1 token per 200 characters.",
   },
   {
     question: "Do tokens expire?",

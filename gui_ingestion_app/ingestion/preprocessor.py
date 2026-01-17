@@ -4,10 +4,12 @@ Advanced text preprocessing for Wikipedia articles.
 Features:
 - Section extraction with hierarchy
 - Infobox parsing for structured data
-- Named entity extraction
-- BM25 sparse vector tokenization
-- Sentence-aware semantic chunking
+- Named entity extraction with NER-like patterns
+- BM25 sparse vector tokenization with global IDF
+- Sentence-aware semantic chunking with quality scoring
 - Rich metadata extraction for graph relationships
+- Integration with SQL dump lookup tables for enrichment
+- Quality scoring for article importance ranking
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import re
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from ingestion.models import (
     ProcessedArticle,
@@ -28,6 +31,9 @@ from ingestion.models import (
     WikiInfobox,
     WikiSection,
 )
+
+if TYPE_CHECKING:
+    from ingestion.sql_parsers import WikipediaLookupTables
 
 logger = logging.getLogger("ingestion.preprocessor")
 
@@ -382,16 +388,47 @@ class AdvancedTextPreprocessor:
         re.IGNORECASE,
     )
 
+    # Enhanced entity extraction patterns
+    PERSON_PATTERN = re.compile(
+        r"\b((?:[A-Z][a-z]+\s+){1,3}(?:[A-Z][a-z]+))\b"
+    )  # "John Smith", "Mary Jane Watson"
+    DATE_EXTRACT_PATTERN = re.compile(
+        r"\b(\d{1,2})\s+(January|February|March|April|May|June|July|August|"
+        r"September|October|November|December)\s+(\d{4})\b",
+        re.IGNORECASE
+    )
+    YEAR_PATTERN = re.compile(r"\b(1[0-9]{3}|20[0-2][0-9])\b")
+
+    # Relationship extraction patterns (for text mining)
+    BORN_PATTERN = re.compile(
+        r"(?:born|b\.)\s+(?:on\s+)?(\d{1,2}\s+\w+\s+\d{4}|\d{4})",
+        re.IGNORECASE
+    )
+    DIED_PATTERN = re.compile(
+        r"(?:died|d\.)\s+(?:on\s+)?(\d{1,2}\s+\w+\s+\d{4}|\d{4})",
+        re.IGNORECASE
+    )
+    FOUNDED_PATTERN = re.compile(
+        r"(?:founded|established|formed)\s+(?:in\s+)?(\d{4})",
+        re.IGNORECASE
+    )
+    POPULATION_PATTERN = re.compile(
+        r"population\s+(?:of\s+)?(?:approximately\s+)?([0-9,]+)",
+        re.IGNORECASE
+    )
+
     def __init__(
         self,
         chunk_size: int = 512,
         chunk_overlap: int = 64,
         min_chunk_size: int = 100,
         max_workers: int = 8,
+        lookup_tables: "WikipediaLookupTables | None" = None,
     ):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.min_chunk_size = min_chunk_size
+        self.lookup_tables = lookup_tables
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers, thread_name_prefix="preprocess"
         )
@@ -1153,14 +1190,189 @@ class AdvancedTextPreprocessor:
 
         return chunks
 
+    def enrich_from_lookup_tables(self, article: WikiArticle) -> None:
+        """
+        Enrich article with data from pre-loaded SQL dump lookup tables.
+
+        This provides much more complete and accurate data than regex extraction:
+        - Wikidata IDs for linking to structured knowledge
+        - Geographic coordinates for location-based queries
+        - Complete category assignments (not just what's in the wikitext)
+        - Disambiguation page detection
+        - Redirect information
+        """
+        if not self.lookup_tables:
+            return
+
+        page_id = article.id
+        tables = self.lookup_tables
+
+        # Wikidata ID
+        if page_id in tables.wikidata_ids:
+            article.wikidata_id = tables.wikidata_ids[page_id]
+            article.has_wikidata = True
+
+        # Geographic coordinates
+        if page_id in tables.geo_coordinates:
+            lat, lon, geo_type, country_code = tables.geo_coordinates[page_id]
+            article.latitude = lat
+            article.longitude = lon
+            article.geo_type = geo_type
+            article.geo_country_code = country_code
+            article.has_coordinates = True
+
+        # Categories from SQL dump (more complete than wikitext extraction)
+        if page_id in tables.categories:
+            # Merge with extracted categories (SQL dump is authoritative)
+            article.categories = tables.categories[page_id]
+
+        # Disambiguation detection
+        if page_id in tables.disambiguation_pages:
+            article.is_disambiguation = True
+
+        # Page metadata
+        if page_id in tables.page_metadata:
+            meta = tables.page_metadata[page_id]
+            article.is_redirect = meta.is_redirect
+            article.page_length = meta.length
+
+        # Check if redirect and get target
+        page_id_str = str(page_id)
+        if page_id_str in tables.redirects:
+            article.is_redirect = True
+            article.redirect_target = tables.redirects[page_id_str]
+
+    def compute_quality_score(self, article: WikiArticle) -> float:
+        """
+        Compute a quality/importance score for the article (0.0 to 1.0).
+
+        This score is used for:
+        - Prioritizing evidence during search
+        - Weighting in ranking algorithms
+        - Filtering low-quality content
+
+        Factors considered:
+        - Article length (longer = more comprehensive)
+        - Has infobox (structured data)
+        - Has coordinates (well-defined entity)
+        - Has Wikidata link (integrated with knowledge graph)
+        - Number of categories (well-classified)
+        - Incoming link count (popular/important)
+        - Has first paragraph (proper article structure)
+        """
+        score = 0.0
+
+        # Length score (log scale, max 0.2)
+        if article.page_length > 0:
+            length_score = min(0.2, math.log10(article.page_length + 1) / 25)
+            score += length_score
+        elif article.word_count > 0:
+            length_score = min(0.2, math.log10(article.word_count * 5 + 1) / 25)
+            score += length_score
+
+        # Infobox presence (0.15)
+        if article.infobox or article.has_infobox:
+            score += 0.15
+            article.has_infobox = True
+
+        # Wikidata link (0.15)
+        if article.wikidata_id:
+            score += 0.15
+
+        # Geographic coordinates (0.1)
+        if article.has_coordinates:
+            score += 0.1
+
+        # Categories (0.15, scaled by count)
+        if article.categories:
+            cat_score = min(0.15, len(article.categories) * 0.015)
+            score += cat_score
+
+        # First paragraph quality (0.1)
+        if article.first_paragraph and len(article.first_paragraph) > 100:
+            score += 0.1
+
+        # Entities extracted (0.1)
+        if article.entities:
+            entity_score = min(0.1, len(article.entities) * 0.02)
+            score += entity_score
+
+        # Instance type classification (0.05)
+        if article.instance_of:
+            score += 0.05
+
+        article.quality_score = min(1.0, score)
+        return article.quality_score
+
+    def extract_temporal_entities(self, text: str) -> dict[str, list[str]]:
+        """
+        Extract temporal entities (dates, years, periods) from text.
+
+        Returns dict with:
+        - 'dates': Full dates found
+        - 'years': Years mentioned
+        - 'birth_dates': Detected birth dates
+        - 'death_dates': Detected death dates
+        """
+        result: dict[str, list[str]] = {
+            "dates": [],
+            "years": [],
+            "birth_dates": [],
+            "death_dates": [],
+        }
+
+        # Extract full dates
+        for match in self.DATE_EXTRACT_PATTERN.finditer(text):
+            result["dates"].append(match.group(0))
+
+        # Extract years
+        for match in self.YEAR_PATTERN.finditer(text[:5000]):  # First 5000 chars
+            result["years"].append(match.group(1))
+
+        # Extract birth dates
+        for match in self.BORN_PATTERN.finditer(text[:3000]):
+            result["birth_dates"].append(match.group(1))
+
+        # Extract death dates
+        for match in self.DIED_PATTERN.finditer(text[:3000]):
+            result["death_dates"].append(match.group(1))
+
+        return result
+
+    def extract_numeric_facts(self, text: str) -> dict[str, str | None]:
+        """
+        Extract numeric facts like population, area, height, etc.
+        """
+        facts: dict[str, str | None] = {
+            "population": None,
+            "founded_year": None,
+        }
+
+        # Population
+        pop_match = self.POPULATION_PATTERN.search(text)
+        if pop_match:
+            facts["population"] = pop_match.group(1).replace(",", "")
+
+        # Founded year
+        founded_match = self.FOUNDED_PATTERN.search(text)
+        if founded_match:
+            facts["founded_year"] = founded_match.group(1)
+
+        return facts
+
     def process_article(self, article: WikiArticle) -> ProcessedArticle:
         """
         Process a single article: extract metadata and create chunks.
 
         This is the main entry point for preprocessing, designed to be
         called in parallel from a thread pool.
+
+        Enhanced with:
+        - Lookup table enrichment for complete metadata
+        - Quality score computation
+        - Better temporal entity extraction
         """
-        # Extract all metadata
+        # Extract all metadata from wikitext
         result = self.clean_and_extract(article.text)
 
         # Update article with extracted metadata
@@ -1204,6 +1416,15 @@ class AdvancedTextPreprocessor:
 
         # Extract first paragraph
         article.first_paragraph = self.extract_first_paragraph(article.text)
+
+        # Set word count
+        article.word_count = len(result.clean_text.split())
+
+        # Enrich from lookup tables (Wikidata, geo coords, etc.)
+        self.enrich_from_lookup_tables(article)
+
+        # Compute quality score
+        self.compute_quality_score(article)
 
         # Create chunks
         chunks = self.chunk_article(article, result.clean_text)

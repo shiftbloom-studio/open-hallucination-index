@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import CitationTraceViewer from "@/components/dashboard/citation-trace-viewer";
 
 const CHARACTERS_PER_TOKEN = 100;
-const STANDARD_TARGET_SOURCES = 6;
+const STANDARD_TARGET_SOURCES = 8;
 const EXPERT_TARGET_SOURCES = 18;
 
 interface VerifyAIOutputFormProps {
@@ -45,9 +45,11 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
   const [progress, setProgress] = useState(0);
   const [verificationResult, setVerificationResult] = useState<VerifyTextResponse | null>(null);
 
-  const textLength = text.length;
-  const baseTokensNeeded = Math.max(1, Math.ceil(textLength / CHARACTERS_PER_TOKEN));
-  const tokensNeeded = analysisMode === "expert" ? baseTokensNeeded * 2 : baseTokensNeeded;
+  const totalLength = text.length + context.length;
+  const baseTokensNeeded = Math.max(1, Math.ceil(totalLength / CHARACTERS_PER_TOKEN));
+  const modeMultiplier = analysisMode === "expert" ? 2 : 1;
+  const evidenceTokensNeeded = returnEvidence ? Math.ceil(totalLength / 200) : 0;
+  const tokensNeeded = baseTokensNeeded * modeMultiplier + evidenceTokensNeeded;
   const hasEnoughTokens = userTokens >= tokensNeeded;
   const targetSources = analysisMode === "expert" ? EXPERT_TARGET_SOURCES : STANDARD_TARGET_SOURCES;
 
@@ -96,7 +98,12 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
       const deductResponse = await fetch("/api/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, context, mode: analysisMode }),
+        body: JSON.stringify({
+          text,
+          context,
+          mode: analysisMode,
+          return_evidence: returnEvidence,
+        }),
       });
 
       if (!deductResponse.ok) {
@@ -273,11 +280,11 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
               onChange={(e) => setAnalysisMode(e.target.value as "standard" | "expert")}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <option value="standard">Standard (target 6 sources)</option>
-              <option value="expert">Expert (target 18 sources)</option>
+              <option value="standard">Standard (target 8 evidence items)</option>
+              <option value="expert">Expert (target 18 evidence items)</option>
             </select>
             <p className="text-xs text-muted-foreground">
-              Sets the preferred number of sources to query for verification.
+              Sets the target amount of supporting or refuting evidence to gather.
             </p>
           </div>
 

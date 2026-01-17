@@ -17,8 +17,13 @@ Ingestion Structure (ingestion/qdrant_store.py):
   * Metadata: infobox_type, instance_of, birth_date, death_date
   * location, occupation, nationality, country, industry, headquarters
   * categories (array), entities (array)
+  * NEW: wikidata_id, has_wikidata, latitude, longitude, geo_type
+  * NEW: geo_country_code, has_coordinates, quality_score, page_length
+  * NEW: is_redirect, redirect_target, is_disambiguation, has_infobox
 - Payload indexes on: text (full-text), title, section, infobox_type,
   country, occupation, nationality (keyword indexes)
+- NEW: geo (GeoIndexParams), quality_score (FloatIndexParams)
+- NEW: page_length (IntegerIndexParams), boolean indexes
 
 API Compatibility:
 - Reads "text" field (not "content") for Wikipedia chunks
@@ -26,8 +31,12 @@ API Compatibility:
 - Uses "url" field as source_uri
 - Supports metadata filtering on all indexed fields
 - Hybrid search ready (dense + sparse vectors)
+- NEW: Geographic radius filtering via geo_filter
+- NEW: Quality score filtering via quality_filter
+- NEW: Wikidata ID filtering via wikidata_id
+- NEW: Disambiguation/redirect exclusion via exclude_disambiguation/exclude_redirects
 
-Version: 2025-01-15 - Aligned with ingestion v2
+Version: 2026-01-17 - Aligned with ingestion v4 (enhanced metadata)
 """
 
 from __future__ import annotations
@@ -270,6 +279,12 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
         
         Supports hybrid search (dense + sparse vectors) and
         rich metadata filtering matching the ingestion structure.
+        
+        Enhanced with:
+        - Geographic radius filtering
+        - Quality score filtering
+        - Wikidata ID filtering
+        - Disambiguation/redirect page exclusion
 
         Args:
             query: Vector query specification.
@@ -287,7 +302,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
         try:
             # Build filter from metadata (supports ingestion structure)
             query_filter = None
-            must_conditions = []
+            must_conditions: list[dict] = []
             
             # Basic metadata filters
             if query.filter_metadata:
@@ -312,6 +327,72 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 must_conditions.append({
                     "key": "section",
                     "match": {"value": query.section_filter}
+                })
+            
+            # =================================================================
+            # NEW: Geographic radius filter
+            # =================================================================
+            if query.geo_filter:
+                must_conditions.append({
+                    "key": "geo",
+                    "geo_radius": {
+                        "center": {
+                            "lat": query.geo_filter.latitude,
+                            "lon": query.geo_filter.longitude,
+                        },
+                        "radius": query.geo_filter.radius_km * 1000,  # Convert to meters
+                    }
+                })
+            
+            # =================================================================
+            # NEW: Quality score filter
+            # =================================================================
+            if query.quality_filter:
+                if query.quality_filter.min_quality_score is not None:
+                    must_conditions.append({
+                        "key": "quality_score",
+                        "range": {"gte": query.quality_filter.min_quality_score}
+                    })
+                if query.quality_filter.min_incoming_links is not None:
+                    must_conditions.append({
+                        "key": "incoming_links",
+                        "range": {"gte": query.quality_filter.min_incoming_links}
+                    })
+                if query.quality_filter.exclude_stubs:
+                    # Exclude short articles (stubs have low page_length)
+                    must_conditions.append({
+                        "key": "page_length",
+                        "range": {"gte": 2000}  # At least 2KB
+                    })
+            
+            # =================================================================
+            # NEW: Wikidata ID filter
+            # =================================================================
+            if query.wikidata_id:
+                must_conditions.append({
+                    "key": "wikidata_id",
+                    "match": {"value": query.wikidata_id.upper()}
+                })
+            
+            if query.require_wikidata:
+                must_conditions.append({
+                    "key": "has_wikidata",
+                    "match": {"value": True}
+                })
+            
+            # =================================================================
+            # NEW: Exclude disambiguation and redirect pages
+            # =================================================================
+            if query.exclude_disambiguation:
+                must_conditions.append({
+                    "key": "is_disambiguation",
+                    "match": {"value": False}
+                })
+            
+            if query.exclude_redirects:
+                must_conditions.append({
+                    "key": "is_redirect",
+                    "match": {"value": False}
                 })
             
             if must_conditions:
@@ -718,3 +799,225 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             )
 
         return final_evidence
+
+    # =========================================================================
+    # NEW: Enhanced search methods for enriched Wikipedia metadata
+    # =========================================================================
+
+    async def search_by_location(
+        self,
+        latitude: float,
+        longitude: float,
+        radius_km: float,
+        text: str,
+        top_k: int = 10,
+        min_similarity: float = 0.4,
+    ) -> list[Evidence]:
+        """
+        Geographic radius search combining location filter with semantic search.
+
+        Uses Qdrant's geo_radius filter on the 'geo' payload field.
+
+        Args:
+            latitude: Center latitude.
+            longitude: Center longitude.
+            radius_km: Radius in kilometers.
+            text: Query text for semantic matching.
+            top_k: Maximum results.
+            min_similarity: Minimum similarity threshold.
+
+        Returns:
+            Evidence within the geographic radius, ranked by similarity.
+        """
+        from interfaces.stores import GeoRadiusFilter
+
+        query = VectorQuery(
+            text=text,
+            top_k=top_k,
+            min_similarity=min_similarity,
+            geo_filter=GeoRadiusFilter(
+                latitude=latitude,
+                longitude=longitude,
+                radius_km=radius_km,
+            ),
+            exclude_disambiguation=True,
+            exclude_redirects=True,
+        )
+
+        return await self.search_similar(query)
+
+    async def search_with_quality_filter(
+        self,
+        text: str,
+        min_quality_score: float = 0.5,
+        min_incoming_links: int | None = None,
+        exclude_stubs: bool = True,
+        top_k: int = 10,
+        min_similarity: float = 0.4,
+    ) -> list[Evidence]:
+        """
+        Search with quality/importance filtering.
+
+        Prioritizes high-quality articles using quality_score from ingestion.
+
+        Args:
+            text: Query text for semantic matching.
+            min_quality_score: Minimum quality score (0.0-1.0).
+            min_incoming_links: Minimum number of incoming links.
+            exclude_stubs: Exclude short stub articles.
+            top_k: Maximum results.
+            min_similarity: Minimum similarity threshold.
+
+        Returns:
+            Evidence from high-quality sources.
+        """
+        from interfaces.stores import QualityFilter
+
+        query = VectorQuery(
+            text=text,
+            top_k=top_k,
+            min_similarity=min_similarity,
+            quality_filter=QualityFilter(
+                min_quality_score=min_quality_score,
+                min_incoming_links=min_incoming_links,
+                exclude_stubs=exclude_stubs,
+            ),
+            exclude_disambiguation=True,
+            exclude_redirects=True,
+        )
+
+        return await self.search_similar(query)
+
+    async def search_by_wikidata(
+        self,
+        wikidata_id: str,
+        text: str | None = None,
+        top_k: int = 10,
+    ) -> list[Evidence]:
+        """
+        Find evidence by Wikidata Q-ID.
+
+        Args:
+            wikidata_id: Wikidata Q-ID (e.g., "Q42" for Douglas Adams).
+            text: Optional query text for semantic ranking within results.
+            top_k: Maximum results.
+
+        Returns:
+            Evidence from articles linked to the Wikidata entity.
+        """
+        # Normalize QID format
+        qid = wikidata_id.upper()
+        if not qid.startswith("Q"):
+            qid = f"Q{qid}"
+
+        query = VectorQuery(
+            text=text or qid,  # Use QID as fallback text
+            top_k=top_k,
+            min_similarity=0.0,  # Don't filter by similarity for ID lookups
+            wikidata_id=qid,
+        )
+
+        return await self.search_similar(query)
+
+    async def search_excluding_disambiguation(
+        self,
+        text: str,
+        top_k: int = 10,
+        min_similarity: float = 0.5,
+    ) -> list[Evidence]:
+        """
+        Search excluding disambiguation and redirect pages.
+
+        Useful for fact verification where you want authoritative content.
+
+        Args:
+            text: Query text.
+            top_k: Maximum results.
+            min_similarity: Minimum similarity threshold.
+
+        Returns:
+            Evidence from non-disambiguation, non-redirect articles.
+        """
+        query = VectorQuery(
+            text=text,
+            top_k=top_k,
+            min_similarity=min_similarity,
+            exclude_disambiguation=True,
+            exclude_redirects=True,
+        )
+
+        return await self.search_similar(query)
+
+    async def search_with_coordinates(
+        self,
+        text: str,
+        top_k: int = 10,
+        min_similarity: float = 0.4,
+    ) -> list[Evidence]:
+        """
+        Search only articles that have geographic coordinates.
+
+        Useful for location-related queries.
+
+        Args:
+            text: Query text.
+            top_k: Maximum results.
+            min_similarity: Minimum similarity threshold.
+
+        Returns:
+            Evidence from geo-tagged articles.
+        """
+        if self._client is None:
+            raise QdrantError("Not connected to Qdrant")
+
+        embedding = await self.embed_text(text)
+
+        # Filter to only articles with coordinates
+        query_filter = Filter(
+            must=[
+                {"key": "has_coordinates", "match": {"value": True}},
+                {"key": "is_disambiguation", "match": {"value": False}},
+            ]
+        )  # type: ignore[arg-type]
+
+        using_vector = "dense" if self._use_named_vectors else None
+
+        try:
+            results = await self._client.query_points(
+                collection_name=self._settings.collection_name,
+                query=embedding,
+                using=using_vector,
+                limit=top_k,
+                score_threshold=min_similarity,
+                query_filter=query_filter,
+            )
+
+            evidence_list: list[Evidence] = []
+            for hit in results.points:
+                content = ""
+                if hit.payload:
+                    content = hit.payload.get("text", "") or hit.payload.get("content", "")
+
+                source_uri = None
+                if hit.payload:
+                    source_uri = hit.payload.get("url") or hit.payload.get("source_uri")
+
+                evidence_list.append(
+                    Evidence(
+                        id=uuid4(),
+                        source=EvidenceSource.VECTOR_SEMANTIC,
+                        source_id=str(hit.id),
+                        content=content,
+                        structured_data=hit.payload,
+                        similarity_score=hit.score,
+                        match_type="geo_tagged",
+                        retrieved_at=datetime.now(UTC),
+                        source_uri=source_uri,
+                    )
+                )
+
+            return evidence_list
+
+        except Exception as e:
+            logger.error(f"Geo-tagged search failed: {e}")
+            return []

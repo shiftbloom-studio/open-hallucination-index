@@ -51,7 +51,7 @@ def _next_request_id() -> int:
 
 
 def _format_mode(target_sources: int | None) -> str:
-    if target_sources == 6:
+    if target_sources == 8:
         return "STANDARD"
     if target_sources == 18:
         return "EXPERT"
@@ -125,7 +125,7 @@ class VerifyTextRequest(BaseModel):
         default=None,
         ge=1,
         le=20,
-        description="Preferred number of sources to query during verification.",
+        description="Target number of supporting or refuting evidence items to gather.",
     )
     skip_decomposition: bool = Field(
         default=False,
