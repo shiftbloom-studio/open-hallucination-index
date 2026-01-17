@@ -13,7 +13,7 @@ from itertools import count
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from adapters.openai import LLMProviderError
@@ -205,7 +205,8 @@ class BatchVerifyResponse(BaseModel):
     ),
 )
 async def verify_text(
-    request: VerifyTextRequest,
+    request_body: VerifyTextRequest,
+    req: Request,
     use_case: Annotated[VerifyTextUseCase, Depends(get_verify_use_case)],
     llm_provider: Annotated[LLMProvider | None, Depends(get_llm_provider_optional)],
     user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
@@ -222,7 +223,7 @@ async def verify_text(
     request_seq = _next_request_id()
     start = time.perf_counter()
 
-    input_text = request.text
+    input_text = request_body.text
 
     # Apply pre-filter pipeline (blacklist -> LLM harm -> LLM claim)
     # Skip filters if benchmark mode is enabled
@@ -250,12 +251,12 @@ async def verify_text(
 
     # Map string strategy to enum
     strategy = None
-    if request.strategy:
-        strategy = VerificationStrategy(request.strategy)
+    if request_body.strategy:
+        strategy = VerificationStrategy(request_body.strategy)
 
     audit_logger.info(
         f'[REQUEST] ID: {request_seq} - UserID: "{user_id or "unknown"}" - '
-        f'Mode: "{_format_mode(request.target_sources)}" - '
+        f'Mode: "{_format_mode(request_body.target_sources)}" - '
         f'Text: "{_format_text_preview(input_text)}"'
     )
 
@@ -264,26 +265,26 @@ async def verify_text(
         extra={
             "request_id": str(request_id),
             "text_length": len(input_text),
-            "has_context": bool(request.context),
+            "has_context": bool(request_body.context),
             "strategy": strategy.value if strategy else "default",
-            "tier": request.tier or "default",
-            "use_cache": request.use_cache,
-            "target_sources": request.target_sources,
+            "tier": request_body.tier or "default",
+            "use_cache": request_body.use_cache,
+            "target_sources": request_body.target_sources,
         },
     )
 
     # Map tier string to enum
-    tier = EvidenceTier(request.tier) if request.tier else EvidenceTier.DEFAULT
+    tier = EvidenceTier(request_body.tier) if request_body.tier else EvidenceTier.DEFAULT
 
     token = set_mcp_call_cache()
     try:
         result: VerificationResult = await use_case.execute(
             text=input_text,
             strategy=strategy,
-            use_cache=request.use_cache,
-            context=request.context,
-            target_sources=request.target_sources,
-            skip_decomposition=request.skip_decomposition,
+            use_cache=request_body.use_cache,
+            context=request_body.context,
+            target_sources=request_body.target_sources,
+            skip_decomposition=request_body.skip_decomposition,
             tier=tier,
         )
     except (MCPConnectionError, MCPQueryError) as e:
@@ -342,9 +343,9 @@ async def verify_text(
             text=input_text,
             strategy=strategy,
             use_cache=False,
-            context=request.context,
-            target_sources=request.target_sources,
-            skip_decomposition=request.skip_decomposition,
+            context=request_body.context,
+            target_sources=request_body.target_sources,
+            skip_decomposition=request_body.skip_decomposition,
             tier=tier,
         )
     except TimeoutError as e:
@@ -409,10 +410,18 @@ async def verify_text(
             status=cv.status,
             confidence=cv.trace.confidence,
             reasoning=cv.trace.reasoning,
-            trace=cv.trace if request.return_evidence else None,
+            trace=cv.trace if request_body.return_evidence else None,
         )
         for cv in result.claim_verifications
     ]
+
+    # Track API key token usage
+    if hasattr(req.state, "api_key_info"):
+        from server.app import increment_token_usage
+        key_info = req.state.api_key_info
+        if key_info.key_id and not key_info.is_env_key:
+            # Deduct 1 token per verification
+            increment_token_usage(key_info.key_id, 1)
 
     return VerifyTextResponse(
         id=result.id,

@@ -20,7 +20,7 @@ interface ApiUser {
   id: string;
   email: string;
   name: string | null;
-  ohi_tokens: number;
+  tokens: number;
   role: "user" | "admin";
   created_at: string;
   updated_at: string;
@@ -182,25 +182,25 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
     expires_in_days: "",
   });
 
-  // Fetch users
+  // Fetch users from Supabase via Next.js API
   const fetchUsers = useCallback(async () => {
     try {
-      const res = await fetch("/api/ohi/admin/users", {
-        headers: { "X-User-Id": user.id },
-      });
+      const res = await fetch("/api/admin/users");
       if (res.ok) {
         const data = await res.json();
         setUsers(data.users || []);
+      } else {
+        console.error("Failed to fetch users:", res.status);
       }
     } catch (error) {
       console.error("Failed to fetch users:", error);
     }
-  }, [user.id]);
+  }, []);
 
   // Fetch API keys
   const fetchApiKeys = useCallback(async () => {
     try {
-      const res = await fetch("/api/ohi/admin/keys", {
+      const res = await fetch("/api/ohi/api/v1/admin/keys", {
         headers: { "X-User-Id": user.id },
       });
       if (res.ok) {
@@ -215,7 +215,7 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
   // Fetch log stats
   const fetchLogStats = useCallback(async () => {
     try {
-      const res = await fetch("/api/ohi/admin/logs/stats", {
+      const res = await fetch("/api/ohi/api/v1/admin/logs/stats", {
         headers: { "X-User-Id": user.id },
       });
       if (res.ok) {
@@ -249,7 +249,7 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
 
     const fetchRecentLogs = async () => {
       try {
-        const res = await fetch("/api/ohi/admin/logs/recent?limit=50", {
+        const res = await fetch("/api/ohi/api/v1/admin/logs/recent?limit=50", {
           headers: { "X-User-Id": user.id },
         });
         if (res.ok) {
@@ -263,7 +263,7 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
 
     fetchRecentLogs();
 
-    const sseUrl = `/api/ohi/admin/logs/stream`;
+    const sseUrl = `/api/ohi/api/v1/admin/logs/stream`;
     const connectSSE = () => {
       const eventSource = new EventSource(sseUrl);
       eventSourceRef.current = eventSource;
@@ -351,7 +351,7 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
       if (keyForm.token_limit) body.token_limit = parseInt(keyForm.token_limit, 10);
       if (keyForm.expires_in_days) body.expires_in_days = parseInt(keyForm.expires_in_days, 10);
 
-      const res = await fetch("/api/ohi/admin/keys", {
+      const res = await fetch("/api/ohi/api/v1/admin/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-User-Id": user.id },
         body: JSON.stringify(body),
@@ -380,7 +380,7 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
     if (!confirm("Are you sure you want to revoke this API key?")) return;
 
     try {
-      const res = await fetch(`/api/ohi/admin/keys/${keyId}`, {
+      const res = await fetch(`/api/ohi/api/v1/admin/keys/${keyId}`, {
         method: "DELETE",
         headers: { "X-User-Id": user.id },
       });
@@ -400,16 +400,17 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
   const handleToggleRole = async (userId: string, currentRole: string) => {
     const newRole = currentRole === "admin" ? "user" : "admin";
     try {
-      const res = await fetch(`/api/ohi/admin/users/${userId}/role`, {
+      const res = await fetch(`/api/admin/users/${userId}/role`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "X-User-Id": user.id },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role: newRole }),
       });
       if (res.ok) {
         toast.success(`User role updated to ${newRole}`);
         fetchUsers();
       } else {
-        toast.error("Failed to update user role");
+        const error = await res.json();
+        toast.error(error.error || "Failed to update user role");
       }
     } catch (error) {
       toast.error("Failed to update user role");
@@ -423,7 +424,7 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
     setTestResult(null);
 
     try {
-      const res = await fetch("/api/ohi/admin/tools/test-verify", {
+      const res = await fetch("/api/ohi/api/v1/admin/tools/test-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-User-Id": user.id },
         body: JSON.stringify({ test_type: selectedTestType }),
@@ -450,9 +451,9 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
     setGrantLoading(true);
 
     try {
-      const res = await fetch("/api/ohi/admin/tools/grant-tokens", {
+      const res = await fetch("/api/admin/grant-tokens", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-User-Id": user.id },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: grantEmail,
           tokens: parseInt(grantTokens, 10),
@@ -469,7 +470,7 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
         fetchUsers();
       } else {
         const error = await res.json();
-        toast.error(error.detail || "Failed to grant tokens");
+        toast.error(error.error || "Failed to grant tokens");
       }
     } catch (error) {
       toast.error("Failed to grant tokens");
@@ -665,7 +666,7 @@ export default function AdminDashboardClient({ user }: AdminDashboardClientProps
                       <td className="py-4 font-medium">{u.email}</td>
                       <td className="py-4 text-muted-foreground">{u.name || "-"}</td>
                       <td className="py-4">
-                        <span className="font-mono bg-muted px-2 py-1 rounded">{u.ohi_tokens}</span>
+                        <span className="font-mono bg-muted px-2 py-1 rounded">{u.tokens}</span>
                       </td>
                       <td className="py-4">
                         <Badge variant={u.role === "admin" ? "default" : "secondary"} className={u.role === "admin" ? "bg-gradient-to-r from-violet-500 to-purple-500" : ""}>

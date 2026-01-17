@@ -177,9 +177,9 @@ class TokenUsageMiddleware(BaseHTTPMiddleware):
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    """Middleware to log all API requests and responses to the live log service."""
+    """Middleware to log important API requests to the live log service."""
 
-    # Paths to exclude from logging (to avoid noise)
+    # Paths to completely exclude from logging
     EXCLUDED_PATHS = {
         "/health",
         "/health/live",
@@ -189,10 +189,52 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         "/openapi.json",
         "/openapi.yaml",
         "/api/v1/admin/logs/stream",  # Don't log the log stream itself
+        "/api/v1/admin/logs/recent",  # Don't log log fetches
+        "/api/v1/admin/logs/stats",   # Don't log stats fetches
+        "/api/v1/strategies",          # Static info, not interesting
     }
 
+    # Important paths that should always be logged (even GET requests)
+    IMPORTANT_PATH_PREFIXES = (
+        "/api/v1/verify",              # Core verification functionality
+        "/api/v1/knowledge-track",     # Knowledge provenance lookups
+        "/api/v1/admin/tools/",        # Admin tools (test, grant tokens)
+    )
+
+    # Paths where only mutations (POST/PUT/PATCH/DELETE) are interesting
+    MUTATION_ONLY_PATHS = {
+        "/api/v1/admin/keys",          # API key creation (POST only)
+        "/api/v1/admin/users",         # User management
+    }
+
+    def _should_log(self, method: str, path: str, status_code: int) -> bool:
+        """Determine if this request should be logged."""
+        # Always log errors (4xx and 5xx)
+        if status_code >= 400:
+            return True
+
+        # Check if path is in important prefixes
+        for prefix in self.IMPORTANT_PATH_PREFIXES:
+            if path.startswith(prefix):
+                return True
+
+        # For mutation-only paths, only log non-GET requests
+        for mutation_path in self.MUTATION_ONLY_PATHS:
+            if path.startswith(mutation_path) and method != "GET":
+                return True
+
+        # Check for role changes (PATCH to user role)
+        if "/role" in path and method == "PATCH":
+            return True
+
+        # Check for key deletion
+        if "/api/v1/admin/keys/" in path and method == "DELETE":
+            return True
+
+        return False
+
     async def dispatch(self, request: Request, call_next: Any) -> Response:
-        # Skip excluded paths
+        # Skip completely excluded paths
         if request.url.path in self.EXCLUDED_PATHS:
             return await call_next(request)
 
@@ -212,24 +254,25 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             duration_ms = (time.perf_counter() - start_time) * 1000
 
-            # Log the response (fire and forget)
-            asyncio.create_task(
-                live_log_service.log_response(
-                    method=request.method,
-                    path=request.url.path,
-                    status_code=response.status_code,
-                    duration_ms=duration_ms,
-                    user_id=user_id,
-                    key_prefix=key_prefix,
+            # Only log if this is an important request
+            if self._should_log(request.method, request.url.path, response.status_code):
+                asyncio.create_task(
+                    live_log_service.log_response(
+                        method=request.method,
+                        path=request.url.path,
+                        status_code=response.status_code,
+                        duration_ms=duration_ms,
+                        user_id=user_id,
+                        key_prefix=key_prefix,
+                    )
                 )
-            )
 
             return response
 
         except Exception as e:
             duration_ms = (time.perf_counter() - start_time) * 1000
 
-            # Log the error
+            # Always log exceptions
             asyncio.create_task(
                 live_log_service.log_error(
                     message=f"{type(e).__name__}: {str(e)}",

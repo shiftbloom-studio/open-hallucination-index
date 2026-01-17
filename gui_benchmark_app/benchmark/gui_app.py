@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QTabWidget,
@@ -857,6 +858,36 @@ class BenchmarkWindow(QMainWindow):
 
         self.status_label = QLabel("Idle")
         layout.addWidget(self.status_label)
+        
+        # Progress bars
+        progress_group = QGroupBox("Progress")
+        progress_layout = QVBoxLayout(progress_group)
+        
+        # Overall progress bar
+        overall_layout = QVBoxLayout()
+        self.overall_progress_label = QLabel("Overall Progress: 0 / 0 evaluators")
+        self.overall_progress_bar = QProgressBar()
+        self.overall_progress_bar.setMinimum(0)
+        self.overall_progress_bar.setMaximum(100)
+        self.overall_progress_bar.setValue(0)
+        self.overall_progress_bar.setFormat("%p% - %v/%m evaluators")
+        overall_layout.addWidget(self.overall_progress_label)
+        overall_layout.addWidget(self.overall_progress_bar)
+        progress_layout.addLayout(overall_layout)
+        
+        # Current run progress bar
+        current_layout = QVBoxLayout()
+        self.current_progress_label = QLabel("Current Run: 0 / 0 items")
+        self.current_progress_bar = QProgressBar()
+        self.current_progress_bar.setMinimum(0)
+        self.current_progress_bar.setMaximum(100)
+        self.current_progress_bar.setValue(0)
+        self.current_progress_bar.setFormat("%p% - %v/%m items")
+        current_layout.addWidget(self.current_progress_label)
+        current_layout.addWidget(self.current_progress_bar)
+        progress_layout.addLayout(current_layout)
+        
+        layout.addWidget(progress_group)
         layout.addStretch(1)
 
         self.start_btn.clicked.connect(self._start_benchmark)
@@ -1088,6 +1119,11 @@ class BenchmarkWindow(QMainWindow):
         else:
             self.status_label.setText("Completed")
             self._append_log("Benchmark completed.")
+            # Set progress bars to 100% on completion
+            if self.overall_progress_bar.maximum() > 0:
+                self.overall_progress_bar.setValue(self.overall_progress_bar.maximum())
+            if self.current_progress_bar.maximum() > 0:
+                self.current_progress_bar.setValue(self.current_progress_bar.maximum())
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.export_btn.setEnabled(False)
@@ -1114,6 +1150,38 @@ class BenchmarkWindow(QMainWindow):
         accuracy = (correct / completed) * 100 if completed else 0.0
         latencies = stats.get("latencies", [])
         latency = latencies[-1] if latencies else 0.0
+        
+        # Update progress bars
+        total_evaluators = stats.get("total_evaluators", 0)
+        completed_evaluators = stats.get("completed_evaluators", 0)
+        current_evaluator = stats.get("current_evaluator", "")
+        current_metric = stats.get("current_metric", "")
+        
+        # Overall progress
+        if total_evaluators > 0:
+            overall_percent = int((completed_evaluators / total_evaluators) * 100)
+            self.overall_progress_bar.setMaximum(total_evaluators)
+            self.overall_progress_bar.setValue(completed_evaluators)
+            self.overall_progress_label.setText(
+                f"Overall Progress: {completed_evaluators} / {total_evaluators} evaluators"
+            )
+        else:
+            self.overall_progress_bar.setValue(0)
+            self.overall_progress_label.setText("Overall Progress: 0 / 0 evaluators")
+        
+        # Current run progress
+        if total > 0:
+            current_percent = int((completed / total) * 100)
+            self.current_progress_bar.setMaximum(total)
+            self.current_progress_bar.setValue(completed)
+            metric_label = f" - {current_metric}" if current_metric else ""
+            evaluator_label = f"{current_evaluator}" if current_evaluator else "N/A"
+            self.current_progress_label.setText(
+                f"Current Run ({evaluator_label}{metric_label}): {completed} / {total} items"
+            )
+        else:
+            self.current_progress_bar.setValue(0)
+            self.current_progress_label.setText("Current Run: 0 / 0 items")
 
         elapsed = now - (self._time_series[0] if self._time_series else now)
         throughput = (completed / elapsed) if elapsed > 0 else 0.0
