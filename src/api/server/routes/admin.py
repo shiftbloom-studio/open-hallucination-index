@@ -401,7 +401,7 @@ async def create_api_key(
         "updated_at": now,
     }
 
-    logger.info(f"Created API key {key_id} (type: {request.type}, prefix: {prefix})")
+    logger.info(f"Created API key {key_id} (type: {request.type})")
 
     return ApiKeyCreatedResponse(
         id=key_id,
