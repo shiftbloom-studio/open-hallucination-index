@@ -20,6 +20,18 @@ import re
 import numpy as np
 
 
+# Text truncation limits for TF-IDF vectorization (to bound memory and computation)
+MAX_TEXT_LENGTH = 2000  # For general contexts and responses
+MAX_SENTENCE_LENGTH = 500  # For sentence-level faithfulness checks
+
+# Context/evidence limits per sample
+MAX_CONTEXTS_PER_SAMPLE = 8  # Balance between coverage and performance
+
+# TF-IDF vectorizer feature limits
+TFIDF_MAX_FEATURES_SMALL = 6000  # For per-response ALCE-style grounding
+TFIDF_MAX_FEATURES_LARGE = 12000  # For global RAGAS-style corpus (questions + answers + contexts + ground truths)
+
+
 @dataclass
 class HallucinationMetrics:
     """
@@ -51,7 +63,7 @@ class HallucinationMetrics:
     rag_questions: list[str] = field(default_factory=list, repr=False)
     rag_answers: list[str] = field(default_factory=list, repr=False)
     rag_contexts: list[list[str]] = field(default_factory=list, repr=False)
-    rag_ground_truths: list[str] = field(default_factory=list, repr=False)
+    rag_ground_truths: list[str | None] = field(default_factory=list, repr=False)
 
     # -------------------------
     # Incremental update helper
@@ -118,8 +130,9 @@ class HallucinationMetrics:
             self.rag_questions.append(str(question))
             self.rag_answers.append(str(answer))
             self.rag_contexts.append([str(c) for c in contexts])
-            # ground truth is optional; include empty string to preserve alignment
-            self.rag_ground_truths.append(str(ground_truth) if ground_truth is not None else "")
+            # ground truth is optional; use None to preserve alignment and distinguish
+            # between "no ground truth provided" vs "empty string ground truth"
+            self.rag_ground_truths.append(str(ground_truth) if ground_truth else None)
     
     @property
     def accuracy(self) -> float:
@@ -273,13 +286,32 @@ class HallucinationMetrics:
 
 
 def compute_aurc(confidence_scores: list[float], correct_flags: list[bool]) -> float:
-    """Compute AURC for selective prediction from confidence ranking."""
+    """
+    Compute AURC (Area Under Risk-Coverage curve) from confidence ranking.
+
+    AURC measures selective prediction performance by computing the area under
+    the curve of risk (error rate) vs. coverage (fraction of predictions retained)
+    when samples are ranked by confidence.
+
+    Notes
+    -----
+    - ``confidence_scores`` and ``correct_flags`` are truncated to the same length.
+    - NaN confidence scores are treated as the lowest possible confidence (mapped to
+      ``-np.inf``) so that, after sorting in descending order, they appear at the end
+      of the ranking. This keeps all samples in the AURC calculation while
+      conservatively assuming NaN scores are least reliable.
+    - Positive infinity values are clamped to a large finite float so that they sort
+      before all finite scores without breaking downstream arithmetic.
+    """
     n = min(len(confidence_scores), len(correct_flags))
     if n <= 1:
         return 0.0
 
     scores = np.asarray(confidence_scores[:n], dtype=float)
     correct = np.asarray(correct_flags[:n], dtype=bool)
+    # Normalize NaN/±inf scores for ranking:
+    # - NaNs and -inf → -np.inf so they are treated as lowest confidence (sorted last)
+    # - +inf → large finite max so it ranks highest while remaining numerically stable
     scores = np.nan_to_num(scores, nan=-np.inf, posinf=np.finfo(float).max, neginf=-np.inf)
 
     order = np.argsort(scores)[::-1]
@@ -365,8 +397,8 @@ def compute_retrieval_metrics(
             # Recall@k
             recall_sum[k] += (sum(hits) / len(rel_set))
 
-            # Precision@k
-            precision_sum[k] += (sum(hits) / k) if k > 0 else 0.0
+            # Precision@k (k is guaranteed > 0 by validation on line 355)
+            precision_sum[k] += sum(hits) / k
 
             # HitRate@k ("success" if any relevant appears in top-k)
             hit_rate_sum[k] += 1.0 if any(hits) else 0.0
@@ -388,7 +420,11 @@ def compute_retrieval_metrics(
             idcg = sum(1.0 / math.log2(i + 1) for i in range(1, ideal_hits + 1))
             ndcg_sum[k] += (dcg / idcg) if idcg > 0 else 0.0
 
-            # MAP@k
+            # MAP@k (Mean Average Precision)
+            # For each relevant document retrieved, compute precision at that rank,
+            # then average over all relevant documents. The denominator is the
+            # minimum of (total relevant documents, k), not the number of relevant
+            # documents retrieved, which is standard for MAP calculation.
             num_rel = 0
             ap = 0.0
             for i, h in enumerate(hits, start=1):
@@ -476,13 +512,16 @@ def compute_alce_style_metrics(
                 try:
                     from sklearn.feature_extraction.text import TfidfVectorizer
                     from sklearn.metrics.pairwise import cosine_similarity
-                except Exception:
+                except ImportError:
+                    # scikit-learn is now a required dependency, but we silently skip
+                    # grounding computation if sklearn fails to import for any reason
+                    # (e.g., optional dependency in older versions or import errors).
                     ctx = []
 
                 if ctx:
                     corpus = list(dict.fromkeys([c for c in ctx if c]))  # de-dup preserve order
-                    corpus = [c[:2000] for c in corpus]  # cap length for speed
-                    vect = TfidfVectorizer(stop_words="english", max_features=6000)
+                    corpus = [c[:MAX_TEXT_LENGTH] for c in corpus]
+                    vect = TfidfVectorizer(stop_words="english", max_features=TFIDF_MAX_FEATURES_SMALL)
                     try:
                         X = vect.fit_transform(corpus + sentences)
                         X_ctx = X[: len(corpus)]
@@ -494,6 +533,8 @@ def compute_alce_style_metrics(
                             # If the sentence has citations, require it to be grounded in *some* context.
                             grounding_scores.append(float(np.max(sim[s_i])))
                     except Exception:
+                        # Vectorization can fail on degenerate inputs (empty strings, etc.).
+                        # Silently skip this sample's grounding computation.
                         pass
 
     if total == 0:
@@ -532,28 +573,38 @@ def compute_ragas_proxy_metrics(
     questions: list[str],
     answers: list[str],
     contexts: list[list[str]],
-    ground_truths: list[str] | None = None,
+    ground_truths: list[str | None] | None = None,
     # similarity thresholds are tuned for TF-IDF cosine values
-    sentence_support_threshold: float = 0.20,
+    faithfulness_threshold: float = 0.20,
     context_relevance_threshold: float = 0.10,
 ) -> dict[str, float]:
-    """Dependency-free approximations of common RAG evaluation metrics.
+    """Lightweight approximations of common RAG evaluation metrics.
 
     These are *proxies* meant for fast regression testing when LLM-based evaluators
     (like RAGAS proper) aren't available. They are deterministic and cheap.
+    
+    **Requirements:**
+    Requires scikit-learn for TF-IDF vectorization and cosine similarity calculations.
+    Returns an empty dict if scikit-learn is not available.
+    
+    **Note:**
+    While scikit-learn is a listed dependency, this function gracefully handles
+    import failures to maintain backward compatibility.
     """
     n = min(len(questions), len(answers), len(contexts))
     if n == 0:
         return {}
 
-    gt = ground_truths if ground_truths is not None else [""] * n
+    gt = ground_truths if ground_truths is not None else [None] * n
     if len(gt) < n:
-        gt = list(gt) + [""] * (n - len(gt))
+        gt = list(gt) + [None] * (n - len(gt))
 
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer
         from sklearn.metrics.pairwise import cosine_similarity
-    except Exception:
+    except ImportError:
+        # scikit-learn is required for RAGAS proxy metrics.
+        # If not available, return empty dict to signal metrics cannot be computed.
         return {}
 
     # Build a global vectorizer for stability across samples.
@@ -561,15 +612,15 @@ def compute_ragas_proxy_metrics(
     for i in range(n):
         corpus.append(questions[i])
         corpus.append(answers[i])
-        corpus.extend(_iter_flat_texts(contexts[i])[:8])
+        corpus.extend(_iter_flat_texts(contexts[i])[:MAX_CONTEXTS_PER_SAMPLE])
         if gt[i]:
             corpus.append(gt[i])
 
-    corpus = [c[:2000] for c in corpus if c and c.strip()]
+    corpus = [c[:MAX_TEXT_LENGTH] for c in corpus if c and c.strip()]
     if len(corpus) < 5:
         return {}
 
-    vect = TfidfVectorizer(stop_words="english", max_features=12000)
+    vect = TfidfVectorizer(stop_words="english", max_features=TFIDF_MAX_FEATURES_LARGE)
     X = vect.fit_transform(corpus)
 
     # Index mapping back into corpus
@@ -584,7 +635,7 @@ def compute_ragas_proxy_metrics(
         a_idx.append(idx)
         idx += 1
         ctx_i: list[int] = []
-        for c in _iter_flat_texts(contexts[i])[:8]:
+        for c in _iter_flat_texts(contexts[i])[:MAX_CONTEXTS_PER_SAMPLE]:
             ctx_i.append(idx)
             idx += 1
         ctx_idx.append(ctx_i)
@@ -630,11 +681,13 @@ def compute_ragas_proxy_metrics(
         ans = answers[i] or ""
         sentences = [s.strip() for s in re.split(r"[\.!\?\n]+", ans) if s.strip()]
         if sentences:
-            # Build sentence vectors using the already-fitted vectorizer
-            # (transform is cheap and deterministic)
-            S = vect.transform([s[:500] for s in sentences])
+            # Build sentence vectors using the already-fitted vectorizer.
+            # Truncate each sentence to 500 characters to bound vectorizer input and
+            # focus faithfulness on local claims; this differs from general text
+            # truncation (2000 chars) to emphasize sentence-level analysis.
+            S = vect.transform([s[:MAX_SENTENCE_LENGTH] for s in sentences])
             sim_sent_ctx = cosine_similarity(S, X[ctxi])
-            supported = np.max(sim_sent_ctx, axis=1) >= sentence_support_threshold
+            supported = np.max(sim_sent_ctx, axis=1) >= faithfulness_threshold
             faithfulnesses.append(float(np.mean(supported)))
 
     if not answer_relevancies:
@@ -914,8 +967,12 @@ class ComparisonReport:
             elif metric == "truthfulqa":
                 score = metrics.truthfulqa.accuracy
             elif metric == "latency":
-                # Lower latency is better, so negate
-                score = -metrics.latency.p95
+                # Lower latency is better, so negate.
+                # Note: If p95 <= 0 (e.g., no reliable latency data due to zero-division
+                # safeguards in LatencyMetrics), treat this as missing data and rank
+                # such evaluators last by giving them the worst possible score.
+                p95 = metrics.latency.p95
+                score = -p95 if p95 > 0 else float("-inf")
             elif metric == "safety":
                 # Lower hallucination pass rate is better
                 score = -metrics.hallucination.hallucination_pass_rate
