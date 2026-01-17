@@ -1,6 +1,7 @@
 # Public Internet Access Setup (HTTPS)
 
-This guide explains how to expose the Open Hallucination Index API to the public internet securely with HTTPS. It is written to work with most routers, OSes, and DNS providers.
+This guide explains how to expose the Open Hallucination Index API to the public internet securely with HTTPS. It is written to work with most routers, OSes, and DNS providers. The production path uses the Next.js proxy (`/api/ohi/*`); the direct FastAPI path (`/api/v1/*`) is only for explicit Nginx locations.
+
 
 ## Prerequisites
 
@@ -10,9 +11,12 @@ This guide explains how to expose the Open Hallucination Index API to the public
 4. Ports 80 and 443 reachable from the internet
 5. No CGNAT, or an alternative tunnel/VPS setup (see below)
 
-## Quick Start (HTTPS with Let's Encrypt)
+## Quick Start (HTTPS with Cloudflare Origin Certificates)
+
+This setup assumes Cloudflare is fronting the domain and Nginx terminates TLS with Origin certificates.
 
 ### Step 1: Generate an API Key
+
 
 ```bash
 # Generate a random 64-character API key
@@ -45,17 +49,17 @@ See [Router Port Forwarding](#router-port-forwarding) below for detailed steps a
 
 Use any DNS provider or dynamic DNS service (e.g., Cloudflare, DuckDNS, No-IP, DynDNS, MyFRITZ!). Point your domain to your **public** IP address.
 
-### Step 4: Initialize Let's Encrypt Certificate
+### Step 4: Configure Cloudflare Origin Certificates
 
-```bash
-# Make the script executable
-chmod +x scripts/init-letsencrypt.sh
+Generate a Cloudflare Origin Certificate (and optional Origin Pull CA) in the Cloudflare dashboard.
+Place the files in `docker/nginx/certs/` as:
 
-# Run the setup (replace with your domain and email)
-./scripts/init-letsencrypt.sh yourdomain.example.com your@email.com
-```
+- `origin.pem`
+- `origin.key`
+- `cloudflare-origin-pull-ca.pem` (only if mTLS Origin Pulls enabled)
 
 ### Step 5: Start All Services
+
 
 ```bash
 docker compose -f docker/compose/docker-compose.yml up -d
@@ -83,7 +87,8 @@ If you expose the backend directly (e.g., custom nginx location), use:
 1. Find **Port Forwarding**, **NAT**, or **Virtual Server** settings
 2. Create two TCP rules that forward to your machine's local IP:
 
-  **Port 80 (HTTP - for Let's Encrypt):**
+  **Port 80 (HTTP redirect):**
+
   | Setting | Value |
   |---------|-------|
   | Name | OHI-HTTP |
@@ -141,28 +146,13 @@ Internet
 
 ## SSL Certificate Management
 
-### Manual Renewal
+Cloudflare Origin Certificates are managed in the Cloudflare dashboard. When you rotate certificates:
 
-Certificates auto-renew every 12 hours if needed. To manually renew:
-
-```bash
-docker-compose exec certbot certbot renew
-docker-compose exec nginx nginx -s reload
-```
-
-### Test Renewal
-
-```bash
-docker-compose exec certbot certbot renew --dry-run
-```
-
-### View Certificate Info
-
-```bash
-docker-compose exec certbot certbot certificates
-```
+- Replace the files in `docker/nginx/certs/`.
+- Reload Nginx: `docker exec ohi-nginx nginx -s reload`.
 
 ---
+
 
 ## API Usage with HTTPS
 
@@ -219,58 +209,52 @@ console.log(result);
 
 - ✅ **HTTPS/TLS 1.2+** - All traffic encrypted
 - ✅ **API Key Authentication** - Required for backend `/api/v1/*` endpoints (proxy injects server key)
-- ✅ **Rate Limiting** - 60 requests/minute per IP (Nginx)
+- ✅ **Rate Limiting** - Optional (see `docker/nginx/nginx-init.conf`)
+
 - ✅ **Security Headers** - HSTS, X-Frame-Options, etc.
 - ✅ **OCSP Stapling** - Faster TLS handshakes
 
 ### Recommended Additional Steps
 
 - [ ] Set up fail2ban for brute-force protection
-- [ ] Monitor access logs: `docker-compose logs -f nginx`
+- [ ] Monitor access logs: `docker compose -f docker/compose/docker-compose.yml logs -f nginx`
+
 - [ ] Consider Cloudflare for DDoS protection
 
 ---
 
 ## Troubleshooting
 
-### Certificate Request Failed
+### TLS/Origin Certificate Issues
 
 ```bash
-# Check if port 80 is reachable from the internet
+# Check if port 443 is reachable from the internet
 # Use a service like https://portchecker.co/ or https://canyouseeme.org/
 
 # Check nginx logs
-docker-compose logs nginx
+docker compose -f docker/compose/docker-compose.yml logs nginx
 
-# Check certbot logs
-docker-compose logs certbot
+# Verify cert files exist
+ls -la docker/nginx/certs/
 ```
 
-### SSL Certificate Errors
-
-```bash
-# Verify certificate exists
-ls -la data/certbot/live/ohi/
-
-# Re-run certificate setup
-./scripts/init-letsencrypt.sh yourdomain.example.com your@email.com
-```
 
 ### 502 Bad Gateway
 
 ```bash
 # Check if API is running
-docker-compose ps
+docker compose -f docker/compose/docker-compose.yml ps
 
-# Check API logs
-docker-compose logs ohi-api
+docker compose -f docker/compose/docker-compose.yml logs ohi-api
+
 ```
 
 ### Connection Timeout
 
 - Verify router port forwarding is active
 - Check OS firewall allows ports 80 and 443
-- Confirm Docker containers are running: `docker-compose ps`
+- Confirm Docker containers are running: `docker compose -f docker/compose/docker-compose.yml ps`
+
 
 ---
 
