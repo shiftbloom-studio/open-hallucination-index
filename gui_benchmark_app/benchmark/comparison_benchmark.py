@@ -29,29 +29,31 @@ MAX_CONTEXTS_PER_SAMPLE = 8  # Balance between coverage and performance
 
 # TF-IDF vectorizer feature limits
 TFIDF_MAX_FEATURES_SMALL = 6000  # For per-response ALCE-style grounding
-TFIDF_MAX_FEATURES_LARGE = 12000  # For global RAGAS-style corpus (questions + answers + contexts + ground truths)
+# For global RAGAS-style corpus (questions + answers + contexts + ground truths)
+TFIDF_MAX_FEATURES_LARGE = 12000
 
 
 @dataclass
 class HallucinationMetrics:
     """
     Metrics for hallucination detection evaluation.
-    
+
     Key safety metric: hallucination_pass_rate (lower is better)
     - Rate at which hallucinations are incorrectly marked as factual
     """
-    
+
     total: int = 0
     correct: int = 0
-    
+
     # Confusion matrix
-    true_positives: int = 0   # Fact correctly identified
-    true_negatives: int = 0   # Hallucination correctly identified
+    true_positives: int = 0  # Fact correctly identified
+    true_negatives: int = 0  # Hallucination correctly identified
     false_positives: int = 0  # Hallucination marked as fact (DANGEROUS)
     false_negatives: int = 0  # Fact marked as hallucination
 
     # Optional per-sample signals (kept lightweight; used for AURC/BEIR/ALCE/RAGAS-style eval)
-    # NOTE: These streams are purely derived from already-produced results; they do not change inputs.
+    # NOTE: These streams are purely derived from already-produced results;
+    # they do not change inputs.
     confidence_scores: list[float] = field(default_factory=list, repr=False)
     correct_flags: list[bool] = field(default_factory=list, repr=False)
     retrieved_sources: list[list[str]] = field(default_factory=list, repr=False)
@@ -133,50 +135,52 @@ class HallucinationMetrics:
             # ground truth is optional; use None to preserve alignment and distinguish
             # between "no ground truth provided" vs "empty string ground truth"
             self.rag_ground_truths.append(str(ground_truth) if ground_truth else None)
-    
+
     @property
     def accuracy(self) -> float:
         """Overall accuracy."""
         return self.correct / self.total if self.total > 0 else 0.0
-    
+
     @property
     def precision(self) -> float:
         """Precision: TP / (TP + FP)."""
         denom = self.true_positives + self.false_positives
         return self.true_positives / denom if denom > 0 else 0.0
-    
+
     @property
     def recall(self) -> float:
         """Recall: TP / (TP + FN)."""
         denom = self.true_positives + self.false_negatives
         return self.true_positives / denom if denom > 0 else 0.0
-    
+
     @property
     def f1_score(self) -> float:
         """F1 Score: Harmonic mean of precision and recall."""
         p, r = self.precision, self.recall
         return 2 * p * r / (p + r) if (p + r) > 0 else 0.0
-    
+
     @property
     def specificity(self) -> float:
         """Specificity (TNR): TN / (TN + FP)."""
         denom = self.true_negatives + self.false_positives
         return self.true_negatives / denom if denom > 0 else 0.0
-    
+
     @property
     def hallucination_pass_rate(self) -> float:
         """
         CRITICAL SAFETY METRIC: Rate of hallucinations marked as factual.
-        
+
         Lower is better. FP / (FP + TN)
         """
         denom = self.false_positives + self.true_negatives
         return self.false_positives / denom if denom > 0 else 0.0
-    
+
     @property
     def mcc(self) -> float:
         """Matthews Correlation Coefficient."""
-        num = self.true_positives * self.true_negatives - self.false_positives * self.false_negatives
+        num = (
+            self.true_positives * self.true_negatives - self.false_positives * self.false_negatives
+        )
         denom = math.sqrt(
             (self.true_positives + self.false_positives)
             * (self.true_positives + self.false_negatives)
@@ -207,7 +211,9 @@ class HallucinationMetrics:
     # BEIR-style retrieval metrics (source match)
     # -------------------------
 
-    def retrieval_metrics(self, *, ks: tuple[int, ...] = (1, 3, 5, 10, 50, 100)) -> dict[str, float]:
+    def retrieval_metrics(
+        self, *, ks: tuple[int, ...] = (1, 3, 5, 10, 50, 100)
+    ) -> dict[str, float]:
         """Compute BEIR-style metrics from stored retrieved/relevant sources."""
         if not self.retrieved_sources or not self.relevant_sources:
             return {}
@@ -240,7 +246,7 @@ class HallucinationMetrics:
             contexts=self.rag_contexts,
             ground_truths=self.rag_ground_truths if self.rag_ground_truths else None,
         )
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for reporting."""
         out: dict[str, Any] = {
@@ -395,7 +401,7 @@ def compute_retrieval_metrics(
             hits = [1 if doc_id in rel_set else 0 for doc_id in topk]
 
             # Recall@k
-            recall_sum[k] += (sum(hits) / len(rel_set))
+            recall_sum[k] += sum(hits) / len(rel_set)
 
             # Precision@k (k is guaranteed > 0 by validation on line 375)
             precision_sum[k] += sum(hits) / k
@@ -522,7 +528,9 @@ def compute_alce_style_metrics(
                 if ctx:
                     corpus = list(dict.fromkeys([c for c in ctx if c]))  # de-dup preserve order
                     corpus = [c[:MAX_TEXT_LENGTH] for c in corpus]
-                    vect = TfidfVectorizer(stop_words="english", max_features=TFIDF_MAX_FEATURES_SMALL)
+                    vect = TfidfVectorizer(
+                        stop_words="english", max_features=TFIDF_MAX_FEATURES_SMALL
+                    )
                     try:
                         X = vect.fit_transform(corpus + sentences)
                         X_ctx = X[: len(corpus)]
@@ -531,7 +539,8 @@ def compute_alce_style_metrics(
                         for s_i, sent in enumerate(sentences):
                             if not _CITATION_RE.search(sent):
                                 continue
-                            # If the sentence has citations, require it to be grounded in *some* context.
+                            # If the sentence has citations, require it to be grounded
+                            # in *some* context.
                             grounding_scores.append(float(np.max(sim[s_i])))
                     except Exception:
                         # Vectorization can fail on degenerate inputs (empty strings, etc.).
@@ -544,7 +553,7 @@ def compute_alce_style_metrics(
     citation_rate = with_citations / total
     citation_density = (total_citation_markers / total_tokens * 100.0) if total_tokens > 0 else 0.0
     sentence_coverage = (cited_sentences / total_sentences) if total_sentences > 0 else 0.0
-    valid_ratio = (total_valid_citations / max(1, total_citation_markers))
+    valid_ratio = total_valid_citations / max(1, total_citation_markers)
 
     out = {
         "citation_rate": citation_rate,
@@ -583,7 +592,7 @@ def compute_ragas_proxy_metrics(
 
     These are *proxies* meant for fast regression testing when LLM-based evaluators
     (like RAGAS proper) aren't available. They are deterministic and cheap.
-    
+
     **Requirements:**
     Requires scikit-learn for TF-IDF vectorization and cosine similarity calculations.
     """
@@ -700,37 +709,37 @@ def compute_ragas_proxy_metrics(
 class TruthfulQAMetrics:
     """
     Metrics for TruthfulQA evaluation.
-    
+
     Measures truthfulness in adversarial question answering.
     """
-    
+
     total_questions: int = 0
     correct_predictions: int = 0
-    
+
     # Detailed breakdown
     mc1_correct: int = 0  # Single correct answer
     mc1_total: int = 0
     mc2_correct: int = 0  # Multiple correct answers
     mc2_total: int = 0
-    
+
     # Category-wise results
     category_results: dict[str, dict[str, int]] = field(default_factory=dict)
-    
+
     @property
     def accuracy(self) -> float:
         """Overall accuracy on TruthfulQA."""
         return self.correct_predictions / self.total_questions if self.total_questions > 0 else 0.0
-    
+
     @property
     def mc1_accuracy(self) -> float:
         """MC1 accuracy (single correct answer)."""
         return self.mc1_correct / self.mc1_total if self.mc1_total > 0 else 0.0
-    
+
     @property
     def mc2_accuracy(self) -> float:
         """MC2 accuracy (multiple correct answers)."""
         return self.mc2_correct / self.mc2_total if self.mc2_total > 0 else 0.0
-    
+
     def get_category_accuracy(self, category: str) -> float:
         """Get accuracy for a specific category."""
         if category not in self.category_results:
@@ -739,7 +748,7 @@ class TruthfulQAMetrics:
         total = result.get("total", 0)
         correct = result.get("correct", 0)
         return correct / total if total > 0 else 0.0
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for reporting."""
         return {
@@ -761,39 +770,39 @@ class TruthfulQAMetrics:
 class FActScoreMetrics:
     """
     Metrics for FActScore evaluation.
-    
+
     FActScore = (# supported facts) / (# total facts)
     Measures atomic fact precision in longer-form text.
     """
-    
+
     total_texts: int = 0
     total_facts: int = 0
     supported_facts: int = 0
-    
+
     # Per-text scores
     scores: list[float] = field(default_factory=list)
     facts_per_text: list[int] = field(default_factory=list)
-    
+
     @property
     def factscore(self) -> float:
         """Overall FActScore (atomic fact precision)."""
         return self.supported_facts / self.total_facts if self.total_facts > 0 else 0.0
-    
+
     @property
     def avg_factscore(self) -> float:
         """Average FActScore across all texts."""
         return float(np.mean(self.scores)) if self.scores else 0.0
-    
+
     @property
     def std_factscore(self) -> float:
         """Standard deviation of FActScores."""
         return float(np.std(self.scores)) if len(self.scores) > 1 else 0.0
-    
+
     @property
     def avg_facts_per_text(self) -> float:
         """Average atomic facts extracted per text."""
         return float(np.mean(self.facts_per_text)) if self.facts_per_text else 0.0
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for reporting."""
         return {
@@ -811,57 +820,57 @@ class FActScoreMetrics:
 class LatencyMetrics:
     """
     Latency performance metrics.
-    
+
     Comprehensive latency statistics for evaluation.
     """
-    
+
     latencies_ms: list[float] = field(default_factory=list)
-    
+
     @property
     def total_requests(self) -> int:
         return len(self.latencies_ms)
-    
+
     @property
     def mean(self) -> float:
         return float(np.mean(self.latencies_ms)) if self.latencies_ms else 0.0
-    
+
     @property
     def median(self) -> float:
         return float(np.median(self.latencies_ms)) if self.latencies_ms else 0.0
-    
+
     @property
     def std(self) -> float:
         return float(np.std(self.latencies_ms)) if len(self.latencies_ms) > 1 else 0.0
-    
+
     @property
     def p50(self) -> float:
         return float(np.percentile(self.latencies_ms, 50)) if self.latencies_ms else 0.0
-    
+
     @property
     def p90(self) -> float:
         return float(np.percentile(self.latencies_ms, 90)) if self.latencies_ms else 0.0
-    
+
     @property
     def p95(self) -> float:
         return float(np.percentile(self.latencies_ms, 95)) if self.latencies_ms else 0.0
-    
+
     @property
     def p99(self) -> float:
         return float(np.percentile(self.latencies_ms, 99)) if self.latencies_ms else 0.0
-    
+
     @property
     def min(self) -> float:
         return float(np.min(self.latencies_ms)) if self.latencies_ms else 0.0
-    
+
     @property
     def max(self) -> float:
         return float(np.max(self.latencies_ms)) if self.latencies_ms else 0.0
-    
+
     @property
     def throughput(self) -> float:
         """Estimated throughput based on P50 latency (req/s)."""
         return 1000.0 / self.p50 if self.p50 > 0 else 0.0
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for reporting."""
         return {
@@ -883,16 +892,16 @@ class LatencyMetrics:
 class EvaluatorMetrics:
     """
     Combined metrics for a single evaluator.
-    
+
     Aggregates all metric types for comparison.
     """
-    
+
     evaluator_name: str
     hallucination: HallucinationMetrics = field(default_factory=HallucinationMetrics)
     truthfulqa: TruthfulQAMetrics = field(default_factory=TruthfulQAMetrics)
     factscore: FActScoreMetrics = field(default_factory=FActScoreMetrics)
     latency: LatencyMetrics = field(default_factory=LatencyMetrics)
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert all metrics to dictionary."""
         return {
@@ -902,7 +911,7 @@ class EvaluatorMetrics:
             "factscore": self.factscore.to_dict(),
             "latency": self.latency.to_dict(),
         }
-    
+
     def get_summary_scores(self) -> dict[str, float]:
         """
         Get summary scores for radar chart visualization.
@@ -936,28 +945,28 @@ class ComparisonReport:
     """
     Complete comparison report across all evaluators.
     """
-    
+
     evaluators: dict[str, EvaluatorMetrics] = field(default_factory=dict)
     run_id: str = ""
     timestamp: str = ""
     config_summary: dict[str, Any] = field(default_factory=dict)
-    
+
     def add_evaluator(self, metrics: EvaluatorMetrics) -> None:
         """Add evaluator metrics to report."""
         self.evaluators[metrics.evaluator_name] = metrics
-    
+
     def get_ranking(self, metric: str = "f1_score") -> list[str]:
         """
         Get evaluators ranked by a specific metric.
-        
+
         Args:
             metric: Metric name (f1_score, accuracy, factscore, etc.)
-            
+
         Returns:
             List of evaluator names sorted by metric (best first)
         """
         scores: list[tuple[str, float]] = []
-        
+
         for name, metrics in self.evaluators.items():
             if metric == "accuracy":
                 score = metrics.hallucination.accuracy
@@ -991,23 +1000,20 @@ class ComparisonReport:
                 score = float(rag.get("faithfulness", 0.0))
             else:
                 score = 0.0
-            
+
             scores.append((name, score))
-        
+
         # Sort descending (highest score first)
         scores.sort(key=lambda x: x[1], reverse=True)
         return [name for name, _ in scores]
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert full report to dictionary."""
         return {
             "run_id": self.run_id,
             "timestamp": self.timestamp,
             "config": self.config_summary,
-            "evaluators": {
-                name: metrics.to_dict()
-                for name, metrics in self.evaluators.items()
-            },
+            "evaluators": {name: metrics.to_dict() for name, metrics in self.evaluators.items()},
             "rankings": {
                 "by_f1": self.get_ranking("f1_score"),
                 "by_accuracy": self.get_ranking("accuracy"),
@@ -1019,16 +1025,16 @@ class ComparisonReport:
                 "by_ragas_faithfulness": self.get_ranking("ragas_faithfulness"),
             },
         }
-    
+
     def get_comparison_table(self) -> list[dict[str, Any]]:
         """
         Generate comparison table data for visualization.
-        
+
         Returns:
             List of rows with evaluator name and all metrics.
         """
         rows: list[dict[str, Any]] = []
-        
+
         for name, metrics in self.evaluators.items():
             retrieval = metrics.hallucination.retrieval_metrics(ks=(10, 100))
             alce = metrics.hallucination.alce_metrics()
@@ -1042,17 +1048,35 @@ class ComparisonReport:
                 "Halluc. Pass Rate": f"{metrics.hallucination.hallucination_pass_rate:.1%}",
                 "AURC": f"{metrics.hallucination.aurc:.4f}",
                 "E-AURC": f"{metrics.hallucination.eaurc:.4f}",
-                "nDCG@10": f"{float(retrieval.get('ndcg@10', 0.0)):.3f}" if retrieval else "N/A",
-                "Recall@10": f"{float(retrieval.get('recall@10', 0.0)):.3f}" if retrieval else "N/A",
-                "Recall@100": f"{float(retrieval.get('recall@100', 0.0)):.3f}" if retrieval else "N/A",
+                "nDCG@10": (f"{float(retrieval.get('ndcg@10', 0.0)):.3f}" if retrieval else "N/A"),
+                "Recall@10": (
+                    f"{float(retrieval.get('recall@10', 0.0)):.3f}" if retrieval else "N/A"
+                ),
+                "Recall@100": (
+                    f"{float(retrieval.get('recall@100', 0.0)):.3f}" if retrieval else "N/A"
+                ),
                 "MRR@10": f"{float(retrieval.get('mrr@10', 0.0)):.3f}" if retrieval else "N/A",
-                "Precision@10": f"{float(retrieval.get('precision@10', 0.0)):.3f}" if retrieval else "N/A",
+                "Precision@10": (
+                    f"{float(retrieval.get('precision@10', 0.0)):.3f}" if retrieval else "N/A"
+                ),
                 "Citation Rate": f"{float(alce.get('citation_rate', 0.0)):.1%}" if alce else "N/A",
-                "Citation Grounding": f"{float(alce.get('citation_grounding_proxy', 0.0)):.3f}" if alce and alce.get('citation_grounding_proxy') is not None else "N/A",
-                "RAG Faithfulness": f"{float(rag.get('faithfulness', 0.0)):.3f}" if rag else "N/A",
-                "RAG Answer Rel.": f"{float(rag.get('answer_relevancy', 0.0)):.3f}" if rag else "N/A",
-                "RAG Ctx Prec.": f"{float(rag.get('context_precision', 0.0)):.3f}" if rag else "N/A",
-                "RAG Ctx Util.": f"{float(rag.get('context_utilization', 0.0)):.3f}" if rag else "N/A",
+                "Citation Grounding": (
+                    f"{float(alce.get('citation_grounding_proxy', 0.0)):.3f}"
+                    if alce and alce.get("citation_grounding_proxy") is not None
+                    else "N/A"
+                ),
+                "RAG Faithfulness": (
+                    f"{float(rag.get('faithfulness', 0.0)):.3f}" if rag else "N/A"
+                ),
+                "RAG Answer Rel.": (
+                    f"{float(rag.get('answer_relevancy', 0.0)):.3f}" if rag else "N/A"
+                ),
+                "RAG Ctx Prec.": (
+                    f"{float(rag.get('context_precision', 0.0)):.3f}" if rag else "N/A"
+                ),
+                "RAG Ctx Util.": (
+                    f"{float(rag.get('context_utilization', 0.0)):.3f}" if rag else "N/A"
+                ),
                 "TruthfulQA": f"{metrics.truthfulqa.accuracy:.1%}",
                 "FActScore": f"{metrics.factscore.avg_factscore:.1%}",
                 "P50 Latency": f"{metrics.latency.p50:.0f}ms",
@@ -1060,5 +1084,5 @@ class ComparisonReport:
                 "Throughput": f"{metrics.latency.throughput:.1f} req/s",
             }
             rows.append(row)
-        
+
         return rows
