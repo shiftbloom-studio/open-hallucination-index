@@ -73,9 +73,9 @@ def get_evaluator(name: str, config):
         return OHIEvaluator(
             config,
             name_override="OHI-Max",
-            strategy_override="adaptive",
+            strategy_override="mcp_enhanced",
             tier="max",  # All sources including all MCP
-            target_sources_override=None,  # No limit
+            target_sources_override=20,
         )
     
     if name == "ohi":

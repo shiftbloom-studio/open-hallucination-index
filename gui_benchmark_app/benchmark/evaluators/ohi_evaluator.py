@@ -51,7 +51,7 @@ class OHIEvaluator(BaseEvaluator):
         *,
         name_override: str | None = None,
         strategy_override: str | None = None,
-        target_sources_override: int | None = None,
+        target_sources_override: int | None = 5,
         tier: str = "default",  # local, default, or max
     ) -> None:
         self.config = config
@@ -62,7 +62,7 @@ class OHIEvaluator(BaseEvaluator):
         if name_override:
             self.name = name_override
         self.timeout = config.timeout_seconds
-        self._target_sources = target_sources_override or 5  # Reduced for stability
+        self._target_sources = target_sources_override  # Reduced for stability
         # Keep connection pool small for stability
         self.max_concurrency = min(5, config.concurrency)
         self.max_retries = 3  # Retry failed requests

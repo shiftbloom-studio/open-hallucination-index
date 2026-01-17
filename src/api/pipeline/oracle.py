@@ -585,11 +585,15 @@ class HybridVerificationOracle(VerificationOracle):
                     mcp_sources = mcp_sources[:max_mcp_allowed]
 
             # Collect evidence using adaptive collector
+            target_count = None if tier == EvidenceTier.MAX else target_sources
+            allow_early_exit = tier != EvidenceTier.MAX
             result = await self._evidence_collector.collect(
                 claim,
                 mcp_sources,
-                target_evidence_count=target_sources,
+                target_evidence_count=target_count,
+                allow_early_exit=allow_early_exit,
             )
+
 
             logger.debug(
                 f"Adaptive collection: {len(result.evidence)} evidence, "
