@@ -81,8 +81,10 @@ dmypy.json
 .env.local
 .env.*.local
 .env.production
+docker/compose/.env
 *.pem
 *.key
+
 secrets/
 .secrets/
 
