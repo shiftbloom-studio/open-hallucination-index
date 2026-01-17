@@ -23,7 +23,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
-from benchmark.comparison_metrics import (
+from benchmark.comparison_benchmark import (
     FActScoreMetrics,
     HallucinationMetrics,
     TruthfulQAMetrics,

@@ -772,6 +772,13 @@ class BenchmarkWindow(QMainWindow):
         self.api_port = QLineEdit("8080")
         self.api_key = QLineEdit()
         self.api_key.setEchoMode(QLineEdit.Password)
+        # Pre-populate API key from environment if available
+        env_api_key = os.getenv("API_API_KEY", "")
+        if env_api_key:
+            self.api_key.setText(env_api_key)
+            self.api_key.setPlaceholderText("Using API_API_KEY from environment")
+        else:
+            self.api_key.setPlaceholderText("Enter API key or set API_API_KEY in .env")
         self.concurrency = QSpinBox()
         self.concurrency.setRange(1, 50)
         self.concurrency.setValue(3)
