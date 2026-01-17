@@ -5,7 +5,8 @@
  * Global news and events.
  */
 
-import { BaseSource, SearchResult } from "./base.js";
+import type { SearchResult } from "./base.js";
+import { BaseSource } from "./base.js";
 import { httpClient } from "../utils/http-client.js";
 
 interface GDELTArticle {

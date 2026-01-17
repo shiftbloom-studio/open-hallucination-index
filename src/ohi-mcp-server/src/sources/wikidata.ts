@@ -5,7 +5,8 @@
  * Search and SPARQL queries against Wikidata.
  */
 
-import { BaseSource, SearchResult } from "./base.js";
+import type { SearchResult } from "./base.js";
+import { BaseSource } from "./base.js";
 import { httpClient } from "../utils/http-client.js";
 
 interface WikidataSearchResult {
@@ -86,12 +87,12 @@ export class WikidataSource extends BaseSource {
   }
 
   private extractEntityHint(query: string): string | null {
-    const capitalMatch = query.match(/capital of ([^\.]+)/i);
+    const capitalMatch = query.match(/capital of ([^.]+)/i);
     if (capitalMatch?.[1]) {
       return this.compactQuery(capitalMatch[1], 3);
     }
 
-    const isMatch = query.match(/\bis\s+([^\.]+)/i);
+    const isMatch = query.match(/\bis\s+([^.]+)/i);
     if (isMatch?.[1]) {
       return this.compactQuery(isMatch[1], 3);
     }

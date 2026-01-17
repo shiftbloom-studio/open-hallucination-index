@@ -6,21 +6,22 @@
  * Handles parallel execution and result aggregation.
  */
 
-import { sourceRegistry, SourceCategory } from "./sources/registry.js";
-import { SearchResult } from "./sources/base.js";
-import { WikidataSource } from "./sources/wikidata.js";
-import { MediaWikiSource } from "./sources/mediawiki.js";
-import { WikimediaRESTSource } from "./sources/wikimedia-rest.js";
-import { DBpediaSource } from "./sources/dbpedia.js";
-import { OpenAlexSource } from "./sources/openalex.js";
-import { CrossrefSource } from "./sources/crossref.js";
-import { EuropePMCSource } from "./sources/europepmc.js";
-import { NCBISource } from "./sources/ncbi.js";
-import { ClinicalTrialsSource } from "./sources/clinicaltrials.js";
-import { OpenCitationsSource } from "./sources/opencitations.js";
-import { GDELTSource } from "./sources/gdelt.js";
-import { WorldBankSource } from "./sources/worldbank.js";
-import { OSVSource } from "./sources/osv.js";
+import type { SourceCategory } from "./sources/registry.js";
+import { sourceRegistry } from "./sources/registry.js";
+import type { SearchResult } from "./sources/base.js";
+import type { WikidataSource } from "./sources/wikidata.js";
+import type { MediaWikiSource } from "./sources/mediawiki.js";
+import type { WikimediaRESTSource } from "./sources/wikimedia-rest.js";
+import type { DBpediaSource } from "./sources/dbpedia.js";
+import type { OpenAlexSource } from "./sources/openalex.js";
+import type { CrossrefSource } from "./sources/crossref.js";
+import type { EuropePMCSource } from "./sources/europepmc.js";
+import type { NCBISource } from "./sources/ncbi.js";
+import type { ClinicalTrialsSource } from "./sources/clinicaltrials.js";
+import type { OpenCitationsSource } from "./sources/opencitations.js";
+import type { GDELTSource } from "./sources/gdelt.js";
+import type { WorldBankSource } from "./sources/worldbank.js";
+import type { OSVSource } from "./sources/osv.js";
 import { queryDocs, resolveLibraryId } from "./utils/context7.js";
 
 export type ToolResult =

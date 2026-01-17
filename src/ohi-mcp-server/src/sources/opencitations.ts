@@ -5,7 +5,8 @@
  * Citation data for DOIs.
  */
 
-import { BaseSource, SearchResult } from "./base.js";
+import type { SearchResult } from "./base.js";
+import { BaseSource } from "./base.js";
 import { httpClient } from "../utils/http-client.js";
 
 interface OpenCitationMeta {
@@ -125,7 +126,7 @@ export class OpenCitationsSource extends BaseSource {
   }
 
   private extractDOIs(text: string): string[] {
-    const pattern = /10\.\d{4,}\/[^\s\]\)\>]+/g;
+    const pattern = /10\.\d{4,}\/[^\s\])>]+/g;
     const matches = text.match(pattern) || [];
     return matches.map((m) => m.replace(/[.,;:]$/, ""));
   }
