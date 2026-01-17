@@ -420,14 +420,22 @@ class ToolAggregator {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json().catch(() => ({})) as { detail?: string };
         return {
           success: false,
           error: errorData.detail || `HTTP ${response.status}: ${response.statusText}`,
         };
       }
 
-      const data = await response.json();
+      const data = await response.json() as {
+        tokens_remaining?: number;
+        tokens_used?: number;
+        token_limit?: number;
+        type?: string;
+        key_name?: string;
+        expires_at?: string;
+        is_active?: boolean;
+      };
       return {
         success: true,
         results: [],
