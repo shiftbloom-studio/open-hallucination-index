@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QGroupBox,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -678,9 +679,26 @@ class BenchmarkWorker(QThread):
 
     @staticmethod
     def _summary_payload(metrics: Any) -> dict[str, Any]:
+        # Derived metrics are computed from the already-collected per-sample signals
+        # (confidence, evidence list, sources, etc.). No input changes required.
+        retrieval = metrics.hallucination.retrieval_metrics(ks=(10, 100)) if hasattr(metrics, 'hallucination') else {}
+        alce = metrics.hallucination.alce_metrics() if hasattr(metrics, 'hallucination') else {}
+        rag = metrics.hallucination.ragas_proxy_metrics() if hasattr(metrics, 'hallucination') else {}
         return {
             "accuracy": metrics.hallucination.accuracy,
             "f1": metrics.hallucination.f1_score,
+            "hpr": metrics.hallucination.hallucination_pass_rate,
+            "aurc": getattr(metrics.hallucination, 'aurc', 0.0),
+            "eaurc": getattr(metrics.hallucination, 'eaurc', 0.0),
+            "ndcg10": float(retrieval.get('ndcg@10', 0.0)) if retrieval else 0.0,
+            "recall10": float(retrieval.get('recall@10', 0.0)) if retrieval else 0.0,
+            "precision10": float(retrieval.get('precision@10', 0.0)) if retrieval else 0.0,
+            "citation_rate": float(alce.get('citation_rate', 0.0)) if alce else 0.0,
+            "citation_grounding": (float(alce.get('citation_grounding_proxy')) if alce and alce.get('citation_grounding_proxy') is not None else None),
+            "rag_faithfulness": float(rag.get('faithfulness', 0.0)) if rag else 0.0,
+            "rag_answer_relevancy": float(rag.get('answer_relevancy', 0.0)) if rag else 0.0,
+            "rag_context_precision": float(rag.get('context_precision', 0.0)) if rag else 0.0,
+            "rag_context_utilization": float(rag.get('context_utilization', 0.0)) if rag else 0.0,
             "p50": metrics.latency.p50,
             "p95": metrics.latency.p95,
             "truthfulqa": metrics.truthfulqa.accuracy,
@@ -949,10 +967,29 @@ class BenchmarkWindow(QMainWindow):
 
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        self.results_table = QTableWidget(0, 6)
+        self.results_table = QTableWidget(0, 12)
         self.results_table.setHorizontalHeaderLabels(
-            ["Evaluator", "Accuracy", "F1", "P50", "P95", "Throughput"]
+            [
+                "Evaluator",
+                "Accuracy",
+                "F1",
+                "HPR",
+                "AURC",
+                "nDCG@10",
+                "Recall@10",
+                "Cite%",
+                "Faith",
+                "P50",
+                "P95",
+                "Throughput",
+            ]
         )
+        # Make wide tables usable
+        self.results_table.setAlternatingRowColors(True)
+        self.results_table.setSortingEnabled(True)
+        header = self.results_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setStretchLastSection(True)
         left_layout.addWidget(self.results_table)
 
         search_row = QHBoxLayout()
@@ -988,6 +1025,32 @@ class BenchmarkWindow(QMainWindow):
         container = QWidget()
         layout = QVBoxLayout(container)
 
+        # Scatter controls (lets you explore new metrics: AURC/BEIR/RAGAS/ALCE)
+        controls = QHBoxLayout()
+        controls.addWidget(QLabel("Scatter X"))
+        self.scatter_x_combo = QComboBox()
+        self.scatter_x_combo.addItems([
+            "P95 latency (ms)",
+            "AURC (lower better)",
+            "nDCG@10",
+            "Recall@10",
+            "Citation rate",
+            "RAG faithfulness",
+        ])
+        controls.addWidget(self.scatter_x_combo)
+        controls.addSpacing(12)
+        controls.addWidget(QLabel("Scatter Y"))
+        self.scatter_y_combo = QComboBox()
+        self.scatter_y_combo.addItems([
+            "Accuracy (%)",
+            "F1 (%)",
+            "Safety (1-HPR)",
+            "RAG faithfulness",
+        ])
+        controls.addWidget(self.scatter_y_combo)
+        controls.addStretch(1)
+        layout.addLayout(controls)
+
         self.insights_figure = Figure(figsize=(9, 6), constrained_layout=True)
         self.insights_canvas = FigureCanvas(self.insights_figure)
         self.insights_toolbar = NavigationToolbar(self.insights_canvas, self)
@@ -997,6 +1060,11 @@ class BenchmarkWindow(QMainWindow):
 
         layout.addWidget(self.insights_toolbar)
         layout.addWidget(self.insights_canvas)
+
+        # Update plots when axes change
+        self.scatter_x_combo.currentIndexChanged.connect(self._update_insights_charts)
+        self.scatter_y_combo.currentIndexChanged.connect(self._update_insights_charts)
+
         return container
 
     def _build_log_tab(self) -> QWidget:
@@ -1233,17 +1301,44 @@ class BenchmarkWindow(QMainWindow):
         self.results_table.setItem(row, 0, QTableWidgetItem(name))
         self.results_table.setItem(row, 1, QTableWidgetItem(f"{metrics.get('accuracy', 0):.2%}"))
         self.results_table.setItem(row, 2, QTableWidgetItem(f"{metrics.get('f1', 0):.2%}"))
-        self.results_table.setItem(row, 3, QTableWidgetItem(f"{metrics.get('p50', 0):.0f}ms"))
-        self.results_table.setItem(row, 4, QTableWidgetItem(f"{metrics.get('p95', 0):.0f}ms"))
-        self.results_table.setItem(row, 5, QTableWidgetItem(f"{metrics.get('throughput', 0):.1f}/s"))
+        self.results_table.setItem(row, 3, QTableWidgetItem(f"{metrics.get('hpr', 0):.2%}"))
+        self.results_table.setItem(row, 4, QTableWidgetItem(f"{metrics.get('aurc', 0):.4f}"))
+        self.results_table.setItem(row, 5, QTableWidgetItem(f"{metrics.get('ndcg10', 0):.3f}"))
+        self.results_table.setItem(row, 6, QTableWidgetItem(f"{metrics.get('recall10', 0):.3f}"))
+        self.results_table.setItem(row, 7, QTableWidgetItem(f"{metrics.get('citation_rate', 0):.1%}"))
+        self.results_table.setItem(row, 8, QTableWidgetItem(f"{metrics.get('rag_faithfulness', 0):.3f}"))
+        self.results_table.setItem(row, 9, QTableWidgetItem(f"{metrics.get('p50', 0):.0f}ms"))
+        self.results_table.setItem(row, 10, QTableWidgetItem(f"{metrics.get('p95', 0):.0f}ms"))
+        self.results_table.setItem(row, 11, QTableWidgetItem(f"{metrics.get('throughput', 0):.1f}/s"))
+
+        # Right-align numeric columns
+        for col in range(1, self.results_table.columnCount()):
+            item = self.results_table.item(row, col)
+            if item is not None:
+                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         summary_scores = metrics.get("summary_scores")
         if isinstance(summary_scores, dict):
-            self._evaluator_summaries[name] = summary_scores
+            # Enrich radar with additional derived metrics
+            enriched = dict(summary_scores)
+            # AURC is lower-better; map to (0,1] for radar
+            aurc = float(metrics.get('aurc', 0.0))
+            enriched['Selective (1/(1+AURC))'] = 1.0 / (1.0 + max(0.0, aurc))
+            enriched['Retrieval (nDCG@10)'] = float(metrics.get('ndcg10', 0.0))
+            enriched['RAG faithfulness'] = float(metrics.get('rag_faithfulness', 0.0))
+            enriched['Citation rate'] = float(metrics.get('citation_rate', 0.0))
+            self._evaluator_summaries[name] = enriched
             self._evaluator_meta[name] = {
-                "accuracy": float(metrics.get("accuracy", 0.0)),
-                "p95": float(metrics.get("p95", 0.0)),
-                "throughput": float(metrics.get("throughput", 0.0)),
+                'accuracy': float(metrics.get('accuracy', 0.0)),
+                'f1': float(metrics.get('f1', 0.0)),
+                'safety': 1.0 - float(metrics.get('hpr', 0.0)),
+                'p95': float(metrics.get('p95', 0.0)),
+                'throughput': float(metrics.get('throughput', 0.0)),
+                'aurc': float(metrics.get('aurc', 0.0)),
+                'ndcg10': float(metrics.get('ndcg10', 0.0)),
+                'recall10': float(metrics.get('recall10', 0.0)),
+                'citation_rate': float(metrics.get('citation_rate', 0.0)),
+                'rag_faithfulness': float(metrics.get('rag_faithfulness', 0.0)),
             }
             self._update_insights_charts()
 
@@ -1411,12 +1506,15 @@ class BenchmarkWindow(QMainWindow):
             return
 
         radar_keys = [
-            "Accuracy",
-            "F1 Score",
-            "Safety (1-HPR)",
-            "TruthfulQA",
-            "FActScore",
-            "Speed (1/P95)",
+            'Accuracy',
+            'F1 Score',
+            'Safety (1-HPR)',
+            'TruthfulQA',
+            'FActScore',
+            'Speed (1/P95)',
+            'Selective (1/(1+AURC))',
+            'Retrieval (nDCG@10)',
+            'RAG faithfulness',
         ]
 
         angles = [i / len(radar_keys) * 2 * 3.14159265 for i in range(len(radar_keys))]
@@ -1434,17 +1532,46 @@ class BenchmarkWindow(QMainWindow):
         self.ax_radar.set_title("Evaluator Radar", pad=16)
         self.ax_radar.legend(loc="upper right", bbox_to_anchor=(1.2, 1.1), fontsize=8)
 
-        # Scatter: Accuracy vs P95 latency with bubble size = throughput
-        for name, meta in self._evaluator_meta.items():
-            acc = meta.get("accuracy", 0.0) * 100
-            p95 = meta.get("p95", 0.0)
-            size = max(40.0, meta.get("throughput", 0.0) * 12)
-            self.ax_scatter.scatter(p95, acc, s=size, alpha=0.7)
-            self.ax_scatter.text(p95, acc, name, fontsize=8)
+        # Scatter: user-selectable axes (includes AURC/BEIR/RAGAS/ALCE signals)
+        x_choice = self.scatter_x_combo.currentText() if hasattr(self, 'scatter_x_combo') else 'P95 latency (ms)'
+        y_choice = self.scatter_y_combo.currentText() if hasattr(self, 'scatter_y_combo') else 'Accuracy (%)'
 
-        self.ax_scatter.set_title("Latency vs Accuracy")
-        self.ax_scatter.set_xlabel("P95 latency (ms)")
-        self.ax_scatter.set_ylabel("Accuracy (%)")
+        def x_val(meta: dict) -> float:
+            if x_choice.startswith('P95'):
+                return float(meta.get('p95', 0.0))
+            if x_choice.startswith('AURC'):
+                return float(meta.get('aurc', 0.0))
+            if x_choice.startswith('nDCG'):
+                return float(meta.get('ndcg10', 0.0))
+            if x_choice.startswith('Recall'):
+                return float(meta.get('recall10', 0.0))
+            if x_choice.startswith('Citation'):
+                return float(meta.get('citation_rate', 0.0))
+            if x_choice.startswith('RAG'):
+                return float(meta.get('rag_faithfulness', 0.0))
+            return float(meta.get('p95', 0.0))
+
+        def y_val(meta: dict) -> float:
+            if y_choice.startswith('Accuracy'):
+                return float(meta.get('accuracy', 0.0)) * 100
+            if y_choice.startswith('F1'):
+                return float(meta.get('f1', 0.0)) * 100
+            if y_choice.startswith('Safety'):
+                return float(meta.get('safety', 0.0)) * 100
+            if y_choice.startswith('RAG'):
+                return float(meta.get('rag_faithfulness', 0.0)) * 100
+            return float(meta.get('accuracy', 0.0)) * 100
+
+        for name, meta in self._evaluator_meta.items():
+            x = x_val(meta)
+            y = y_val(meta)
+            size = max(40.0, float(meta.get('throughput', 0.0)) * 12)
+            self.ax_scatter.scatter(x, y, s=size, alpha=0.7)
+            self.ax_scatter.text(x, y, name, fontsize=8)
+
+        self.ax_scatter.set_title(f"{x_choice} vs {y_choice}")
+        self.ax_scatter.set_xlabel(x_choice)
+        self.ax_scatter.set_ylabel(y_choice)
         self.ax_scatter.grid(True, alpha=0.2)
 
         self.insights_canvas.draw_idle()
