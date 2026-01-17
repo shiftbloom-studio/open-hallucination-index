@@ -28,12 +28,14 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import type {
+  Tool} from "@modelcontextprotocol/sdk/types.js";
 import {
   CallToolRequestSchema,
-  ListToolsRequestSchema,
-  Tool,
+  ListToolsRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
-import express, { Request, Response } from "express";
+import type { Request, Response } from "express";
+import express from "express";
 
 import { toolAggregator } from "./aggregator.js";
 import { sourceRegistry } from "./sources/registry.js";

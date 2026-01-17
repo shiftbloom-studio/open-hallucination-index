@@ -6,7 +6,7 @@
  * Manages initialization, health checks, and source discovery.
  */
 
-import { BaseSource, SearchResult } from "./base.js";
+import type { BaseSource, SearchResult } from "./base.js";
 import { WikidataSource } from "./wikidata.js";
 import { MediaWikiSource } from "./mediawiki.js";
 import { WikimediaRESTSource } from "./wikimedia-rest.js";
