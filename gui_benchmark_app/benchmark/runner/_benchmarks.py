@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 from benchmark.comparison_metrics import (
@@ -303,7 +304,7 @@ async def run_hallucination_benchmark(
 
             # Collect auxiliary signals for AURC / BEIR-style retrieval / ALCE-style citation stats
             confidence = float(result.trust_score) if result.trust_score is not None else 0.0
-            if not (confidence == confidence):  # NaN guard
+            if math.isnan(confidence):  # NaN guard
                 confidence = 0.0
 
             retrieved_sources = [str(ev.source) for ev in (result.evidence or []) if getattr(ev, "source", None)]
