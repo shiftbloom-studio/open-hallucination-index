@@ -146,10 +146,20 @@ class BalanceResponse(BaseModel):
 _mock_users: dict[str, dict] = {}
 _mock_api_keys: dict[str, dict] = {}
 
+# Parameters for API key hashing (slow KDF to resist brute force)
+_API_KEY_PBKDF2_ITERATIONS = 100_000
+_API_KEY_PBKDF2_SALT = b"admin_api_key_salt_v1"
+
 
 def _hash_key(key: str) -> str:
-    """Hash an API key using SHA-256."""
-    return hashlib.sha256(key.encode()).hexdigest()
+    """Hash an API key using a slow, key-derivation function (PBKDF2-HMAC-SHA256)."""
+    derived = hashlib.pbkdf2_hmac(
+        "sha256",
+        key.encode("utf-8"),
+        _API_KEY_PBKDF2_SALT,
+        _API_KEY_PBKDF2_ITERATIONS,
+    )
+    return derived.hex()
 
 
 def _generate_api_key(key_type: str) -> tuple[str, str]:
@@ -391,7 +401,7 @@ async def create_api_key(
         "updated_at": now,
     }
 
-    logger.info(f"Created API key {key_id} (type: {request.type}, prefix: {prefix})")
+    logger.info(f"Created API key {key_id} (type: {request.type})")
 
     return ApiKeyCreatedResponse(
         id=key_id,
