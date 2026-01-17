@@ -1232,7 +1232,7 @@ class ChartsReporter(BaseReporter):
         ]
 
         labels = list(base_labels)
-        for lab, fn, _tag in extra_specs:
+        for lab, fn in extra_specs:
             vals = [fn(m) for m in evaluators.values()]
             if any(v > 0 for v in vals):
                 labels.append((lab, fn))
