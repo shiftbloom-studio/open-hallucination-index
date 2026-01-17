@@ -1090,6 +1090,7 @@ class ChartsReporter(BaseReporter):
     # COMPARISON CHARTS (Multi-Evaluator)
     # =========================================================================
 
+
     def generate_comparison_charts(
         self,
         comparison_report: ComparisonReport,
@@ -1098,176 +1099,211 @@ class ChartsReporter(BaseReporter):
     ) -> list[Path]:
         """
         Generate comparison charts from a ComparisonReport.
-        
-        This is the main method for multi-evaluator comparison visualization.
-        
-        Args:
-            comparison_report: ComparisonReport with all evaluator metrics.
-            prefix: Filename prefix.
-            consolidated: If True, generate combined dashboard instead of many individual charts.
-            
-        Returns:
-            List of generated chart file paths.
+
+        - consolidated=True: generates a single dashboard PNG (plus optional extra panels if data exists)
+        - consolidated=False: generates individual charts (radar/bar/latency/heatmap/...)
         """
         try:
             import matplotlib.pyplot as plt  # noqa: F401
         except ImportError:
             return []
 
-        if not comparison_report.evaluators:
+        if not getattr(comparison_report, "evaluators", None):
             return []
 
         chart_files: list[Path] = []
 
-        # CONSOLIDATED MODE: Single dashboard with all key metrics
         if consolidated:
             dashboard = self._create_comparison_dashboard(comparison_report, prefix)
             if dashboard:
                 chart_files.append(dashboard)
             return chart_files
 
-        # DETAILED MODE: Individual charts for each visualization
-        # 1. RADAR CHART - Multi-metric comparison (dedicated comparison chart)
+        # DETAILED MODE
         c1 = self._create_comparison_radar(comparison_report, prefix)
         if c1:
             chart_files.append(c1)
 
-        # 2. Grouped Bar Chart - Metric comparison per evaluator
         c2 = self._create_comparison_grouped_bar(comparison_report, prefix)
         if c2:
             chart_files.append(c2)
 
-        # 3. Latency Comparison Boxplot
         c3 = self._create_comparison_latency_boxplot(comparison_report, prefix)
         if c3:
             chart_files.append(c3)
 
-        # 4. Heatmap of normalized scores
         c4 = self._create_comparison_heatmap(comparison_report, prefix)
         if c4:
             chart_files.append(c4)
 
-        # 5. FActScore distribution if available
-        c5 = self._create_comparison_factscore_violin(comparison_report, prefix)
+        # Optional panels (only if streams exist)
+        c5 = self._create_comparison_risk_coverage(comparison_report, prefix)
         if c5:
             chart_files.append(c5)
 
+        c6 = self._create_comparison_rag_retrieval_citation(comparison_report, prefix)
+        if c6:
+            chart_files.append(c6)
+
+        c7 = self._create_comparison_factscore_violin(comparison_report, prefix)
+        if c7:
+            chart_files.append(c7)
+
         return chart_files
-    
+
+
     def _create_comparison_dashboard(
         self,
         comparison_report: ComparisonReport,
         prefix: str,
     ) -> Path | None:
-        """
-        Create a consolidated dashboard with all key comparison visualizations.
-        
-        Layout (2x2 grid):
-        - Top-left: Radar chart (multi-metric overview)
-        - Top-right: Grouped bar chart (key metrics)
-        - Bottom-left: Latency boxplot
-        - Bottom-right: Performance heatmap
-        
-        This replaces 5+ individual charts with one comprehensive view.
-        """
+        """Create a consolidated dashboard (3x2 grid) with key + extended metrics."""
         try:
             import matplotlib.pyplot as plt
             from matplotlib.gridspec import GridSpec
         except ImportError:
             return None
 
-        evaluators = comparison_report.evaluators
+        evaluators = getattr(comparison_report, "evaluators", None) or {}
         if not evaluators:
             return None
 
         with self._mpl_style():
-            fig = plt.figure(figsize=(20, 16))
-            gs = GridSpec(2, 2, figure=fig, hspace=0.3, wspace=0.25)
+            fig = plt.figure(figsize=(20, 21))
+            gs = GridSpec(3, 2, figure=fig, hspace=0.32, wspace=0.28)
 
-            # ===== TOP-LEFT: Radar Chart =====
+            # Row 0
             ax_radar = fig.add_subplot(gs[0, 0], polar=True)
             self._draw_radar_on_axis(ax_radar, evaluators)
 
-            # ===== TOP-RIGHT: Grouped Bar Chart =====
-            ax_bar = fig.add_subplot(gs[0, 1])
-            self._draw_grouped_bar_on_axis(ax_bar, evaluators, comparison_report)
-
-            # ===== BOTTOM-LEFT: Latency Boxplot =====
-            ax_latency = fig.add_subplot(gs[1, 0])
-            self._draw_latency_boxplot_on_axis(ax_latency, evaluators)
-
-            # ===== BOTTOM-RIGHT: Performance Heatmap =====
-            ax_heatmap = fig.add_subplot(gs[1, 1])
+            ax_heatmap = fig.add_subplot(gs[0, 1])
             self._draw_heatmap_on_axis(ax_heatmap, evaluators, fig)
 
-            # Main title
-            fig.suptitle(
-                "OHI Benchmark Comparison Dashboard",
-                fontsize=20, fontweight='bold', y=0.98
-            )
+            # Row 1
+            ax_bar = fig.add_subplot(gs[1, 0])
+            self._draw_grouped_bar_on_axis(ax_bar, evaluators)
 
-            # Subtitle with run info
+            ax_latency = fig.add_subplot(gs[1, 1])
+            self._draw_latency_boxplot_on_axis(ax_latency, evaluators)
+
+            # Row 2
+            ax_rc = fig.add_subplot(gs[2, 0])
+            self._draw_risk_coverage_on_axis(ax_rc, evaluators)
+
+            ax_rag = fig.add_subplot(gs[2, 1])
+            self._draw_rag_retrieval_citation_on_axis(ax_rag, evaluators)
+
+            fig.suptitle("OHI Benchmark Comparison Dashboard", fontsize=20, fontweight='bold', y=0.985)
+
+            run_id = getattr(comparison_report, "run_id", "")
+            ts = str(getattr(comparison_report, "timestamp", ""))
             fig.text(
-                0.5, 0.94,
-                f"Run ID: {comparison_report.run_id} | Evaluators: {len(evaluators)} | Generated: {comparison_report.timestamp[:19]}",
-                ha='center', fontsize=11, color=CHART_COLORS["neutral"]
+                0.5,
+                0.955,
+                f"Run ID: {run_id} | Evaluators: {len(evaluators)} | Generated: {ts[:19]}",
+                ha='center',
+                fontsize=11,
+                color=CHART_COLORS["neutral"],
             )
 
-            plt.tight_layout(rect=[0, 0.02, 1, 0.92])
+            plt.tight_layout(rect=[0, 0.02, 1, 0.94])
             return self._save_fig(fig, f"{prefix}comparison_dashboard.png")
-    
+
+
     def _draw_radar_on_axis(self, ax, evaluators: dict) -> None:
-        """Draw radar chart on provided axis."""
-        metrics_labels = ["Accuracy", "Precision", "Recall", "F1", "Safety", "TruthfulQA", "FActScore", "Speed"]
+        """Draw radar chart. Uses base metrics + optional AURC/BEIR/ALCE/RAG signals if present."""
+        base_labels = [
+            ("Accuracy", lambda m: float(m.hallucination.accuracy)),
+            ("Precision", lambda m: float(m.hallucination.precision)),
+            ("Recall", lambda m: float(m.hallucination.recall)),
+            ("F1", lambda m: float(m.hallucination.f1_score)),
+            ("Safety", lambda m: float(1.0 - m.hallucination.hallucination_pass_rate)),
+            ("TruthfulQA", lambda m: float(m.truthfulqa.accuracy)),
+            ("FActScore", lambda m: float(m.factscore.avg_factscore)),
+            ("Speed", lambda m: float(min(1.0, 1000.0 / m.latency.p95) if getattr(m.latency, 'p95', 0) > 0 else 0.0)),
+        ]
+
+        # Optional extras (only show if any evaluator has non-trivial values)
+        extra_specs = [
+            ("Selective", lambda m: float(1.0 / (1.0 + float(getattr(m.hallucination, "aurc", 0.0)))) if getattr(m.hallucination, "aurc", None) is not None else 0.0),
+            ("nDCG@10", lambda m: float((m.hallucination.retrieval_metrics(ks=(10,)) or {}).get("ndcg@10", 0.0))),
+            ("CiteRate", lambda m: float((m.hallucination.alce_metrics() or {}).get("citation_rate", 0.0))),
+            ("Faithful", lambda m: float((m.hallucination.ragas_proxy_metrics() or {}).get("faithfulness", 0.0))),
+        ]
+
+        labels = list(base_labels)
+        for lab, fn, _tag in extra_specs:
+            vals = [fn(m) for m in evaluators.values()]
+            if any(v > 0 for v in vals):
+                labels.append((lab, fn))
+
+        metrics_labels = [l for l, _ in labels]
         num_metrics = len(metrics_labels)
         angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
         angles += angles[:1]
 
         for i, (name, m) in enumerate(evaluators.items()):
-            scores = m.get_summary_scores()
-            values = [
-                scores.get("Accuracy", 0), scores.get("Precision", 0),
-                scores.get("Recall", 0), scores.get("F1 Score", 0),
-                scores.get("Safety (1-HPR)", 0), scores.get("TruthfulQA", 0),
-                scores.get("FActScore", 0), scores.get("Speed (1/P95)", 0),
-            ]
+            values = [float(fn(m)) for _, fn in labels]
+            # Clip to [0,1] for radar safety
+            values = [min(1.0, max(0.0, v)) for v in values]
             values += values[:1]
             color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
-            ax.plot(angles, values, 'o-', linewidth=2, label=self._format_strategy_name(name), color=color)
-            ax.fill(angles, values, alpha=0.2, color=color)
+            ax.plot(angles, values, 'o-', linewidth=2.2, label=self._format_strategy_name(name), color=color)
+            ax.fill(angles, values, alpha=0.18, color=color)
 
         ax.set_xticks(angles[:-1])
         ax.set_xticklabels(metrics_labels, size=9)
         ax.set_ylim(0, 1.0)
-        ax.set_title("Multi-Metric Comparison", fontsize=12, pad=10)
+        ax.set_title("Multi-Metric Overview", fontsize=12, pad=10)
         ax.legend(loc='upper right', bbox_to_anchor=(1.25, 1.0), fontsize=9)
-    
-    def _draw_grouped_bar_on_axis(self, ax, evaluators: dict, comparison_report: ComparisonReport) -> None:
-        """Draw grouped bar chart on provided axis."""
-        metrics = ["Accuracy", "F1", "Safety", "TruthfulQA", "FActScore"]
+
+
+    def _draw_grouped_bar_on_axis(self, ax, evaluators: dict) -> None:
+        """Draw grouped bar chart for key metrics + optional new families."""
         evaluator_names = list(evaluators.keys())
-        x = np.arange(len(metrics))
-        width = 0.8 / max(len(evaluator_names), 1)
+        if not evaluator_names:
+            ax.text(0.5, 0.5, "No evaluators", ha='center', va='center', transform=ax.transAxes)
+            return
+
+        # Base (always)
+        specs = [
+            ("Accuracy", lambda m: float(m.hallucination.accuracy)),
+            ("F1", lambda m: float(m.hallucination.f1_score)),
+            ("Safety", lambda m: float(1.0 - m.hallucination.hallucination_pass_rate)),
+            ("TruthfulQA", lambda m: float(m.truthfulqa.accuracy)),
+            ("FActScore", lambda m: float(m.factscore.avg_factscore)),
+        ]
+
+        # Optional extra bars
+        opt = [
+            ("Selective", lambda m: float(1.0 / (1.0 + getattr(m.hallucination, 'aurc', 0.0))) if getattr(m.hallucination, 'aurc', None) is not None else 0.0),
+            ("nDCG@10", lambda m: float((m.hallucination.retrieval_metrics(ks=(10,)) or {}).get('ndcg@10', 0.0))),
+            ("CiteRate", lambda m: float((m.hallucination.alce_metrics() or {}).get('citation_rate', 0.0))),
+            ("Faithful", lambda m: float((m.hallucination.ragas_proxy_metrics() or {}).get('faithfulness', 0.0))),
+        ]
+        for label, fn in opt:
+            vals = [fn(evaluators[n]) for n in evaluator_names]
+            if any(v > 0 for v in vals):
+                specs.append((label, fn))
+
+        metric_labels = [s[0] for s in specs]
+        x = np.arange(len(metric_labels))
+        width = 0.82 / max(len(evaluator_names), 1)
 
         for i, name in enumerate(evaluator_names):
             m = evaluators[name]
-            scores = m.get_summary_scores()
-            values = [
-                scores.get("Accuracy", 0), scores.get("F1 Score", 0),
-                scores.get("Safety (1-HPR)", 0), scores.get("TruthfulQA", 0),
-                scores.get("FActScore", 0),
-            ]
+            values = [min(1.0, max(0.0, float(fn(m)))) for _, fn in specs]
             color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
             offset = (i - len(evaluator_names) / 2 + 0.5) * width
-            ax.bar(x + offset, values, width * 0.9, label=self._format_strategy_name(name), color=color)
+            ax.bar(x + offset, values, width * 0.92, label=self._format_strategy_name(name), color=color, edgecolor="#111827", linewidth=0.6)
 
         ax.set_xticks(x)
-        ax.set_xticklabels(metrics, fontsize=10)
+        ax.set_xticklabels(metric_labels, fontsize=10)
         ax.set_ylim(0, 1.15)
-        ax.set_ylabel("Score", fontsize=10)
-        ax.set_title("Key Metrics Comparison", fontsize=12, pad=10)
+        ax.set_ylabel("Score (higher is better)", fontsize=10)
+        ax.set_title("Key + Extended Metrics", fontsize=12, pad=10)
         ax.legend(fontsize=9, loc='upper right')
-    
+
     def _draw_latency_boxplot_on_axis(self, ax, evaluators: dict) -> None:
         """Draw latency boxplot on provided axis."""
         latencies = []
@@ -1298,40 +1334,209 @@ class ChartsReporter(BaseReporter):
             ax.annotate(f"P50:{p50:.0f}ms P95:{p95:.0f}ms", xy=(i + 1, p95),
                         fontsize=8, ha='center', va='bottom')
     
-    def _draw_heatmap_on_axis(self, ax, evaluators: dict, fig) -> None:
-        """Draw heatmap on provided axis."""
-        metrics = ["Acc", "Prec", "Rec", "F1", "Safe", "TQA", "FAct", "Spd"]
-        evaluator_names = list(evaluators.keys())
 
+    def _draw_heatmap_on_axis(self, ax, evaluators: dict, fig) -> None:
+        """Draw heatmap (normalized scores). Includes optional AURC/BEIR/ALCE/RAG signals if present."""
+        evaluator_names = list(evaluators.keys())
+        if not evaluator_names:
+            ax.text(0.5, 0.5, "No evaluators", ha='center', va='center', transform=ax.transAxes)
+            return
+
+        # Build dynamic metric columns (all higher-is-better)
+        specs = [
+            ("Acc", lambda m: float(m.hallucination.accuracy)),
+            ("Prec", lambda m: float(m.hallucination.precision)),
+            ("Rec", lambda m: float(m.hallucination.recall)),
+            ("F1", lambda m: float(m.hallucination.f1_score)),
+            ("Safe", lambda m: float(1.0 - m.hallucination.hallucination_pass_rate)),
+            ("TQA", lambda m: float(m.truthfulqa.accuracy)),
+            ("Fact", lambda m: float(m.factscore.avg_factscore)),
+            ("Spd", lambda m: float(min(1.0, 1000.0 / m.latency.p95) if getattr(m.latency, 'p95', 0) > 0 else 0.0)),
+        ]
+
+        optional = [
+            ("Sel", lambda m: float(1.0 / (1.0 + getattr(m.hallucination, 'aurc', 0.0))) if getattr(m.hallucination, 'aurc', None) is not None else 0.0),
+            ("nDCG10", lambda m: float((m.hallucination.retrieval_metrics(ks=(10,)) or {}).get('ndcg@10', 0.0))),
+            ("Cite", lambda m: float((m.hallucination.alce_metrics() or {}).get('citation_rate', 0.0))),
+            ("Faith", lambda m: float((m.hallucination.ragas_proxy_metrics() or {}).get('faithfulness', 0.0))),
+        ]
+        for lab, fn in optional:
+            vals = [fn(evaluators[n]) for n in evaluator_names]
+            if any(v > 0 for v in vals):
+                specs.append((lab, fn))
+
+        metrics = [lab for lab, _ in specs]
         data = []
         for name in evaluator_names:
             m = evaluators[name]
-            scores = m.get_summary_scores()
-            row = [
-                scores.get("Accuracy", 0), scores.get("Precision", 0),
-                scores.get("Recall", 0), scores.get("F1 Score", 0),
-                scores.get("Safety (1-HPR)", 0), scores.get("TruthfulQA", 0),
-                scores.get("FActScore", 0), scores.get("Speed (1/P95)", 0),
-            ]
+            row = [min(1.0, max(0.0, float(fn(m)))) for _, fn in specs]
             data.append(row)
 
         mat = np.array(data, dtype=float)
         im = ax.imshow(mat, aspect='auto', cmap='RdYlGn', vmin=0, vmax=1)
 
         ax.set_xticks(np.arange(len(metrics)))
-        ax.set_xticklabels(metrics, fontsize=9)
+        ax.set_xticklabels(metrics, fontsize=9, rotation=0)
         ax.set_yticks(np.arange(len(evaluator_names)))
         ax.set_yticklabels([self._format_strategy_name(n) for n in evaluator_names], fontsize=9)
 
         for i in range(len(evaluator_names)):
             for j in range(len(metrics)):
                 val = mat[i, j]
-                color = "white" if val < 0.5 else "#111827"
+                color = "white" if val < 0.45 else "#111827"
                 ax.text(j, i, f"{val:.0%}", ha="center", va="center", fontsize=8, fontweight="bold", color=color)
 
         ax.set_title("Performance Heatmap", fontsize=12, pad=10)
         ax.grid(False)
         fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
+
+    def _draw_risk_coverage_on_axis(self, ax, evaluators: dict) -> None:
+        """Plot risk-coverage curves (selective prediction). Uses confidence_scores + correct_flags streams."""
+        any_stream = False
+        for i, (name, m) in enumerate(evaluators.items()):
+            conf = getattr(m.hallucination, 'confidence_scores', None)
+            corr = getattr(m.hallucination, 'correct_flags', None)
+            if not conf or not corr or len(conf) != len(corr) or len(conf) < 5:
+                continue
+            any_stream = True
+            conf_arr = np.asarray(conf, dtype=float)
+            corr_arr = np.asarray(corr, dtype=bool)
+            order = np.argsort(-conf_arr, kind='mergesort')
+            corr_s = corr_arr[order]
+            n = corr_s.size
+            coverage = (np.arange(1, n + 1) / n)
+            risk = np.cumsum(~corr_s) / np.arange(1, n + 1)
+            color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+            ax.plot(coverage, risk, color=color, linewidth=2.2, alpha=0.95, label=f"{self._format_strategy_name(name)}")
+
+            aurc = getattr(m.hallucination, 'aurc', None)
+            if aurc is None:
+                # Approx AURC
+                aurc = float(np.trapz(risk, coverage))
+            ax.text(
+                0.02,
+                0.92 - i * 0.06,
+                f"{self._format_strategy_name(name)}: AURC {float(aurc):.4f}",
+                transform=ax.transAxes,
+                fontsize=9,
+                color=color,
+            )
+
+        if not any_stream:
+            ax.text(0.5, 0.5, "No confidence/correctness streams for Risk-Coverage", ha='center', va='center', transform=ax.transAxes)
+            ax.set_title("Risk-Coverage (AURC)", fontsize=12, pad=10)
+            ax.set_xlabel("Coverage")
+            ax.set_ylabel("Risk (error rate)")
+            return
+
+        ax.set_title("Risk-Coverage Curves (Selective Prediction)", fontsize=12, pad=10)
+        ax.set_xlabel("Coverage (fraction kept)", fontsize=10)
+        ax.set_ylabel("Risk (error rate on kept)", fontsize=10)
+        ax.set_xlim(0, 1.0)
+        ax.set_ylim(0, 1.0)
+        ax.grid(True, linestyle='--', alpha=0.35)
+        ax.legend(fontsize=9, loc='upper right')
+
+    def _draw_rag_retrieval_citation_on_axis(self, ax, evaluators: dict) -> None:
+        """One compact panel for RAG-ish metrics: retrieval, citations, faithfulness."""
+        names = list(evaluators.keys())
+        if not names:
+            ax.text(0.5, 0.5, "No evaluators", ha='center', va='center', transform=ax.transAxes)
+            return
+
+        # Choose a small set of high-signal metrics (0-1, higher is better)
+        metric_specs = [
+            ("nDCG@10", lambda m: float((m.hallucination.retrieval_metrics(ks=(10,)) or {}).get('ndcg@10', 0.0))),
+            ("Recall@10", lambda m: float((m.hallucination.retrieval_metrics(ks=(10,)) or {}).get('recall@10', 0.0))),
+            ("CiteRate", lambda m: float((m.hallucination.alce_metrics() or {}).get('citation_rate', 0.0))),
+            ("Faithful", lambda m: float((m.hallucination.ragas_proxy_metrics() or {}).get('faithfulness', 0.0))),
+        ]
+
+        # Hide the whole chart if everything is empty
+        all_vals = []
+        for _, fn in metric_specs:
+            all_vals.extend([fn(evaluators[n]) for n in names])
+        if not any(v > 0 for v in all_vals):
+            ax.text(0.5, 0.5, "No retrieval/citation/RAG signals", ha='center', va='center', transform=ax.transAxes)
+            ax.set_title("RAG Metrics", fontsize=12, pad=10)
+            return
+
+        x = np.arange(len(metric_specs))
+        width = 0.82 / max(len(names), 1)
+
+        for i, name in enumerate(names):
+            m = evaluators[name]
+            values = [min(1.0, max(0.0, fn(m))) for _, fn in metric_specs]
+            color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+            offset = (i - len(names) / 2 + 0.5) * width
+            ax.bar(x + offset, values, width * 0.92, color=color, alpha=0.9, edgecolor="#111827", linewidth=0.5, label=self._format_strategy_name(name))
+
+        ax.set_xticks(x)
+        ax.set_xticklabels([m[0] for m in metric_specs], fontsize=10)
+        ax.set_ylim(0, 1.15)
+        ax.set_ylabel("Score", fontsize=10)
+        ax.set_title("Retrieval / Citations / Faithfulness", fontsize=12, pad=10)
+        ax.legend(fontsize=9, loc='upper right')
+
+
+    def _create_comparison_risk_coverage(
+        self,
+        comparison_report: ComparisonReport,
+        prefix: str,
+    ) -> Path | None:
+        """Create Risk-Coverage curve chart (AURC) if confidence streams exist."""
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        evaluators = getattr(comparison_report, "evaluators", None) or {}
+        if not evaluators:
+            return None
+
+        # quick check
+        if not any(getattr(m.hallucination, 'confidence_scores', None) for m in evaluators.values()):
+            return None
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.8, 7.2))
+            self._draw_risk_coverage_on_axis(ax, evaluators)
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}comparison_risk_coverage.png")
+
+    def _create_comparison_rag_retrieval_citation(
+        self,
+        comparison_report: ComparisonReport,
+        prefix: str,
+    ) -> Path | None:
+        """Create grouped bar chart for retrieval/citation/rag metrics if present."""
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return None
+
+        evaluators = getattr(comparison_report, "evaluators", None) or {}
+        if not evaluators:
+            return None
+
+        # quick check
+        any_vals = False
+        for m in evaluators.values():
+            if (m.hallucination.retrieval_metrics(ks=(10,)) or {}).get('ndcg@10', 0.0) > 0:
+                any_vals = True
+            if (m.hallucination.alce_metrics() or {}).get('citation_rate', 0.0) > 0:
+                any_vals = True
+            if (m.hallucination.ragas_proxy_metrics() or {}).get('faithfulness', 0.0) > 0:
+                any_vals = True
+        if not any_vals:
+            return None
+
+        with self._mpl_style():
+            fig, ax = plt.subplots(figsize=(12.8, 7.2))
+            self._draw_rag_retrieval_citation_on_axis(ax, evaluators)
+            plt.tight_layout()
+            return self._save_fig(fig, f"{prefix}comparison_rag_retrieval_citation.png")
+
 
     def _create_comparison_radar(
         self,
