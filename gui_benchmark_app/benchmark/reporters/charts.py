@@ -222,26 +222,70 @@ class ChartsReporter(BaseReporter):
         finally:
             mpl.rcParams.update(old)
 
-    def _save_fig(self, fig, filename: str) -> Path:
+    def _save_fig(self, fig, filename: str, report: Any = None) -> Path:
         import matplotlib.pyplot as plt
+
+        if report:
+            meta = self._get_run_metadata(report)
+            if meta:
+                fig.text(
+                    0.5,
+                    0.01,
+                    meta,
+                    ha="center",
+                    fontsize=9,
+                    color="#6b7280",  # neutral
+                    weight="light",
+                )
 
         filepath = self._charts_dir / filename
         fig.savefig(str(filepath), dpi=self.dpi, bbox_inches="tight", facecolor="white")
         plt.close(fig)
         return filepath
 
-    def _meta_line(self, report: BenchmarkReport) -> str:
-        dataset_size = getattr(report, "dataset_size", None)
-        threshold = getattr(report, "threshold_used", None)
-        run_id = getattr(report, "run_id", "n/a")
+    def _get_run_metadata(self, report: Any) -> str:
+        """Extract standardized run metadata for footer."""
+        # Case 1: ComparisonReport (multi-evaluator)
+        if hasattr(report, "evaluators") and isinstance(report.evaluators, dict):
+            evaluators = report.evaluators
+            count = len(evaluators)
+            claims = 0
+            if evaluators:
+                # Use first evaluator to estimate dataset size
+                first = next(iter(evaluators.values()))
+                if hasattr(first, "hallucination") and hasattr(first.hallucination, "total"):
+                    claims = first.hallucination.total
+            
+            run_id = getattr(report, "run_id", "n/a")
+            # Timestamp if available
+            ts = getattr(report, "timestamp", "")
+            if ts and len(str(ts)) > 10:
+                ts = str(ts)[:10]  # Just date
+                return f"Run: {run_id} | Date: {ts} | Evaluators: {count} | Claims Tested: {claims}"
+            return f"Run: {run_id} | Evaluators: {count} | Claims Tested: {claims}"
 
-        bits = []
+        # Case 2: BenchmarkReport (single strategy)
+        dataset_size = getattr(report, "dataset_size", None)
         if dataset_size is not None:
-            bits.append(f"Dataset: {dataset_size} cases")
-        if threshold is not None:
-            bits.append(f"Threshold: {threshold}")
-        bits.append(f"Run: {run_id}")
-        return " | ".join(bits)
+            threshold = getattr(report, "threshold_used", None)
+            run_id = getattr(report, "run_id", "n/a")
+            parts = [f"Run: {run_id}", f"Cases: {dataset_size}"]
+            if threshold is not None:
+                parts.append(f"Threshold: {threshold}")
+            return " | ".join(parts)
+        
+        return ""
+
+    def _meta_line(self, report: BenchmarkReport) -> str:
+        # Legacy / text-in-axis backup
+        # We now prefer _save_fig footer, so this can return empty 
+        # to avoid duplication, OR we keep it if it's used inside axes.
+        # Given we are adding a footer, we interpret the user request as
+        # "extend" not "replace and break layout". 
+        # However, double info is ugly. 
+        # We will keep this method but make it return "" so caller logic
+        # simplifies to just chart specific info.
+        return ""
 
     def _latencies_for(self, rs: list[ResultMetric]) -> np.ndarray:
         vals: list[float] = []
@@ -349,19 +393,11 @@ class ChartsReporter(BaseReporter):
 
             plt.xticks(rotation=12, ha="right")
 
-            # Footnote meta line
-            ax.text(
-                0.5,
-                -0.12,
-                self._meta_line(report),
-                transform=ax.transAxes,
-                fontsize=10,
-                color=CHART_COLORS["neutral"],
-                ha="center",
-            )
+            # Footnote meta line (Replaced by unified footer in _save_fig)
+            # ax.text removed to avoid duplication
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}latency_boxplot.png")
+            return self._save_fig(fig, f"{prefix}latency_boxplot.png", report=report)
 
     # -------------------------
     # Chart 2: Throughput bars
@@ -471,7 +507,7 @@ class ChartsReporter(BaseReporter):
             ax.text(
                 0.5,
                 -0.12,
-                "Throughput computed as 1000 / P50 latency (sustainable estimate) | " + self._meta_line(report),
+                "Throughput computed as 1000 / P50 latency (sustainable estimate)",
                 transform=ax.transAxes,
                 fontsize=10,
                 color=CHART_COLORS["neutral"],
@@ -479,7 +515,7 @@ class ChartsReporter(BaseReporter):
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}throughput_bar.png")
+            return self._save_fig(fig, f"{prefix}throughput_bar.png", report=report)
 
     # -------------------------
     # Chart 3: Histogram overlay (no SciPy)
@@ -563,7 +599,7 @@ class ChartsReporter(BaseReporter):
             ax.text(
                 0.5,
                 -0.10,
-                f"Distribution capped at P99 ({cap:.0f}ms) | Total samples: {all_lat.size} | {self._meta_line(report)}",
+                f"Distribution capped at P99 ({cap:.0f}ms) | Total samples: {all_lat.size}",
                 transform=ax.transAxes,
                 fontsize=10,
                 color=CHART_COLORS["neutral"],
@@ -571,7 +607,7 @@ class ChartsReporter(BaseReporter):
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}latency_histogram.png")
+            return self._save_fig(fig, f"{prefix}latency_histogram.png", report=report)
 
     # -------------------------
     # Chart 4: Violin plot
@@ -634,7 +670,7 @@ class ChartsReporter(BaseReporter):
             ax.text(
                 0.5,
                 -0.12,
-                "IQR whiskers show P25–P75; white dot = median | " + self._meta_line(report),
+                "IQR whiskers show P25–P75; white dot = median",
                 transform=ax.transAxes,
                 fontsize=10,
                 color=CHART_COLORS["neutral"],
@@ -642,7 +678,7 @@ class ChartsReporter(BaseReporter):
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}latency_violin.png")
+            return self._save_fig(fig, f"{prefix}latency_violin.png", report=report)
 
     # -------------------------
     # Chart 5: ECDF
@@ -694,18 +730,9 @@ class ChartsReporter(BaseReporter):
                 ax.axhline(p, color="#9ca3af", linewidth=1.2, alpha=0.8)
                 ax.text(cap * 1.01, p, label, va="center", ha="left", fontsize=9, color="#6b7280")
 
-            ax.text(
-                0.5,
-                -0.12,
-                self._meta_line(report),
-                transform=ax.transAxes,
-                fontsize=10,
-                color=CHART_COLORS["neutral"],
-                ha="center",
-            )
-
+            # Footnote added by _save_fig
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}latency_ecdf.png")
+            return self._save_fig(fig, f"{prefix}latency_ecdf.png", report=report)
 
     # -------------------------
     # Chart 6: Percentile curves
@@ -751,7 +778,7 @@ class ChartsReporter(BaseReporter):
             ax.text(
                 0.5,
                 -0.12,
-                "Shows tail behavior (P90–P99) clearly | " + self._meta_line(report),
+                "Shows tail behavior (P90–P99) clearly",
                 transform=ax.transAxes,
                 fontsize=10,
                 color=CHART_COLORS["neutral"],
@@ -759,7 +786,7 @@ class ChartsReporter(BaseReporter):
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}latency_percentile_curves.png")
+            return self._save_fig(fig, f"{prefix}latency_percentile_curves.png", report=report)
 
     # -------------------------
     # Chart 7: Quantile heatmap
@@ -814,18 +841,9 @@ class ChartsReporter(BaseReporter):
 
             ax.grid(False)
 
-            ax.text(
-                0.5,
-                -0.10,
-                self._meta_line(report),
-                transform=ax.transAxes,
-                fontsize=10,
-                color=CHART_COLORS["neutral"],
-                ha="center",
-            )
-
+            # Footnote added by _save_fig
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}latency_quantiles_heatmap.png")
+            return self._save_fig(fig, f"{prefix}latency_quantiles_heatmap.png", report=report)
 
     # -------------------------
     # Chart 8: Ranked dotplot (median + IQR)
@@ -893,7 +911,7 @@ class ChartsReporter(BaseReporter):
             ax.text(
                 0.5,
                 -0.10,
-                "Whiskers: P25–P75 | Dot: P50 | " + self._meta_line(report),
+                "Whiskers: P25–P75 | Dot: P50",
                 transform=ax.transAxes,
                 fontsize=10,
                 color=CHART_COLORS["neutral"],
@@ -901,7 +919,7 @@ class ChartsReporter(BaseReporter):
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}latency_ranking.png")
+            return self._save_fig(fig, f"{prefix}latency_ranking.png", report=report)
 
     # -------------------------
     # Chart 9: Throughput vs tail latency frontier
@@ -955,7 +973,7 @@ class ChartsReporter(BaseReporter):
             ax.text(
                 0.5,
                 -0.12,
-                "Top-left is ideal (high throughput, low tail latency) | " + self._meta_line(report),
+                "Top-left is ideal (high throughput, low tail latency)",
                 transform=ax.transAxes,
                 fontsize=10,
                 color=CHART_COLORS["neutral"],
@@ -963,7 +981,7 @@ class ChartsReporter(BaseReporter):
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}throughput_latency_frontier.png")
+            return self._save_fig(fig, f"{prefix}throughput_latency_frontier.png", report=report)
 
     # -------------------------
     # Chart 10: Error rate (optional)
@@ -1042,18 +1060,9 @@ class ChartsReporter(BaseReporter):
             ax.set_xticklabels([self._format_strategy_name(s) for s in strategies], rotation=12, ha="right")
             ax.set_ylim(0, max(rates * 100.0) * 1.25)
 
-            ax.text(
-                0.5,
-                -0.12,
-                self._meta_line(report),
-                transform=ax.transAxes,
-                fontsize=10,
-                color=CHART_COLORS["neutral"],
-                ha="center",
-            )
-
+            # Footnote added by _save_fig
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}error_rate.png")
+            return self._save_fig(fig, f"{prefix}error_rate.png", report=report)
 
     # -------------------------
     # Name formatting
@@ -1196,18 +1205,12 @@ class ChartsReporter(BaseReporter):
             fig.suptitle("OHI Benchmark Comparison Dashboard", fontsize=20, fontweight='bold', y=0.985)
 
             run_id = getattr(comparison_report, "run_id", "")
-            ts = str(getattr(comparison_report, "timestamp", ""))
-            fig.text(
-                0.5,
-                0.955,
-                f"Run ID: {run_id} | Evaluators: {len(evaluators)} | Generated: {ts[:19]}",
-                ha='center',
-                fontsize=11,
-                color=CHART_COLORS["neutral"],
-            )
+            # Footer added by _save_fig
+            # Manual header removed to avoid duplication, or can be kept if distinct info needed.
+            # But standardizing on footer is better for "all images".
 
             plt.tight_layout(rect=[0, 0.02, 1, 0.94])
-            return self._save_fig(fig, f"{prefix}comparison_dashboard.png")
+            return self._save_fig(fig, f"{prefix}comparison_dashboard.png", report=comparison_report)
 
 
     def _draw_radar_on_axis(self, ax, evaluators: dict) -> None:
@@ -1502,7 +1505,7 @@ class ChartsReporter(BaseReporter):
             fig, ax = plt.subplots(figsize=(12.8, 7.2))
             self._draw_risk_coverage_on_axis(ax, evaluators)
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_risk_coverage.png")
+            return self._save_fig(fig, f"{prefix}comparison_risk_coverage.png", report=comparison_report)
 
     def _create_comparison_rag_retrieval_citation(
         self,
@@ -1535,7 +1538,7 @@ class ChartsReporter(BaseReporter):
             fig, ax = plt.subplots(figsize=(12.8, 7.2))
             self._draw_rag_retrieval_citation_on_axis(ax, evaluators)
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_rag_retrieval_citation.png")
+            return self._save_fig(fig, f"{prefix}comparison_rag_retrieval_citation.png", report=comparison_report)
 
 
     def _create_comparison_radar(
@@ -1610,7 +1613,7 @@ class ChartsReporter(BaseReporter):
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_radar.png")
+            return self._save_fig(fig, f"{prefix}comparison_radar.png", report=comparison_report)
 
     def _create_comparison_grouped_bar(
         self,
@@ -1681,7 +1684,7 @@ class ChartsReporter(BaseReporter):
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_grouped_bar.png")
+            return self._save_fig(fig, f"{prefix}comparison_grouped_bar.png", report=comparison_report)
 
     def _create_comparison_latency_boxplot(
         self,
@@ -1759,7 +1762,7 @@ class ChartsReporter(BaseReporter):
             )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_latency_boxplot.png")
+            return self._save_fig(fig, f"{prefix}comparison_latency_boxplot.png", report=comparison_report)
 
     def _create_comparison_heatmap(
         self,
@@ -1821,7 +1824,7 @@ class ChartsReporter(BaseReporter):
             ax.grid(False)
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_heatmap.png")
+            return self._save_fig(fig, f"{prefix}comparison_heatmap.png", report=comparison_report)
 
     def _create_comparison_factscore_violin(
         self,
@@ -1882,4 +1885,4 @@ class ChartsReporter(BaseReporter):
                 )
 
             plt.tight_layout()
-            return self._save_fig(fig, f"{prefix}comparison_factscore_violin.png")
+            return self._save_fig(fig, f"{prefix}comparison_factscore_violin.png", report=comparison_report)

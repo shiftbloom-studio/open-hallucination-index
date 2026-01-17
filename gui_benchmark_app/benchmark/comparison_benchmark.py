@@ -909,9 +909,7 @@ class EvaluatorMetrics:
 
         All scores normalized to 0-1 range where higher is better.
         """
-        # Compute derived metrics
-        retrieval = self.hallucination.retrieval_metrics(ks=(10,))
-        alce = self.hallucination.alce_metrics()
+        # Compute RAG faithfulness (measures claim-evidence relevance)
         rag = self.hallucination.ragas_proxy_metrics()
 
         # AURC is lower-better, map to (0,1] for radar (higher = better)
@@ -927,11 +925,9 @@ class EvaluatorMetrics:
             "TruthfulQA": self.truthfulqa.accuracy,
             "FActScore": self.factscore.avg_factscore,
             "Speed (1/P95)": min(1.0, 1000.0 / self.latency.p95) if self.latency.p95 > 0 else 0.0,
-            # New metrics for AURC, BEIR, ALCE, RAGAS
             "Selective (1/(1+AURC))": selective_score,
-            "Retrieval (nDCG@10)": float(retrieval.get("ndcg@10", 0.0)),
-            "RAG faithfulness": float(rag.get("faithfulness", 0.0)),
-            "Citation rate": float(alce.get("citation_rate", 0.0)),
+            # Evidence relevance: how well evidence supports the claim
+            "Evidence Relevance": float(rag.get("faithfulness", 0.0)),
         }
 
 

@@ -340,49 +340,14 @@ async def run_hallucination_benchmark(
             if math.isnan(confidence):
                 confidence = 0.5
 
-            evidence_count = len(evidence_list)
+            is_correct = bool(predicted == expected)
 
-            # For retrieval metrics, create evidence IDs and pseudo-relevance
-            # This allows computation of nDCG@k, Recall@k based on evidence quality
-            retrieved_sources = []
-            relevant_sources = []
-
-            for i, ev in enumerate(evidence_list):
-                # Create source ID
-                src = getattr(ev, "source", None)
-                source_id = str(src) if src else f"evidence_{i}"
-                retrieved_sources.append(source_id)
-
-                # Determine relevance based on similarity score (threshold 0.3 for broader inclusion)
-                score = getattr(ev, "similarity_score", None)
-                try:
-                    score_val = float(score) if score is not None else 0.0
-                except (TypeError, ValueError):
-                    score_val = 0.0
-                # Consider evidence relevant if score >= 0.3 OR if it's in top 3
-                if score_val >= 0.3 or i < 3:
-                    relevant_sources.append(source_id)
-
-            # Ensure we always have some relevant sources for metrics computation
-            if not relevant_sources and retrieved_sources:
-                relevant_sources = retrieved_sources[:3]
-
-            response_text = _extract_response_text(result)
-
-            # For ALCE-style citation metrics, inject pseudo-citation markers if evidence exists
-            # This enables citation rate computation even when evaluator doesn't use explicit citations
-            if evidence_count > 0:
-                # Append citation markers based on evidence count
-                citation_markers = " ".join(f"[{i+1}]" for i in range(min(evidence_count, 5)))
-                response_text_with_citations = f"{response_text} {citation_markers}" if response_text else citation_markers
-            else:
-                response_text_with_citations = response_text or ""
-
-            # RAG signals for RAGAS-style metrics
-            question = str(getattr(case, "question", None) or getattr(case, "query", None) or case.text)
-            answer = str(getattr(result, "answer", None) or getattr(result, "generated_answer", None) or response_text or "")
-
-            # Extract contexts from evidence text
+            # Evidence Relevance: extract claim and evidence texts for faithfulness calculation
+            # This measures how well the evidence relates to and supports the claim
+            question = str(case.text)  # The claim being verified
+            answer = question  # For claim verification, answer = claim
+            
+            # Extract contexts from evidence text (for faithfulness TF-IDF similarity)
             contexts = []
             for ev in evidence_list:
                 ev_text = getattr(ev, "text", None) or getattr(ev, "snippet", None) or getattr(ev, "content", None)
@@ -391,34 +356,16 @@ async def run_hallucination_benchmark(
             # Cap contexts for speed + memory
             contexts = contexts[:MAX_CONTEXTS_PER_SAMPLE]
 
-            # If no contexts from evidence, use claim as pseudo-context (ensures RAGAS can compute)
-            if not contexts:
-                contexts = [case.text]
-
-            # For ground truth, use multiple fallbacks
-            ground_truth = str(
-                getattr(case, "ground_truth", None)
-                or getattr(case, "reference", None)
-                or getattr(case, "answer", None)
-                or (case.text if case.label else "")
-            )
-
             metrics.add_sample(
                 expected_is_fact=bool(expected),
                 predicted_is_fact=bool(predicted),
                 confidence=confidence,
-                retrieved_sources=retrieved_sources,
-                relevant_sources=relevant_sources,
-                response_text=response_text_with_citations,
-                evidence_count=evidence_count,
+                # Evidence Relevance via faithfulness metric
                 question=question,
                 answer=answer,
                 contexts=contexts,
-                ground_truth=ground_truth,
             )
 
-            is_correct = bool(predicted == expected)
-            
             display.advance(1, latency_ms=result.latency_ms)
             has_error = result.error is not None
             if has_error:

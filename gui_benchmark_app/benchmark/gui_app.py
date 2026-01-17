@@ -207,6 +207,9 @@ class BenchmarkWorker(QThread):
         )
 
         cache.connect(None)
+        if cache.is_connected:
+            cache.flush("before_benchmark")
+            self.log_message.emit("Redis cache flushed before benchmark.")
 
         if self._stop_requested:
             self.log_message.emit("⚠ Benchmark stopped by user.")
@@ -687,10 +690,7 @@ class BenchmarkWorker(QThread):
 
     @staticmethod
     def _summary_payload(metrics: Any) -> dict[str, Any]:
-        # Derived metrics are computed from the already-collected per-sample signals
-        # (confidence, evidence list, sources, etc.). No input changes required.
-        retrieval = metrics.hallucination.retrieval_metrics(ks=(10, 100)) if hasattr(metrics, 'hallucination') else {}
-        alce = metrics.hallucination.alce_metrics() if hasattr(metrics, 'hallucination') else {}
+        # Derived metrics: faithfulness measures claim-evidence relevance
         rag = metrics.hallucination.ragas_proxy_metrics() if hasattr(metrics, 'hallucination') else {}
         return {
             "accuracy": metrics.hallucination.accuracy,
@@ -698,15 +698,8 @@ class BenchmarkWorker(QThread):
             "hpr": metrics.hallucination.hallucination_pass_rate,
             "aurc": getattr(metrics.hallucination, 'aurc', 0.0),
             "eaurc": getattr(metrics.hallucination, 'eaurc', 0.0),
-            "ndcg10": float(retrieval.get('ndcg@10', 0.0)) if retrieval else 0.0,
-            "recall10": float(retrieval.get('recall@10', 0.0)) if retrieval else 0.0,
-            "precision10": float(retrieval.get('precision@10', 0.0)) if retrieval else 0.0,
-            "citation_rate": float(alce.get('citation_rate', 0.0)) if alce else 0.0,
-            "citation_grounding": (float(alce.get('citation_grounding_proxy')) if alce and alce.get('citation_grounding_proxy') is not None else None),
-            "rag_faithfulness": float(rag.get('faithfulness', 0.0)) if rag else 0.0,
-            "rag_answer_relevancy": float(rag.get('answer_relevancy', 0.0)) if rag else 0.0,
-            "rag_context_precision": float(rag.get('context_precision', 0.0)) if rag else 0.0,
-            "rag_context_utilization": float(rag.get('context_utilization', 0.0)) if rag else 0.0,
+            # Evidence relevance: how well evidence supports the claim (TF-IDF based)
+            "evidence_relevance": float(rag.get('faithfulness', 0.0)) if rag else 0.0,
             "p50": metrics.latency.p50,
             "p95": metrics.latency.p95,
             "truthfulqa": metrics.truthfulqa.accuracy,
@@ -982,7 +975,7 @@ class BenchmarkWindow(QMainWindow):
 
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        self.results_table = QTableWidget(0, 12)
+        self.results_table = QTableWidget(0, 9)
         self.results_table.setHorizontalHeaderLabels(
             [
                 "Evaluator",
@@ -990,10 +983,7 @@ class BenchmarkWindow(QMainWindow):
                 "F1",
                 "HPR",
                 "AURC",
-                "nDCG@10",
-                "Recall@10",
-                "Cite%",
-                "Faith",
+                "Evidence Rel.",
                 "P50",
                 "P95",
                 "Throughput",
@@ -1040,17 +1030,14 @@ class BenchmarkWindow(QMainWindow):
         container = QWidget()
         layout = QVBoxLayout(container)
 
-        # Scatter controls (lets you explore new metrics: AURC/BEIR/RAGAS/ALCE)
+        # Scatter controls (lets you explore AURC and Evidence Relevance)
         controls = QHBoxLayout()
         controls.addWidget(QLabel("Scatter X"))
         self.scatter_x_combo = QComboBox()
         self.scatter_x_combo.addItems([
             "P95 latency (ms)",
             "AURC (lower better)",
-            "nDCG@10",
-            "Recall@10",
-            "Citation rate",
-            "RAG faithfulness",
+            "Evidence Relevance",
         ])
         controls.addWidget(self.scatter_x_combo)
         controls.addSpacing(12)
@@ -1060,7 +1047,7 @@ class BenchmarkWindow(QMainWindow):
             "Accuracy (%)",
             "F1 (%)",
             "Safety (1-HPR)",
-            "RAG faithfulness",
+            "Evidence Relevance",
         ])
         controls.addWidget(self.scatter_y_combo)
         controls.addStretch(1)
@@ -1292,7 +1279,7 @@ class BenchmarkWindow(QMainWindow):
                 "p95": latency,
                 "throughput": throughput,
             }
-            # Include all metrics including new ones for live radar display
+            # Include all metrics for live radar display
             self._evaluator_summaries[current_eval] = {
                 "Accuracy": accuracy / 100.0,
                 "Precision": accuracy / 100.0,
@@ -1302,11 +1289,8 @@ class BenchmarkWindow(QMainWindow):
                 "TruthfulQA": accuracy / 100.0,
                 "FActScore": accuracy / 100.0,
                 "Speed (1/P95)": min(1.0, 1000.0 / latency) if latency > 0 else 0.0,
-                # New metrics - show estimated values during live run
                 "Selective (1/(1+AURC))": accuracy / 100.0,  # Proxy during live
-                "Retrieval (nDCG@10)": accuracy / 100.0,  # Proxy during live
-                "RAG faithfulness": accuracy / 100.0,  # Proxy during live
-                "Citation rate": 1.0 if accuracy > 50 else 0.5,  # Proxy during live
+                "Evidence Relevance": accuracy / 100.0,  # Proxy during live
             }
             self._update_insights_charts()
 
@@ -1324,13 +1308,10 @@ class BenchmarkWindow(QMainWindow):
         self.results_table.setItem(row, 2, QTableWidgetItem(f"{metrics.get('f1', 0):.2%}"))
         self.results_table.setItem(row, 3, QTableWidgetItem(f"{metrics.get('hpr', 0):.2%}"))
         self.results_table.setItem(row, 4, QTableWidgetItem(f"{metrics.get('aurc', 0):.4f}"))
-        self.results_table.setItem(row, 5, QTableWidgetItem(f"{metrics.get('ndcg10', 0):.3f}"))
-        self.results_table.setItem(row, 6, QTableWidgetItem(f"{metrics.get('recall10', 0):.3f}"))
-        self.results_table.setItem(row, 7, QTableWidgetItem(f"{metrics.get('citation_rate', 0):.1%}"))
-        self.results_table.setItem(row, 8, QTableWidgetItem(f"{metrics.get('rag_faithfulness', 0):.3f}"))
-        self.results_table.setItem(row, 9, QTableWidgetItem(f"{metrics.get('p50', 0):.0f}ms"))
-        self.results_table.setItem(row, 10, QTableWidgetItem(f"{metrics.get('p95', 0):.0f}ms"))
-        self.results_table.setItem(row, 11, QTableWidgetItem(f"{metrics.get('throughput', 0):.1f}/s"))
+        self.results_table.setItem(row, 5, QTableWidgetItem(f"{metrics.get('evidence_relevance', 0):.3f}"))
+        self.results_table.setItem(row, 6, QTableWidgetItem(f"{metrics.get('p50', 0):.0f}ms"))
+        self.results_table.setItem(row, 7, QTableWidgetItem(f"{metrics.get('p95', 0):.0f}ms"))
+        self.results_table.setItem(row, 8, QTableWidgetItem(f"{metrics.get('throughput', 0):.1f}/s"))
 
         # Right-align numeric columns
         for col in range(1, self.results_table.columnCount()):
@@ -1340,14 +1321,12 @@ class BenchmarkWindow(QMainWindow):
 
         summary_scores = metrics.get("summary_scores")
         if isinstance(summary_scores, dict):
-            # Enrich radar with additional derived metrics
+            # Enrich radar with derived metrics
             enriched = dict(summary_scores)
             # AURC is lower-better; map to (0,1] for radar
             aurc = float(metrics.get('aurc', 0.0))
             enriched['Selective (1/(1+AURC))'] = 1.0 / (1.0 + max(0.0, aurc))
-            enriched['Retrieval (nDCG@10)'] = float(metrics.get('ndcg10', 0.0))
-            enriched['RAG faithfulness'] = float(metrics.get('rag_faithfulness', 0.0))
-            enriched['Citation rate'] = float(metrics.get('citation_rate', 0.0))
+            enriched['Evidence Relevance'] = float(metrics.get('evidence_relevance', 0.0))
             self._evaluator_summaries[name] = enriched
             self._evaluator_meta[name] = {
                 'accuracy': float(metrics.get('accuracy', 0.0)),
@@ -1356,10 +1335,7 @@ class BenchmarkWindow(QMainWindow):
                 'p95': float(metrics.get('p95', 0.0)),
                 'throughput': float(metrics.get('throughput', 0.0)),
                 'aurc': float(metrics.get('aurc', 0.0)),
-                'ndcg10': float(metrics.get('ndcg10', 0.0)),
-                'recall10': float(metrics.get('recall10', 0.0)),
-                'citation_rate': float(metrics.get('citation_rate', 0.0)),
-                'rag_faithfulness': float(metrics.get('rag_faithfulness', 0.0)),
+                'evidence_relevance': float(metrics.get('evidence_relevance', 0.0)),
             }
             self._update_insights_charts()
 
@@ -1534,9 +1510,7 @@ class BenchmarkWindow(QMainWindow):
             'FActScore',
             'Speed (1/P95)',
             'Selective (1/(1+AURC))',
-            'Retrieval (nDCG@10)',
-            'RAG faithfulness',
-            'Citation rate',
+            'Evidence Relevance',
         ]
 
         angles = [i / len(radar_keys) * 2 * 3.14159265 for i in range(len(radar_keys))]
@@ -1563,14 +1537,8 @@ class BenchmarkWindow(QMainWindow):
                 return float(meta.get('p95', 0.0))
             if x_choice.startswith('AURC'):
                 return float(meta.get('aurc', 0.0))
-            if x_choice.startswith('nDCG'):
-                return float(meta.get('ndcg10', 0.0))
-            if x_choice.startswith('Recall'):
-                return float(meta.get('recall10', 0.0))
-            if x_choice.startswith('Citation'):
-                return float(meta.get('citation_rate', 0.0))
-            if x_choice.startswith('RAG'):
-                return float(meta.get('rag_faithfulness', 0.0))
+            if x_choice.startswith('Evidence'):
+                return float(meta.get('evidence_relevance', 0.0))
             return float(meta.get('p95', 0.0))
 
         def y_val(meta: dict) -> float:
@@ -1580,8 +1548,8 @@ class BenchmarkWindow(QMainWindow):
                 return float(meta.get('f1', 0.0)) * 100
             if y_choice.startswith('Safety'):
                 return float(meta.get('safety', 0.0)) * 100
-            if y_choice.startswith('RAG'):
-                return float(meta.get('rag_faithfulness', 0.0)) * 100
+            if y_choice.startswith('Evidence'):
+                return float(meta.get('evidence_relevance', 0.0)) * 100
             return float(meta.get('accuracy', 0.0)) * 100
 
         for name, meta in self._evaluator_meta.items():
