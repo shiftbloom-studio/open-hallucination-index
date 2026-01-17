@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import secrets
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import yaml
@@ -23,6 +23,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from config.dependencies import lifespan_manager
 from config.settings import get_settings
 from server.routes import admin_router, health_router, track_router, verify_router
+from server.routes.admin import _hash_key, _mock_api_keys
 from server.services.live_logs import live_log_service
 
 # API Key header
@@ -30,7 +31,6 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 # In-memory API key store (shared with admin routes for now)
 # In production, this would be Supabase queries
-from server.routes.admin import _mock_api_keys, _hash_key
 
 
 class ApiKeyInfo:
@@ -82,11 +82,11 @@ def _validate_db_key(api_key: str) -> ApiKeyInfo | None:
 
             # Check expiry
             expires_at = key_data.get("expires_at")
-            if expires_at and expires_at < datetime.now(timezone.utc):
+            if expires_at and expires_at < datetime.now(UTC):
                 return None
 
             # Update last used
-            key_data["last_used_at"] = datetime.now(timezone.utc)
+            key_data["last_used_at"] = datetime.now(UTC)
 
             return ApiKeyInfo(
                 key_id=key_data["id"],
@@ -228,10 +228,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             return True
 
         # Check for key deletion
-        if "/api/v1/admin/keys/" in path and method == "DELETE":
-            return True
-
-        return False
+        return "/api/v1/admin/keys/" in path and method == "DELETE"
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         # Skip completely excluded paths

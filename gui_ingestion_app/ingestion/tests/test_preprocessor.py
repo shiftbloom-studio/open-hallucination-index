@@ -1,9 +1,8 @@
 """Unit tests for text preprocessor."""
 from __future__ import annotations
 
-import pytest
 
-from ingestion.models import WikiArticle, WikiSection
+from ingestion.models import WikiArticle
 from ingestion.preprocessor import AdvancedTextPreprocessor, BM25Tokenizer
 
 

@@ -24,7 +24,6 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.console import Console

@@ -729,9 +729,9 @@ class LiveBenchmarkDisplay:
             
             # Style based on level
             if level == "ERROR":
-                line.append(f"ERROR: ", style=f"bold {COLORS.bad}")
+                line.append("ERROR: ", style=f"bold {COLORS.bad}")
             elif level == "WARNING":
-                line.append(f"WARN: ", style=f"bold {COLORS.warn}")
+                line.append("WARN: ", style=f"bold {COLORS.warn}")
             else:
                 line.append(f"{level}: ", style="dim")
             

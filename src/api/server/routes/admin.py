@@ -13,16 +13,17 @@ import hashlib
 import json
 import logging
 import secrets
-from datetime import datetime, timezone
-from typing import Annotated, AsyncGenerator, Literal
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from config.settings import get_settings
-from server.services.live_logs import live_log_service, LogEntry
+from server.services.live_logs import live_log_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -190,9 +191,8 @@ async def verify_admin_access(
     settings = get_settings()
 
     # Check if API key is configured and matches (master key = admin access)
-    if settings.api.api_key and x_api_key:
-        if secrets.compare_digest(x_api_key, settings.api.api_key):
-            return True
+    if settings.api.api_key and x_api_key and secrets.compare_digest(x_api_key, settings.api.api_key):
+        return True
 
     # Check if user has admin role (would query Supabase in production)
     if x_user_id:
@@ -254,8 +254,8 @@ async def list_users(
             name=u.get("name"),
             ohi_tokens=u.get("ohi_tokens", 0),
             role=u.get("role", "user"),
-            created_at=u.get("created_at", datetime.now(timezone.utc)),
-            updated_at=u.get("updated_at", datetime.now(timezone.utc)),
+            created_at=u.get("created_at", datetime.now(UTC)),
+            updated_at=u.get("updated_at", datetime.now(UTC)),
         )
         for u in all_users[start:end]
     ]
@@ -292,7 +292,7 @@ async def update_user_role(
         )
 
     _mock_users[user_id_str]["role"] = request.role
-    _mock_users[user_id_str]["updated_at"] = datetime.now(timezone.utc)
+    _mock_users[user_id_str]["updated_at"] = datetime.now(UTC)
 
     u = _mock_users[user_id_str]
     return UserResponse(
@@ -301,8 +301,8 @@ async def update_user_role(
         name=u.get("name"),
         ohi_tokens=u.get("ohi_tokens", 0),
         role=u.get("role", "user"),
-        created_at=u.get("created_at", datetime.now(timezone.utc)),
-        updated_at=u.get("updated_at", datetime.now(timezone.utc)),
+        created_at=u.get("created_at", datetime.now(UTC)),
+        updated_at=u.get("updated_at", datetime.now(UTC)),
     )
 
 
@@ -330,7 +330,7 @@ async def create_api_key(
     - **master**: Full access, unlimited tokens (use sparingly)
     - **guest**: Creates a new guest user with limited tokens
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     key_id = uuid4()
     user_id = request.user_id
     user_email: str | None = None
@@ -493,7 +493,7 @@ async def revoke_api_key(
         )
 
     _mock_api_keys[key_id_str]["is_active"] = False
-    _mock_api_keys[key_id_str]["updated_at"] = datetime.now(timezone.utc)
+    _mock_api_keys[key_id_str]["updated_at"] = datetime.now(UTC)
 
     logger.info(f"Revoked API key {key_id}")
 
@@ -553,7 +553,7 @@ async def check_balance(
             detail="API key has been revoked",
         )
 
-    if key_data.get("expires_at") and key_data["expires_at"] < datetime.now(timezone.utc):
+    if key_data.get("expires_at") and key_data["expires_at"] < datetime.now(UTC):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="API key has expired",
@@ -592,7 +592,7 @@ class LogStatsResponse(BaseModel):
 
 async def _log_event_generator(
     _admin: bool,
-) -> AsyncGenerator[str, None]:
+) -> AsyncGenerator[str]:
     """Generate SSE events for live logs."""
     try:
         async for entry in live_log_service.subscribe():
@@ -759,8 +759,8 @@ async def grant_tokens(
             "name": None,
             "ohi_tokens": 0,
             "role": "user",
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
         }
         _mock_users[user_id] = user_data
         logger.info(f"Created new user {user_id} for token grant")
@@ -769,7 +769,7 @@ async def grant_tokens(
     old_balance = user_data.get("ohi_tokens", 0)
     new_balance = old_balance + request.tokens
     user_data["ohi_tokens"] = new_balance
-    user_data["updated_at"] = datetime.now(timezone.utc)
+    user_data["updated_at"] = datetime.now(UTC)
 
     logger.info(
         f"Granted {request.tokens} tokens to {request.email} "

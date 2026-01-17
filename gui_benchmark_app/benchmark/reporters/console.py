@@ -25,7 +25,7 @@ from rich.markup import escape
 from benchmark.reporters.base import BaseReporter
 
 if TYPE_CHECKING:
-    from benchmark.models import BenchmarkReport, ResultMetric, StrategyReport
+    from benchmark.models import BenchmarkReport, ResultMetric
 
 
 @dataclass(frozen=True)
