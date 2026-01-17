@@ -28,12 +28,34 @@ class GraphQuery:
 
 
 @dataclass(frozen=True, slots=True)
+class GeoRadiusFilter:
+    """Geographic radius filter for location-based queries."""
+
+    latitude: float
+    longitude: float
+    radius_km: float = 50.0  # Default 50km radius
+
+
+@dataclass(frozen=True, slots=True)
+class QualityFilter:
+    """Quality-based filtering options."""
+
+    min_quality_score: float | None = None  # 0.0-1.0, computed from content+pagerank+links
+    min_pagerank: float | None = None  # PageRank score threshold
+    min_incoming_links: int | None = None  # Minimum incoming link count
+    exclude_stubs: bool = False  # Exclude short/stub articles
+
+
+@dataclass(frozen=True, slots=True)
 class VectorQuery:
     """
     Query specification for vector-based semantic search.
     
     Supports hybrid search (dense + sparse vectors) matching 
     the ingestion structure with BM25 sparse vectors.
+    
+    Enhanced with geographic, quality, and Wikidata filtering
+    to leverage enriched Wikipedia metadata from SQL dumps.
     """
 
     text: str
@@ -43,10 +65,25 @@ class VectorQuery:
     top_k: int = 5
     min_similarity: float = 0.5  # Lowered for better evidence recall
     filter_metadata: dict[str, Any] | None = None
+
     # Extended filters matching Wikipedia ingestion metadata
     infobox_types: list[str] | None = None  # Filter by entity types
-    categories: list[str] | None = None      # Filter by Wikipedia categories
-    section_filter: str | None = None        # Filter by section name
+    categories: list[str] | None = None  # Filter by Wikipedia categories
+    section_filter: str | None = None  # Filter by section name
+
+    # Geographic filtering (uses Qdrant geo_radius)
+    geo_filter: GeoRadiusFilter | None = None
+
+    # Quality-based filtering
+    quality_filter: QualityFilter | None = None
+
+    # Wikidata integration
+    wikidata_id: str | None = None  # Filter by specific Wikidata Q-ID
+    require_wikidata: bool = False  # Only return articles with Wikidata links
+
+    # Page type filtering
+    exclude_disambiguation: bool = True  # Exclude disambiguation pages by default
+    exclude_redirects: bool = True  # Exclude redirect pages by default
 
 
 class KnowledgeStore(ABC):

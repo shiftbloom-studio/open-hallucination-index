@@ -136,9 +136,9 @@ describe('VerifyAIOutputForm', () => {
 
     const textArea = screen.getByPlaceholderText(/paste your ai-generated text/i);
     
-    // Type text that's less than 1000 chars - should need 1 token
+    // Type text that's less than 200 chars - should need 2 tokens (base + evidence)
     await user.type(textArea, 'Short text');
-    expect(screen.getByText(/1 token.*needed/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 token.*needed/i)).toBeInTheDocument();
   });
 
   it('should show context field as optional', () => {

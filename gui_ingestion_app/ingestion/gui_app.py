@@ -50,6 +50,7 @@ class IngestionWorker(QThread):
     log_message = Signal(str)
     finished = Signal(dict)
     failed = Signal(str)
+    connection_warning = Signal(str)  # New signal for connection issues
 
     def __init__(
         self,
@@ -78,6 +79,12 @@ class IngestionWorker(QThread):
 
         try:
             self._pipeline = IngestionPipeline(self._config)
+            
+            # Test connections before starting
+            if not self._check_connections():
+                self.failed.emit("Connection check failed. Please verify Qdrant and Neo4j are accessible.")
+                return
+            
             self._pipeline.load_checkpoint(
                 no_resume=self._no_resume,
                 clear=self._clear_checkpoint,
@@ -102,6 +109,45 @@ class IngestionWorker(QThread):
             self.failed.emit(f"{type(exc).__name__}: {exc}")
         finally:
             root_logger.removeHandler(handler)
+
+    def _check_connections(self) -> bool:
+        """
+        Check if Qdrant and Neo4j connections are working.
+        
+        Returns:
+            True if both connections are healthy, False otherwise
+        """
+        try:
+            # Check Qdrant
+            from qdrant_client import QdrantClient
+            qdrant = QdrantClient(
+                host=self._config.qdrant_host,
+                port=self._config.qdrant_port,
+                timeout=10,
+            )
+            qdrant.get_collections()
+            self.log_message.emit("✅ Qdrant connection OK")
+        except Exception as e:
+            self.log_message.emit(f"❌ Qdrant connection failed: {e}")
+            return False
+
+        try:
+            # Check Neo4j
+            from neo4j import GraphDatabase
+            driver = GraphDatabase.driver(
+                self._config.neo4j_uri,
+                auth=(self._config.neo4j_user, self._config.neo4j_password),
+                connection_acquisition_timeout=10,
+            )
+            with driver.session(database=self._config.neo4j_database) as session:
+                session.run("RETURN 1")
+            driver.close()
+            self.log_message.emit("✅ Neo4j connection OK")
+        except Exception as e:
+            self.log_message.emit(f"❌ Neo4j connection failed: {e}")
+            return False
+
+        return True
 
     @staticmethod
     def _snapshot(stats: PipelineStats) -> dict[str, Any]:

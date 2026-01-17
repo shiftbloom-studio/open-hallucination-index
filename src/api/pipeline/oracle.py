@@ -12,7 +12,9 @@ import asyncio
 import json
 import logging
 import re
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, Coroutine
+
+from pipeline.collector import CollectionResult
 
 from interfaces.verification import (
     EvidenceTier,
@@ -143,6 +145,8 @@ class HybridVerificationOracle(VerificationOracle):
         refuting_evidence: list[Evidence] = []
         all_evidence: list[Evidence] = []
 
+        preclassified = False
+
         try:
             if active_strategy == VerificationStrategy.GRAPH_EXACT:
                 all_evidence = await self._graph_evidence(claim)
@@ -186,18 +190,30 @@ class HybridVerificationOracle(VerificationOracle):
             elif active_strategy == VerificationStrategy.ADAPTIVE:
                 # ADAPTIVE: Use AdaptiveEvidenceCollector for intelligent tiered collection
                 # Respect tier parameter for source selection
-                all_evidence = await self._adaptive_evidence(
-                    claim,
-                    target_sources=target_sources,
-                    tier=tier,
-                )
+                if target_sources is not None:
+                    result = await self._adaptive_evidence_with_target(
+                        claim,
+                        target_evidence_count=target_sources,
+                        tier=tier,
+                    )
+                    all_evidence = result.evidence
+                    supporting_evidence = result.supporting_evidence
+                    refuting_evidence = result.refuting_evidence
+                    preclassified = True
+                else:
+                    all_evidence = await self._adaptive_evidence(
+                        claim,
+                        target_sources=target_sources,
+                        tier=tier,
+                    )
 
         except Exception as e:
             logger.error(f"Evidence gathering failed: {e}")
             return self._unverifiable_result(claim, str(e), active_strategy)
 
         # Classify evidence as supporting or refuting
-        supporting_evidence, refuting_evidence = await self._classify_evidence(claim, all_evidence)
+        if not preclassified:
+            supporting_evidence, refuting_evidence = await self._classify_evidence(claim, all_evidence)
 
         # If no evidence found anywhere, allow LLM plausibility fallback (low weight)
         if not all_evidence and self._llm_provider is not None:
@@ -300,18 +316,18 @@ class HybridVerificationOracle(VerificationOracle):
                 
                 if entity:
                     # Use specialized queries based on claim type
-                    if self._looks_like_person_claim(claim):
-                        person_evidence = await self._graph_store.query_person_facts(entity)
+                    if self._looks_like_person_claim(claim) and hasattr(self._graph_store, "query_person_facts"):
+                        person_evidence = await getattr(self._graph_store, "query_person_facts")(entity)
                         if person_evidence:
                             return person_evidence
                     
-                    elif self._looks_like_org_claim(claim):
-                        org_evidence = await self._graph_store.query_organization_facts(entity)
+                    elif self._looks_like_org_claim(claim) and hasattr(self._graph_store, "query_organization_facts"):
+                        org_evidence = await getattr(self._graph_store, "query_organization_facts")(entity)
                         if org_evidence:
                             return org_evidence
                     
-                    elif self._looks_like_place_claim(claim):
-                        place_evidence = await self._graph_store.query_geographic_facts(entity)
+                    elif self._looks_like_place_claim(claim) and hasattr(self._graph_store, "query_geographic_facts"):
+                        place_evidence = await getattr(self._graph_store, "query_geographic_facts")(entity)
                         if place_evidence:
                             return place_evidence
             
@@ -423,7 +439,7 @@ class HybridVerificationOracle(VerificationOracle):
             try:
                 # Check if graph store has persist method
                 if hasattr(self._graph_store, "persist_external_evidence"):
-                    await self._graph_store.persist_external_evidence(ev)
+                    await getattr(self._graph_store, "persist_external_evidence")(ev)
             except Exception as e:
                 logger.debug(f"Failed to persist MCP evidence: {e}")
 
@@ -537,63 +553,103 @@ class HybridVerificationOracle(VerificationOracle):
 
         Falls back to MCP_ENHANCED if collector not configured.
         """
+        result = await self._adaptive_evidence_with_target(
+            claim,
+            target_evidence_count=target_sources,
+            tier=tier,
+            allow_early_exit=tier != EvidenceTier.MAX,
+        )
+        return result.evidence
+
+    async def _adaptive_evidence_with_target(
+        self,
+        claim: Claim,
+        *,
+        target_evidence_count: int | None = None,
+        tier: EvidenceTier = EvidenceTier.DEFAULT,
+        allow_early_exit: bool = True,
+    ) -> CollectionResult:
+        """
+        Adaptive evidence gathering with optional evidence target.
+
+        Classifies evidence during collection when a target count is provided
+        so early exit aligns with supporting/refuting evidence volume.
+        """
         # LOCAL tier: skip adaptive collector, just use local sources
         if tier == EvidenceTier.LOCAL:
             logger.debug("LOCAL tier: using only local sources (Neo4j + Qdrant)")
-            return await self._hybrid_evidence(claim)
-        
+            evidence = await self._hybrid_evidence(claim)
+            supporting, refuting = await self._classify_evidence(claim, evidence)
+            return CollectionResult(
+                claim_id=str(claim.id),
+                evidence=evidence,
+                supporting_evidence=supporting,
+                refuting_evidence=refuting,
+                quality_scores=[],
+                total_weighted_value=0.0,
+                latency_ms=0.0,
+                tier_latencies={},
+                sources_queried=[],
+                early_exit=False,
+                background_tasks_pending=0,
+            )
+
         if self._evidence_collector is None:
             # Fallback to MCP_ENHANCED if no collector configured
             logger.debug("No evidence collector configured, falling back to MCP_ENHANCED")
-            return await self._mcp_enhanced_evidence(claim, tier=tier)
+            evidence = await self._mcp_enhanced_evidence(claim, tier=tier)
+            supporting, refuting = await self._classify_evidence(claim, evidence)
+            return CollectionResult(
+                claim_id=str(claim.id),
+                evidence=evidence,
+                supporting_evidence=supporting,
+                refuting_evidence=refuting,
+                quality_scores=[],
+                total_weighted_value=0.0,
+                latency_ms=0.0,
+                tier_latencies={},
+                sources_queried=[],
+                early_exit=False,
+                background_tasks_pending=0,
+            )
 
         try:
-            total_source_cap = 20 if tier != EvidenceTier.MAX else 100
-            local_sources_count = int(self._graph_store is not None) + int(
-                self._vector_store is not None
-            )
-            max_mcp_allowed = max(total_source_cap - local_sources_count, 0)
-
             # Get MCP sources to query based on claim domain and tier
             mcp_sources = None
-            if tier == EvidenceTier.MAX:
+            if target_evidence_count is not None:
+                mcp_sources = [s for s in self._mcp_sources if s.is_available]
+                logger.debug(
+                    f"Targeting evidence count: using all {len(mcp_sources)} available MCP sources"
+                )
+            elif tier == EvidenceTier.MAX:
                 # MAX tier: use ALL available MCP sources
                 mcp_sources = [s for s in self._mcp_sources if s.is_available]
                 logger.debug(f"MAX tier: using all {len(mcp_sources)} available MCP sources")
             elif self._mcp_selector is not None:
                 # DEFAULT tier with selector: use domain-based selection
-                allow_all = target_sources is None
-                selection = await self._mcp_selector.select(
-                    claim,
-                    max_sources_override=target_sources,
-                    allow_all_relevant=allow_all,
-                )
-                
+                selection = await self._mcp_selector.select(claim)
+
                 mcp_sources = self._mcp_selector.get_sources_for_selection(selection)
-                if max_mcp_allowed and len(mcp_sources) > max_mcp_allowed:
-                    mcp_sources = mcp_sources[:max_mcp_allowed]
                 logger.debug(
                     f"Claim domain: {selection.domain.value}, "
                     f"selected {len(selection.selected_sources)} MCP sources"
                 )
             else:
-                # DEFAULT tier without selector: use all available MCP sources (limited)
+                # DEFAULT tier without selector: use all available MCP sources
                 mcp_sources = [s for s in self._mcp_sources if s.is_available]
-                if target_sources is not None:
-                    mcp_sources = mcp_sources[: min(target_sources, max_mcp_allowed)]
-                elif max_mcp_allowed:
-                    mcp_sources = mcp_sources[:max_mcp_allowed]
 
-            # Collect evidence using adaptive collector
-            target_count = None if tier == EvidenceTier.MAX else target_sources
-            allow_early_exit = tier != EvidenceTier.MAX
+            def classify_evidence(
+                evidence: list[Evidence],
+            ) -> Coroutine[Any, Any, tuple[list[Evidence], list[Evidence]]]:
+                return self._classify_evidence(claim, evidence)
+
             result = await self._evidence_collector.collect(
                 claim,
                 mcp_sources,
-                target_evidence_count=target_count,
+                target_evidence_count=target_evidence_count,
                 allow_early_exit=allow_early_exit,
+                classifier=classify_evidence,
             )
-
 
             logger.debug(
                 f"Adaptive collection: {len(result.evidence)} evidence, "
@@ -615,14 +671,28 @@ class HybridVerificationOracle(VerificationOracle):
                 if self._persist_to_vector and self._vector_store is not None:
                     asyncio.create_task(self._persist_evidence_to_vector(mcp_evidence))
 
-            return result.evidence
+            return result
 
         except Exception as e:
             logger.warning(
                 "Adaptive evidence collection failed: %s, falling back to MCP_ENHANCED",
                 e,
             )
-            return await self._mcp_enhanced_evidence(claim, tier=tier)
+            evidence = await self._mcp_enhanced_evidence(claim, tier=tier)
+            supporting, refuting = await self._classify_evidence(claim, evidence)
+            return CollectionResult(
+                claim_id=str(claim.id),
+                evidence=evidence,
+                supporting_evidence=supporting,
+                refuting_evidence=refuting,
+                quality_scores=[],
+                total_weighted_value=0.0,
+                latency_ms=0.0,
+                tier_latencies={},
+                sources_queried=[],
+                early_exit=False,
+                background_tasks_pending=0,
+            )
 
     async def _persist_evidence_to_vector(self, evidence_list: list[Evidence]) -> None:
         """Persist evidence to vector store for semantic fallback."""
@@ -631,7 +701,7 @@ class HybridVerificationOracle(VerificationOracle):
 
         try:
             if hasattr(self._vector_store, "persist_external_evidence"):
-                await self._vector_store.persist_external_evidence(evidence_list)
+                await getattr(self._vector_store, "persist_external_evidence")(evidence_list)
                 logger.debug(f"Persisted {len(evidence_list)} evidence to vector store")
         except Exception as e:
             logger.debug(f"Failed to persist evidence to vector store: {e}")
@@ -960,6 +1030,9 @@ Respond with valid JSON only:
             LLMMessage(role="user", content=prompt),
         ]
         
+        if self._llm_provider is None:
+            raise RuntimeError("LLM provider is required for evidence classification")
+
         response = await self._llm_provider.complete(
             messages=messages,
             max_tokens=512,
@@ -968,29 +1041,20 @@ Respond with valid JSON only:
         
         classifications = self._parse_classification_response(response.content)
         
-        supporting: list[Evidence] = []
-        refuting: list[Evidence] = []
-        neutral: list[Evidence] = []
-        classified_indices: set[int] = set()
-        
+        supporting_indices: set[int] = set()
+        refuting_indices: set[int] = set()
         for classification in classifications:
-            ev_idx = classification.get("evidence_index", 0) - 1
-            if 0 <= ev_idx < len(batch):
-                classified_indices.add(ev_idx)
-                ev = batch[ev_idx]
+            ev_index = classification.get("evidence_index", 0)
+            if 0 < ev_index <= len(batch):
                 label = classification.get("classification", "NEUTRAL").upper()
-                
                 if label == "SUPPORTS":
-                    supporting.append(ev)
+                    supporting_indices.add(ev_index - 1)
                 elif label == "REFUTES":
-                    refuting.append(ev)
-                else:
-                    neutral.append(ev)
-        
-        # Default unclassified evidence to neutral
-        for ev_idx, ev in enumerate(batch):
-            if ev_idx not in classified_indices:
-                neutral.append(ev)
+                    refuting_indices.add(ev_index - 1)
+        classified_indices = supporting_indices | refuting_indices
+        supporting = [batch[idx] for idx in supporting_indices]
+        refuting = [batch[idx] for idx in refuting_indices]
+        neutral = [batch[idx] for idx in range(len(batch)) if idx not in classified_indices]
         
         return supporting, refuting, neutral
 
@@ -1042,152 +1106,33 @@ Respond with valid JSON only:
         self, claim: Claim, evidence: list[Evidence]
     ) -> tuple[list[Evidence], list[Evidence]]:
         """
-        Classify evidence using 5-level confidence scale.
-        
-        Classifications:
-        - STRONG_SUPPORT (0.9): Evidence directly confirms claim
-        - WEAK_SUPPORT (0.7): Evidence provides contextual support
-        - NEUTRAL (0.5): Evidence is unrelated or ambiguous
-        - WEAK_REFUTE (0.3): Evidence suggests claim might be false
-        - STRONG_REFUTE (0.1): Evidence directly contradicts claim
-        
-        This enables confidence-weighted scoring in trust computation.
+        Classify evidence with confidence scores (5-level scale).
         """
         if not self._llm_provider or not evidence:
             return [], []
-        
-        from models.results import EvidenceClassification
-        
-        deduped = self._dedupe_evidence(evidence)
-        batch_size = self._verification_settings.classification_batch_size
-        
-        supporting_with_confidence: list[Evidence] = []
-        refuting_with_confidence: list[Evidence] = []
-        
-        for i in range(0, len(deduped), batch_size):
-            batch = deduped[i : i + batch_size]
-            
-            evidence_descriptions = []
-            for idx, ev in enumerate(batch):
-                content_preview = ev.content[:250] if len(ev.content) > 250 else ev.content
-                evidence_descriptions.append(
-                    f"Evidence {idx + 1} (source: {ev.source.value}):\n{content_preview}"
-                )
-            
-            evidence_text = "\n\n".join(evidence_descriptions)
-            
-            prompt = f"""You are a fact-checking assistant. Classify evidence using a 5-level confidence scale.
 
-CLAIM: "{claim.text}"
+        supporting_with_confidence, refuting_with_confidence = await self._classify_evidence_with_llm(
+            claim, evidence
+        )
 
-EVIDENCE:
-{evidence_text}
+        # Add confidence scores to classified evidence
+        # Note: model_copy() returns Self, but type checkers need explicit Evidence type
+        supporting_with_confidence = [
+            cast(Evidence, ev.model_copy(update={"classification_confidence": 0.7}))
+            for ev in supporting_with_confidence
+        ]
+        refuting_with_confidence = [
+            cast(Evidence, ev.model_copy(update={"classification_confidence": 0.3}))
+            for ev in refuting_with_confidence
+        ]
 
-CLASSIFICATION LEVELS:
-
-🟢 STRONG_SUPPORT (confidence: 0.9)
-   - Evidence directly confirms the claim with high certainty
-   - All key facts align perfectly
-
-🟡 WEAK_SUPPORT (confidence: 0.7)
-   - Evidence provides contextual support
-   - Core facts align but peripheral details may differ
-   - Evidence makes the claim plausible
-
-⚪ NEUTRAL (confidence: 0.5)
-   - Evidence is unrelated or completely ambiguous
-   - Cannot determine support or refutation
-
-🟠 WEAK_REFUTE (confidence: 0.3)
-   - Evidence suggests the claim might be false
-   - Some contradictions but not definitive
-
-🔴 STRONG_REFUTE (confidence: 0.1)
-   - Evidence directly contradicts core facts
-   - Clearly proves the claim is false
-
-Respond with valid JSON only:
-{{
-    "classifications": [
-        {{"evidence_index": 1, "classification": "STRONG_SUPPORT|WEAK_SUPPORT|NEUTRAL|WEAK_REFUTE|STRONG_REFUTE"}}
-    ]
-}}
-"""
-            
-            try:
-                from interfaces.llm import LLMMessage
-                
-                messages = [
-                    LLMMessage(role="system", content="You classify evidence with confidence levels."),
-                    LLMMessage(role="user", content=prompt),
-                ]
-                
-                response = await self._llm_provider.complete(
-                    messages=messages,
-                    max_tokens=512,
-                    temperature=self._verification_settings.classification_temperature,
-                )
-                
-                classifications = self._parse_classification_response(response.content)
-                classified_indices: set[int] = set()
-                neutral_count = 0
-                
-                for classification in classifications:
-                    ev_idx = classification.get("evidence_index", 0) - 1
-                    if 0 <= ev_idx < len(batch):
-                        classified_indices.add(ev_idx)
-                        original_ev = batch[ev_idx]
-                        label = classification.get("classification", "NEUTRAL").upper()
-                        
-                        try:
-                            # Convert string to enum
-                            classification_enum = EvidenceClassification[label]
-                            confidence = classification_enum.to_confidence()
-                            
-                            # Create new Evidence with classification_confidence
-                            ev_with_confidence = original_ev.model_copy(
-                                update={"classification_confidence": confidence}
-                            )
-                            
-                            # Categorize as supporting or refuting
-                            if confidence >= 0.6:  # WEAK_SUPPORT or STRONG_SUPPORT
-                                supporting_with_confidence.append(ev_with_confidence)
-                                logger.debug(
-                                    f"LLM: {label} ({confidence}) - {ev_with_confidence.content[:80]}..."
-                                )
-                            elif confidence <= 0.4:  # WEAK_REFUTE or STRONG_REFUTE
-                                refuting_with_confidence.append(ev_with_confidence)
-                                logger.debug(
-                                    f"LLM: {label} ({confidence}) - {ev_with_confidence.content[:80]}..."
-                                )
-                            else:
-                                # NEUTRAL (0.5) items are not included in either list
-                                neutral_count += 1
-                            
-                        except KeyError:
-                            logger.warning(f"Unknown classification label: {label}")
-                            continue
-                
-                # Count unclassified items
-                unclassified = len(batch) - len(classified_indices)
-                if unclassified > 0:
-                    logger.debug(f"Confidence classification: {unclassified} evidence items unclassified by LLM")
-            
-            except Exception as e:
-                logger.warning(f"Failed to classify batch with confidence: {e}")
-                # Fallback: use basic classification without confidence
-                supporting_batch, refuting_batch, _ = await self._classify_batch(
-                    claim, batch, self._verification_settings.classification_temperature, relaxed=True
-                )
-                supporting_with_confidence.extend(supporting_batch)
-                refuting_with_confidence.extend(refuting_batch)
-        
         logger.info(
             f"Confidence-weighted classification: {len(supporting_with_confidence)} supporting, "
-            f"{len(refuting_with_confidence)} refuting (from {len(deduped)} total)"
+            f"{len(refuting_with_confidence)} refuting (from {len(evidence)} total)"
         )
-        
+
         return supporting_with_confidence, refuting_with_confidence
+
 
     @staticmethod
     def _dedupe_evidence(evidence: list[Evidence]) -> list[Evidence]:

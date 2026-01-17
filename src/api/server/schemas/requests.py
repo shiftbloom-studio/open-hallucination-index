@@ -38,7 +38,7 @@ class VerifyTextRequest(BaseModel):
         default=None,
         ge=1,
         le=20,
-        description="Preferred number of sources to query during verification.",
+        description="Target number of supporting or refuting evidence items to gather.",
     )
     return_evidence: bool = Field(
         default=True,

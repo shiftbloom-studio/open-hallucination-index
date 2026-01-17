@@ -57,17 +57,38 @@ from ingestion.neo4j_store import Neo4jGraphStore
 from ingestion.preprocessor import AdvancedTextPreprocessor
 from ingestion.qdrant_store import QdrantHybridStore
 
+# Optional: SQL dump parsers for enhanced metadata
+SQL_PARSERS_AVAILABLE = False
+load_all_lookup_tables = None  # type: ignore
+WikipediaLookupTables = None  # type: ignore
+
+try:
+    from ingestion.sql_parsers import (
+        WikipediaLookupTables as _WikipediaLookupTables,
+        load_all_lookup_tables as _load_all_lookup_tables,
+    )
+    SQL_PARSERS_AVAILABLE = True
+    load_all_lookup_tables = _load_all_lookup_tables
+    WikipediaLookupTables = _WikipediaLookupTables
+except ImportError:
+    pass
+
 logger = logging.getLogger("ingestion.pipeline")
 
 
 @dataclass
 class BatchResult:
-    """Result of processing a batch."""
+    """Result of processing a batch with upload tracking."""
 
     article_count: int
     chunk_count: int
     qdrant_event: threading.Event
     neo4j_event: threading.Event
+    batch_data: list[ProcessedArticle]  # Keep data for retry if needed
+    article_ids: list[int]  # For checkpoint recording
+    upload_attempts: int = 0
+    max_attempts: int = 3
+    checkpoint_recorded: bool = False
 
 
 class IngestionPipeline:
@@ -88,9 +109,10 @@ class IngestionPipeline:
     - Statistics update in real-time without blocking
     """
 
-    def __init__(self, config: IngestionConfig):
+    def __init__(self, config: IngestionConfig, lookup_tables = None):
         self.config = config
         self.stats = PipelineStats()
+        self.lookup_tables = lookup_tables
 
         # Initialize components
         self.checkpoint = CheckpointManager(
@@ -108,6 +130,7 @@ class IngestionPipeline:
             chunk_overlap=config.chunk_overlap,
             min_chunk_size=config.min_chunk_size,
             max_workers=config.preprocess_workers,
+            lookup_tables=lookup_tables,  # Pass lookup tables to preprocessor
         )
 
         self.qdrant = QdrantHybridStore(
@@ -455,11 +478,8 @@ class IngestionPipeline:
             if limit and self.stats.articles_processed >= limit:
                 logger.info("✅ Limit reached")
                 self._stop_event.set()
-
-        # Record in checkpoint (thread-safe)
-        with self._checkpoint_lock:
-            article_ids = [pa.article.id for pa in processed]
-            self.checkpoint.record_batch(article_ids, chunk_count)
+        
+        # Note: Checkpoint recording now happens in _process_batch after upload verification
 
     def _process_batch(self, batch: list[ProcessedArticle], batch_id: int) -> None:
         """Process a batch: compute embeddings and upload."""
@@ -470,33 +490,112 @@ class IngestionPipeline:
         qdrant_event = self.qdrant.upload_batch_async(batch)
         neo4j_event = self.neo4j.upload_batch_async(batch)
 
-        # Track pending uploads
+        # Extract article IDs for checkpoint
+        article_ids = [pa.article.id for pa in batch]
+
+        # Track pending uploads with batch data for retry
         result = BatchResult(
             article_count=len(batch),
             chunk_count=sum(len(a.chunks) for a in batch),
             qdrant_event=qdrant_event,
             neo4j_event=neo4j_event,
+            batch_data=batch,  # Keep data for potential retry
+            article_ids=article_ids,
         )
         self._pending_uploads.append(result)
 
-        # Clean up completed uploads
-        self._pending_uploads = [
-            r
-            for r in self._pending_uploads
-            if not (r.qdrant_event.is_set() and r.neo4j_event.is_set())
-        ]
+        # Clean up completed uploads and record in checkpoint
+        completed = []
+        for r in self._pending_uploads:
+            if r.qdrant_event.is_set() and r.neo4j_event.is_set() and not r.checkpoint_recorded:
+                # Both uploads completed successfully - record in checkpoint
+                with self._checkpoint_lock:
+                    self.checkpoint.record_batch(r.article_ids, r.chunk_count)
+                r.checkpoint_recorded = True
+                completed.append(r)
+        
+        # Remove fully completed batches
+        self._pending_uploads = [r for r in self._pending_uploads if r not in completed]
 
     def _wait_for_uploads(self, timeout: float = 60.0) -> None:
-        """Wait for all pending uploads to complete."""
+        """
+        Wait for all pending uploads to complete with retry logic.
+        
+        This ensures all batches are successfully uploaded before checkpointing.
+        Failed batches are retried up to max_attempts times.
+        Only successful uploads are recorded in the checkpoint.
+        """
         logger.info(f"⏳ Waiting for {len(self._pending_uploads)} pending uploads...")
 
+        failed_batches = []
+        successful_batches = []
+        
         for result in self._pending_uploads:
-            result.qdrant_event.wait(timeout=timeout)
-            result.neo4j_event.wait(timeout=timeout)
+            # Wait for both uploads to complete
+            qdrant_done = result.qdrant_event.wait(timeout=timeout)
+            neo4j_done = result.neo4j_event.wait(timeout=timeout)
+            
+            # Check if uploads succeeded
+            if qdrant_done and neo4j_done:
+                successful_batches.append(result)
+            else:
+                # Upload timed out or failed
+                if result.upload_attempts < result.max_attempts:
+                    logger.warning(
+                        f"⚠️ Upload timeout for batch (attempt {result.upload_attempts + 1}/"
+                        f"{result.max_attempts}), will retry"
+                    )
+                    failed_batches.append(result)
+                else:
+                    logger.error(
+                        f"❌ Upload failed for batch after {result.max_attempts} attempts, "
+                        f"skipping {result.article_count} articles"
+                    )
 
         # Flush any remaining items in store queues
         self.qdrant.flush()
         self.neo4j.flush()
+
+        # Retry failed batches
+        if failed_batches:
+            logger.info(f"🔄 Retrying {len(failed_batches)} failed batches...")
+            for result in failed_batches:
+                result.upload_attempts += 1
+                logger.info(
+                    f"Retrying batch (attempt {result.upload_attempts}/{result.max_attempts})..."
+                )
+                
+                # Re-upload with fresh events
+                result.qdrant_event = self.qdrant.upload_batch_async(result.batch_data)
+                result.neo4j_event = self.neo4j.upload_batch_async(result.batch_data)
+                
+                # Wait for retry
+                qdrant_done = result.qdrant_event.wait(timeout=timeout)
+                neo4j_done = result.neo4j_event.wait(timeout=timeout)
+                
+                if qdrant_done and neo4j_done:
+                    successful_batches.append(result)
+                    logger.info(f"✅ Batch retry succeeded")
+                else:
+                    if result.upload_attempts < result.max_attempts:
+                        logger.warning(
+                            f"⚠️ Retry failed, will try again "
+                            f"({result.upload_attempts}/{result.max_attempts})"
+                        )
+                    else:
+                        logger.error(
+                            f"❌ Batch upload failed permanently after {result.max_attempts} attempts"
+                        )
+
+        # Record successful uploads in checkpoint (only after verification!)
+        if successful_batches:
+            with self._checkpoint_lock:
+                for result in successful_batches:
+                    if not result.checkpoint_recorded:
+                        self.checkpoint.record_batch(result.article_ids, result.chunk_count)
+                        result.checkpoint_recorded = True
+            
+            logger.info(f"💾 Recorded {len(successful_batches)} successful batches in checkpoint")
 
         self._pending_uploads.clear()
 
@@ -548,6 +647,8 @@ def run_ingestion(
     no_resume: bool = False,
     clear_checkpoint: bool = False,
     limit: int | None = None,
+    load_sql_dumps: bool = False,
+    run_post_optimization: bool = False,
 ) -> PipelineStats:
     """
     Convenience function to run the full ingestion pipeline.
@@ -557,6 +658,8 @@ def run_ingestion(
         no_resume: Reset stats but keep processed IDs
         clear_checkpoint: Clear all checkpoint data
         limit: Maximum articles to process
+        load_sql_dumps: Load SQL dump lookup tables for enrichment
+        run_post_optimization: Run post-ingestion optimization (PageRank, etc.)
 
     Returns:
         Final pipeline statistics
@@ -580,7 +683,25 @@ def run_ingestion(
         f"embedding_workers={config.embedding_workers}"
     )
 
-    pipeline = IngestionPipeline(config)
+    # Load SQL dump lookup tables if requested
+    lookup_tables = None
+    if load_sql_dumps and SQL_PARSERS_AVAILABLE and load_all_lookup_tables is not None:
+        logger.info("📚 Loading SQL dump lookup tables for enrichment...")
+        try:
+            lookup_tables = load_all_lookup_tables(Path(config.download_dir))
+            if lookup_tables is not None:
+                logger.info(
+                    f"✅ Loaded: {len(lookup_tables.wikidata_ids):,} Wikidata IDs, "
+                    f"{len(lookup_tables.geo_coordinates):,} geo coords, "
+                    f"{len(lookup_tables.categories):,} category assignments"
+                )
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load SQL dumps: {e}")
+            lookup_tables = None
+    elif load_sql_dumps:
+        logger.warning("⚠️ SQL parsers not available, skipping lookup table loading")
+
+    pipeline = IngestionPipeline(config, lookup_tables=lookup_tables)
     pipeline.load_checkpoint(no_resume=no_resume, clear=clear_checkpoint)
 
     if clear_checkpoint:
@@ -590,5 +711,20 @@ def run_ingestion(
     stats = pipeline.run(limit=limit or config.limit)
 
     logger.info(stats.summary())
+
+    # Run post-ingestion optimization if requested
+    if run_post_optimization:
+        logger.info("🔧 Running post-ingestion optimization...")
+        try:
+            from ingestion.optimizer import run_optimization
+            opt_stats = run_optimization(
+                neo4j_uri=config.neo4j_uri,
+                neo4j_user=config.neo4j_user,
+                neo4j_password=config.neo4j_password,
+                neo4j_database=config.neo4j_database,
+            )
+            logger.info(opt_stats.summary())
+        except Exception as e:
+            logger.error(f"Optimization failed: {e}")
 
     return stats

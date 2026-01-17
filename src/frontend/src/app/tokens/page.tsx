@@ -46,7 +46,7 @@ export default function TokensPage() {
               <ul className="space-y-3 text-neutral-300">
                 <li className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                  Each token verifies up to 100 characters
+                  Each token verifies up to 100 characters (plus 1 per 200 for evidence)
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />

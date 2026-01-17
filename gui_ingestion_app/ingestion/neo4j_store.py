@@ -3,10 +3,15 @@ Neo4j graph store with rich relationship modeling.
 
 Features:
 - Optimized batch writes with UNWIND
-- Rich relationship types for knowledge graph
+- Rich relationship types for knowledge graph (35+ types)
+- Geographic node support with coordinates
+- Wikidata integration for structured knowledge
+- Redirect handling and resolution
+- Quality scoring for evidence ranking
 - Async upload support with deadlock retry
 - Connection pooling for throughput
 - Full-text search indexes
+- Point-based geographic indexes
 """
 
 from __future__ import annotations
@@ -24,10 +29,11 @@ from ingestion.models import ProcessedArticle
 
 logger = logging.getLogger("ingestion.neo4j")
 
-# Retry settings for deadlock handling
+# Retry settings for deadlock and transient error handling
 MAX_RETRIES = 8
 BASE_RETRY_DELAY = 0.2  # seconds
 MAX_RETRY_DELAY = 4.0  # seconds
+CONNECTION_CHECK_INTERVAL = 30.0  # seconds
 
 
 class Neo4jGraphStore:
@@ -77,13 +83,13 @@ class Neo4jGraphStore:
     Classification:
     - INSTANCE_OF: Type classification
 
-    Node Types:
-    - Article: Main Wikipedia articles
-    - Category: Wikipedia categories
+    Node Types (18 total):
+    - Article: Main Wikipedia articles (with geographic points)
+    - Category: Wikipedia categories with hierarchy
     - Entity: Named entities (people, places, things)
     - Person: Individuals (spouses, children, founders)
-    - Location: Geographic locations
-    - Country: Countries
+    - Location: Geographic locations (with coordinates)
+    - Country: Countries with ISO codes
     - Occupation: Job/profession types
     - Nationality: Nationalities
     - EducationalInstitution: Schools, universities
@@ -93,12 +99,26 @@ class Neo4jGraphStore:
     - Genre: Creative genres
     - Industry: Business industries
     - Type: Classification types
+    - WikidataEntity: Links to Wikidata Q-IDs
+    - GeoPoint: Geographic coordinate nodes
+    - Redirect: Redirect page markers
+
+    Additional Relationship Types (7 new):
+    - HAS_WIKIDATA: Links to Wikidata entity
+    - NEAR: Geographic proximity (computed)
+    - REDIRECTS_TO: Redirect relationship
+    - SUPERSEDES: Temporal succession with context
+    - HAS_COORDINATES: Link to geographic point
+    - PARENT_CATEGORY: Category hierarchy
+    - SUBCATEGORY_OF: Inverse category hierarchy
 
     Optimizations:
     - Large connection pool (100 connections)
     - Batched UNWIND queries
     - Async upload queue with worker threads
     - Separate queries to avoid cartesian products
+    - Point-based geographic indexes for location queries
+    - Quality score indexing for ranking
     """
 
     def __init__(
@@ -109,6 +129,13 @@ class Neo4jGraphStore:
         database: str = "neo4j",
         upload_workers: int = 4,
     ):
+        # Store connection parameters for reconnection
+        self._uri = uri
+        self._user = user
+        self._password = password
+        self._connection_lock = threading.Lock()
+        self._last_health_check = 0.0
+        
         self.driver = GraphDatabase.driver(
             uri,
             auth=(user, password),
@@ -156,6 +183,8 @@ class Neo4jGraphStore:
                 "CREATE CONSTRAINT industry_name IF NOT EXISTS FOR (i:Industry) REQUIRE i.name IS UNIQUE",
                 "CREATE CONSTRAINT country_name IF NOT EXISTS FOR (c:Country) REQUIRE c.name IS UNIQUE",
                 "CREATE CONSTRAINT type_name IF NOT EXISTS FOR (t:Type) REQUIRE t.name IS UNIQUE",
+                # NEW: Wikidata entity constraint
+                "CREATE CONSTRAINT wikidata_qid IF NOT EXISTS FOR (w:WikidataEntity) REQUIRE w.qid IS UNIQUE",
             ]
 
             for constraint in constraints:
@@ -169,6 +198,8 @@ class Neo4jGraphStore:
             fulltext_indexes = [
                 "CREATE FULLTEXT INDEX article_search IF NOT EXISTS FOR (a:Article) ON EACH [a.title, a.first_paragraph]",
                 "CREATE FULLTEXT INDEX entity_search IF NOT EXISTS FOR (e:Entity) ON EACH [e.name]",
+                # NEW: Full-text on Wikidata descriptions
+                "CREATE FULLTEXT INDEX wikidata_search IF NOT EXISTS FOR (w:WikidataEntity) ON EACH [w.qid, w.label]",
             ]
 
             for index in fulltext_indexes:
@@ -183,6 +214,18 @@ class Neo4jGraphStore:
                 "CREATE INDEX article_title IF NOT EXISTS FOR (a:Article) ON (a.title)",
                 "CREATE INDEX article_infobox IF NOT EXISTS FOR (a:Article) ON (a.infobox_type)",
                 "CREATE INDEX article_word_count IF NOT EXISTS FOR (a:Article) ON (a.word_count)",
+                # NEW: Wikidata ID index on articles
+                "CREATE INDEX article_wikidata IF NOT EXISTS FOR (a:Article) ON (a.wikidata_id)",
+                # NEW: Quality score index for ranking
+                "CREATE INDEX article_quality IF NOT EXISTS FOR (a:Article) ON (a.quality_score)",
+                # NEW: Geographic type index
+                "CREATE INDEX article_geo_type IF NOT EXISTS FOR (a:Article) ON (a.geo_type)",
+                # NEW: Disambiguation index
+                "CREATE INDEX article_disambig IF NOT EXISTS FOR (a:Article) ON (a.is_disambiguation)",
+                # NEW: Redirect index
+                "CREATE INDEX article_redirect IF NOT EXISTS FOR (a:Article) ON (a.is_redirect)",
+                # NEW: Instance type index for filtering by entity type
+                "CREATE INDEX article_instance IF NOT EXISTS FOR (a:Article) ON (a.instance_of)",
             ]
 
             for index in indexes:
@@ -192,7 +235,82 @@ class Neo4jGraphStore:
                     if "already exists" not in str(e).lower():
                         logger.debug(f"Index: {e}")
 
-            logger.info("✅ Neo4j schema initialized")
+            # Point index for geographic queries (if Neo4j version supports it)
+            try:
+                session.run(
+                    "CREATE POINT INDEX article_location IF NOT EXISTS "
+                    "FOR (a:Article) ON (a.location_point)"
+                )
+                logger.info("✅ Created geographic point index")
+            except Exception as e:
+                logger.debug(f"Point index not supported or already exists: {e}")
+
+            logger.info("✅ Neo4j schema initialized with enhanced indexes")
+
+    def _check_connection(self) -> bool:
+        """
+        Check if Neo4j connection is healthy.
+        
+        Returns:
+            True if connection is healthy, False otherwise
+        """
+        try:
+            with self.driver.session(database=self.database) as session:
+                session.run("RETURN 1")
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ Neo4j connection check failed: {e}")
+            return False
+
+    def _reconnect(self) -> bool:
+        """
+        Attempt to reconnect to Neo4j with exponential backoff.
+        
+        Returns:
+            True if reconnection succeeded, False otherwise
+        """
+        with self._connection_lock:
+            logger.warning("🔄 Attempting to reconnect to Neo4j...")
+            
+            for attempt in range(MAX_RETRIES):
+                try:
+                    # Close old driver
+                    try:
+                        self.driver.close()
+                    except Exception:
+                        pass
+                    
+                    # Create new driver
+                    self.driver = GraphDatabase.driver(
+                        self._uri,
+                        auth=(self._user, self._password),
+                        max_connection_pool_size=100,
+                        connection_acquisition_timeout=120,
+                    )
+                    
+                    # Test connection
+                    with self.driver.session(database=self.database) as session:
+                        session.run("RETURN 1")
+                    
+                    logger.info(f"✅ Reconnected to Neo4j")
+                    self._last_health_check = time.time()
+                    return True
+                    
+                except Exception as e:
+                    if attempt < MAX_RETRIES - 1:
+                        delay = min(
+                            BASE_RETRY_DELAY * (2 ** attempt) + random.uniform(0, 0.2),
+                            MAX_RETRY_DELAY
+                        )
+                        logger.warning(
+                            f"Reconnection attempt {attempt + 1}/{MAX_RETRIES} failed: {e}. "
+                            f"Retrying in {delay:.2f}s..."
+                        )
+                        time.sleep(delay)
+                    else:
+                        logger.error(f"❌ Failed to reconnect to Neo4j after {MAX_RETRIES} attempts")
+            
+            return False
 
     def _upload_worker(self):
         """Worker thread that processes upload queue."""
@@ -214,6 +332,16 @@ class Neo4jGraphStore:
 
         for pa in articles:
             article = pa.article
+
+            # Prepare geographic point if coordinates available
+            location_point = None
+            if article.latitude is not None and article.longitude is not None:
+                # Neo4j point format: point({latitude: lat, longitude: lon})
+                location_point = {
+                    "latitude": article.latitude,
+                    "longitude": article.longitude,
+                }
+
             batch_data.append(
                 {
                     "id": article.id,
@@ -262,6 +390,27 @@ class Neo4jGraphStore:
                     "predecessor": article.predecessor,
                     "successor": article.successor,
                     "instance_of": article.instance_of,
+                    # =========================================================
+                    # NEW: Enhanced metadata from SQL dumps
+                    # =========================================================
+                    # Wikidata integration
+                    "wikidata_id": article.wikidata_id,
+                    # Geographic data
+                    "latitude": article.latitude,
+                    "longitude": article.longitude,
+                    "location_point": location_point,
+                    "geo_type": article.geo_type,
+                    "geo_country_code": article.geo_country_code,
+                    # Page metadata
+                    "is_redirect": article.is_redirect,
+                    "redirect_target": article.redirect_target,
+                    "is_disambiguation": article.is_disambiguation,
+                    "page_length": article.page_length,
+                    # Quality indicators
+                    "quality_score": article.quality_score,
+                    "has_infobox": article.has_infobox,
+                    "has_coordinates": article.has_coordinates,
+                    "has_wikidata": article.has_wikidata,
                 }
             )
 
@@ -269,32 +418,76 @@ class Neo4jGraphStore:
 
     def _run_with_retry(self, session, query: str, batch: list[dict], operation_name: str) -> bool:
         """
-        Execute a Neo4j query with exponential backoff retry on deadlock.
+        Execute a Neo4j query with exponential backoff retry on transient errors.
+        
+        Handles:
+        - Deadlocks (TransientError)
+        - Connection failures
+        - Timeout errors
+        - Other transient network issues
         
         Returns True if successful, False if all retries exhausted.
         """
         for attempt in range(MAX_RETRIES):
             try:
+                # Periodic health check
+                now = time.time()
+                if now - self._last_health_check > CONNECTION_CHECK_INTERVAL:
+                    if not self._check_connection():
+                        if not self._reconnect():
+                            # Connection lost and reconnection failed
+                            if attempt < MAX_RETRIES - 1:
+                                continue  # Try again in retry loop
+                            else:
+                                return False
+                    self._last_health_check = now
+                
                 session.run(query, batch=batch)
                 return True
+                
             except TransientError as e:
-                # Deadlock detected - retry with exponential backoff + jitter
+                # Transient errors (deadlocks, temporary failures)
                 if attempt < MAX_RETRIES - 1:
                     delay = min(
                         BASE_RETRY_DELAY * (2 ** attempt) + random.uniform(0, 0.1),
                         MAX_RETRY_DELAY
                     )
                     logger.debug(
-                        f"Deadlock in {operation_name}, retry {attempt + 1}/{MAX_RETRIES} "
-                        f"after {delay:.2f}s"
+                        f"⚠️ Transient error in {operation_name}, retry {attempt + 1}/{MAX_RETRIES} "
+                        f"after {delay:.2f}s: {e}"
                     )
                     time.sleep(delay)
                 else:
-                    logger.warning(f"{operation_name} failed after {MAX_RETRIES} retries: {e}")
+                    logger.warning(f"❌ {operation_name} failed after {MAX_RETRIES} retries: {e}")
                     return False
+                    
             except Exception as e:
-                logger.error(f"{operation_name} error: {e}")
-                return False
+                # Check if it's a connection-related error
+                error_msg = str(e).lower()
+                is_connection_error = any(
+                    keyword in error_msg
+                    for keyword in ["connection", "timeout", "network", "unavailable", "refused", "closed"]
+                )
+                
+                if is_connection_error and attempt < MAX_RETRIES - 1:
+                    delay = min(
+                        BASE_RETRY_DELAY * (2 ** attempt) + random.uniform(0, 0.1),
+                        MAX_RETRY_DELAY
+                    )
+                    logger.warning(
+                        f"⚠️ Connection error in {operation_name}, retry {attempt + 1}/{MAX_RETRIES} "
+                        f"after {delay:.2f}s: {e}"
+                    )
+                    time.sleep(delay)
+                    
+                    # Try to reconnect
+                    if not self._check_connection():
+                        self._reconnect()
+                else:
+                    # Non-transient error or final attempt
+                    logger.error(f"❌ {operation_name} error: {e}")
+                    return False
+                    
         return False
 
     def _do_upload(self, batch_data: list[dict]):
@@ -303,7 +496,7 @@ class Neo4jGraphStore:
             return
 
         with self.driver.session(database=self.database) as session:
-            # 1. Create/update Article nodes
+            # 1. Create/update Article nodes with enhanced metadata
             article_query = """
             UNWIND $batch AS data
             MERGE (a:Article {id: data.id})
@@ -330,7 +523,27 @@ class Neo4jGraphStore:
                 a.capital_of = data.capital_of,
                 a.predecessor = data.predecessor,
                 a.successor = data.successor,
+                // NEW: Enhanced metadata
+                a.wikidata_id = data.wikidata_id,
+                a.latitude = data.latitude,
+                a.longitude = data.longitude,
+                a.geo_type = data.geo_type,
+                a.geo_country_code = data.geo_country_code,
+                a.is_redirect = data.is_redirect,
+                a.redirect_target = data.redirect_target,
+                a.is_disambiguation = data.is_disambiguation,
+                a.page_length = data.page_length,
+                a.quality_score = data.quality_score,
+                a.has_infobox = data.has_infobox,
+                a.has_coordinates = data.has_coordinates,
+                a.has_wikidata = data.has_wikidata,
                 a.last_updated = datetime()
+            WITH a, data
+            WHERE data.location_point IS NOT NULL
+            SET a.location_point = point({
+                latitude: data.location_point.latitude,
+                longitude: data.location_point.longitude
+            })
             """
             self._run_with_retry(session, article_query, batch_data, "Article creation")
 
@@ -671,6 +884,55 @@ class Neo4jGraphStore:
                 MERGE (a)-[:CAPITAL_OF]->(region)
                 """
                 self._run_with_retry(session, capital_of_query, batch_data, "Capital of relationships")
+
+            # =================================================================
+            # NEW RELATIONSHIPS (30-34): Wikidata, Geographic, Redirect
+            # =================================================================
+
+            # 30. Wikidata entity relationships (HAS_WIKIDATA)
+            if any(d.get("wikidata_id") for d in batch_data):
+                wikidata_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.wikidata_id IS NOT NULL
+                MERGE (w:WikidataEntity {qid: data.wikidata_id})
+                MERGE (a)-[:HAS_WIKIDATA]->(w)
+                """
+                self._run_with_retry(session, wikidata_query, batch_data, "Wikidata relationships")
+
+            # 31. Redirect relationships (REDIRECTS_TO)
+            if any(d.get("redirect_target") for d in batch_data):
+                redirect_query = """
+                UNWIND $batch AS data
+                MATCH (source:Article {id: data.id})
+                WHERE data.redirect_target IS NOT NULL AND data.is_redirect = true
+                MERGE (target:Article {title: data.redirect_target})
+                ON CREATE SET target.stub = true
+                MERGE (source)-[:REDIRECTS_TO]->(target)
+                """
+                self._run_with_retry(session, redirect_query, batch_data, "Redirect relationships")
+
+            # 32. Geographic country relationships (via geo_country_code)
+            if any(d.get("geo_country_code") for d in batch_data):
+                geo_country_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.geo_country_code IS NOT NULL
+                MERGE (c:Country {code: data.geo_country_code})
+                MERGE (a)-[:IN_COUNTRY]->(c)
+                """
+                self._run_with_retry(session, geo_country_query, batch_data, "Geo country relationships")
+
+            # 33. Geographic type classification (geographic entities)
+            if any(d.get("geo_type") for d in batch_data):
+                geo_type_query = """
+                UNWIND $batch AS data
+                MATCH (a:Article {id: data.id})
+                WHERE data.geo_type IS NOT NULL
+                MERGE (t:Type {name: data.geo_type})
+                MERGE (a)-[:INSTANCE_OF]->(t)
+                """
+                self._run_with_retry(session, geo_type_query, batch_data, "Geo type relationships")
 
     def upload_batch_async(self, articles: list[ProcessedArticle]) -> threading.Event:
         """

@@ -3,49 +3,58 @@ Neo4j Graph Knowledge Store Adapter
 ===================================
 
 Adapter for Neo4j graph database as a knowledge store.
-Supports 27 relationship types for rich knowledge graph queries.
+Supports 35+ relationship types for rich knowledge graph queries.
 
 INGESTION COMPATIBILITY
 -----------------------
 This adapter is fully aligned with the ingestion pipeline structure:
 
 Ingestion Structure (ingestion/neo4j_store.py):
-- 27 Relationship Types created during ingestion:
+- 35+ Relationship Types created during ingestion:
   Core: LINKS_TO, IN_CATEGORY, MENTIONS, SEE_ALSO, DISAMBIGUATES, RELATED_TO
   Person: LOCATED_IN, HAS_OCCUPATION, HAS_NATIONALITY, MARRIED_TO, PARENT_OF,
           CHILD_OF, EDUCATED_AT, EMPLOYED_BY, WON_AWARD
   Creative: AUTHORED, HAS_GENRE, INFLUENCED_BY, INFLUENCED
   Organization: FOUNDED_BY, HEADQUARTERED_IN, IN_INDUSTRY
-  Geographic: IN_COUNTRY, PART_OF
+  Geographic: IN_COUNTRY, PART_OF, CAPITAL_OF, NEAR
   Temporal: PRECEDED_BY, SUCCEEDED_BY
-  Classification: INSTANCE_OF
+  Classification: INSTANCE_OF, SUBCATEGORY_OF
+  Enrichment: HAS_WIKIDATA, REDIRECTS_TO
 
-- 15 Node Types:
+- 18 Node Types:
   Article, Category, Entity, Person, Location, Country, Occupation,
   Nationality, EducationalInstitution, Organization, Award, CreativeWork,
-  Genre, Industry, Type
+  Genre, Industry, Type, WikidataEntity, GeoPoint, Redirect
 
 - Article Properties:
   id, title, url, word_count, first_paragraph, infobox_type,
   birth_date, death_date, location, occupation, nationality,
-  country, industry, headquarters, instance_of, vector_chunk_ids
+  country, industry, headquarters, instance_of, vector_chunk_ids,
+  wikidata_id, is_redirect, redirect_target, is_disambiguation,
+  quality_score, pagerank, incoming_links, outgoing_links,
+  location_point, has_coordinates
 
 API Compatibility:
-- All 27 relationship types are defined and usable
+- All enriched relationship types are defined and usable
 - Specialized query methods for relationship categories:
   * query_person_facts() - family, education, career, awards
   * query_organization_facts() - founders, HQ, industry, employees
   * query_geographic_facts() - location hierarchy, country
   * query_creative_facts() - works, genres, influences
+  * query_by_wikidata_id() - structured Wikidata lookups
+  * query_geographic_proximity() - geo-radius evidence
+  * query_with_quality_filter() - importance-based filtering
+  * resolve_redirects() - redirect resolution for canonical titles
 - Relationship-aware verification in VerificationOracle
 
-Version: 2025-01-15 - Aligned with ingestion v2 (27 relationships)
+Version: 2026-01-17 - Aligned with ingestion v4 (35+ relationships)
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -66,9 +75,22 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# RELATIONSHIP TYPE CONSTANTS (25 types from ingestion pipeline)
+# RELATIONSHIP TYPE CONSTANTS (35+ types from ingestion pipeline)
 # =============================================================================
 
+# Article property keys
+ARTICLE_PROP_TITLE = "title"
+ARTICLE_PROP_FIRST_PARAGRAPH = "first_paragraph"
+ARTICLE_PROP_WIKIDATA_ID = "wikidata_id"
+ARTICLE_PROP_IS_DISAMBIGUATION = "is_disambiguation"
+ARTICLE_PROP_IS_REDIRECT = "is_redirect"
+ARTICLE_PROP_REDIRECT_TARGET = "redirect_target"
+ARTICLE_PROP_QUALITY_SCORE = "quality_score"
+ARTICLE_PROP_PAGERANK = "pagerank"
+ARTICLE_PROP_INCOMING_LINKS = "incoming_links"
+ARTICLE_PROP_OUTGOING_LINKS = "outgoing_links"
+ARTICLE_PROP_LOCATION_POINT = "location_point"
+ARTICLE_PROP_HAS_COORDINATES = "has_coordinates"
 # Core Article Relationships
 REL_LINKS_TO = "LINKS_TO"
 REL_IN_CATEGORY = "IN_CATEGORY"
@@ -102,6 +124,7 @@ REL_IN_INDUSTRY = "IN_INDUSTRY"
 # Geographic Relationships
 REL_IN_COUNTRY = "IN_COUNTRY"
 REL_PART_OF = "PART_OF"
+REL_CAPITAL_OF = "CAPITAL_OF"
 
 # Temporal Relationships
 REL_PRECEDED_BY = "PRECEDED_BY"
@@ -110,14 +133,46 @@ REL_SUCCEEDED_BY = "SUCCEEDED_BY"
 # Classification
 REL_INSTANCE_OF = "INSTANCE_OF"
 
+# Wikidata and derived relationships
+REL_HAS_WIKIDATA = "HAS_WIKIDATA"
+REL_REDIRECTS_TO = "REDIRECTS_TO"
+REL_NEAR = "NEAR"
+REL_SUBCATEGORY_OF = "SUBCATEGORY_OF"
+
 # All relationship types for queries
 ALL_RELATIONSHIP_TYPES = [
-    REL_LINKS_TO, REL_IN_CATEGORY, REL_MENTIONS, REL_SEE_ALSO, REL_DISAMBIGUATES,
-    REL_RELATED_TO, REL_LOCATED_IN, REL_HAS_OCCUPATION, REL_HAS_NATIONALITY,
-    REL_MARRIED_TO, REL_PARENT_OF, REL_CHILD_OF, REL_EDUCATED_AT, REL_EMPLOYED_BY,
-    REL_WON_AWARD, REL_AUTHORED, REL_HAS_GENRE, REL_INFLUENCED_BY, REL_INFLUENCED,
-    REL_FOUNDED_BY, REL_HEADQUARTERED_IN, REL_IN_INDUSTRY, REL_IN_COUNTRY,
-    REL_PART_OF, REL_PRECEDED_BY, REL_SUCCEEDED_BY, REL_INSTANCE_OF,
+    REL_LINKS_TO,
+    REL_IN_CATEGORY,
+    REL_MENTIONS,
+    REL_SEE_ALSO,
+    REL_DISAMBIGUATES,
+    REL_RELATED_TO,
+    REL_LOCATED_IN,
+    REL_HAS_OCCUPATION,
+    REL_HAS_NATIONALITY,
+    REL_MARRIED_TO,
+    REL_PARENT_OF,
+    REL_CHILD_OF,
+    REL_EDUCATED_AT,
+    REL_EMPLOYED_BY,
+    REL_WON_AWARD,
+    REL_AUTHORED,
+    REL_HAS_GENRE,
+    REL_INFLUENCED_BY,
+    REL_INFLUENCED,
+    REL_FOUNDED_BY,
+    REL_HEADQUARTERED_IN,
+    REL_IN_INDUSTRY,
+    REL_IN_COUNTRY,
+    REL_PART_OF,
+    REL_CAPITAL_OF,
+    REL_PRECEDED_BY,
+    REL_SUCCEEDED_BY,
+    REL_INSTANCE_OF,
+    REL_HAS_WIKIDATA,
+    REL_REDIRECTS_TO,
+    REL_NEAR,
+    REL_SUBCATEGORY_OF,
 ]
 
 # Relationship categories for semantic queries
@@ -135,7 +190,11 @@ ORGANIZATION_RELATIONSHIPS = [
 ]
 
 GEOGRAPHIC_RELATIONSHIPS = [
-    REL_LOCATED_IN, REL_IN_COUNTRY, REL_PART_OF, REL_HEADQUARTERED_IN,
+    REL_LOCATED_IN,
+    REL_IN_COUNTRY,
+    REL_PART_OF,
+    REL_CAPITAL_OF,
+    REL_HEADQUARTERED_IN,
 ]
 
 
@@ -150,7 +209,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
     Adapter for Neo4j as a graph-based knowledge store.
 
     Provides exact and inferred fact lookup via Cypher queries.
-    Supports 25 relationship types for comprehensive knowledge graph queries.
+    Supports 35+ relationship types for comprehensive knowledge graph queries.
     """
 
     def __init__(self, settings: Neo4jSettings) -> None:
@@ -242,11 +301,11 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
         params: dict[str, Any] = {}
 
         if subject:
-            conditions.append("toLower(s.name) CONTAINS toLower($subject)")
+            conditions.append("toLower(coalesce(s.name, s.title, '')) CONTAINS toLower($subject)")
             params["subject"] = subject
 
         if obj:
-            conditions.append("toLower(o.name) CONTAINS toLower($obj)")
+            conditions.append("toLower(coalesce(o.name, o.title, '')) CONTAINS toLower($obj)")
             params["obj"] = obj
 
         where_clause = " AND ".join(conditions) if conditions else "true"
@@ -255,8 +314,13 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
             query = f"""
                 MATCH (s)-[r]->(o)
                 WHERE type(r) = $predicate AND {where_clause}
-                RETURN s.name AS subject, type(r) AS predicate, o.name AS object,
-                       properties(s) AS s_props, properties(o) AS o_props
+                RETURN coalesce(s.name, s.title, s.qid, s.code, 'Unknown') AS subject,
+                       type(r) AS predicate,
+                       coalesce(o.name, o.title, o.qid, o.code, 'Unknown') AS object,
+                       properties(s) AS s_props,
+                       properties(o) AS o_props,
+                       labels(s) AS s_labels,
+                       labels(o) AS o_labels
                 LIMIT 10
             """
             params["predicate"] = predicate
@@ -264,8 +328,13 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
             query = f"""
                 MATCH (s)-[r]->(o)
                 WHERE {where_clause}
-                RETURN s.name AS subject, type(r) AS predicate, o.name AS object,
-                       properties(s) AS s_props, properties(o) AS o_props
+                RETURN coalesce(s.name, s.title, s.qid, s.code, 'Unknown') AS subject,
+                       type(r) AS predicate,
+                       coalesce(o.name, o.title, o.qid, o.code, 'Unknown') AS object,
+                       properties(s) AS s_props,
+                       properties(o) AS o_props,
+                       labels(s) AS s_labels,
+                       labels(o) AS o_labels
                 LIMIT 10
             """
 
@@ -323,12 +392,16 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
         if not evidence:
             await self._entity_search(claim, evidence)
 
+        # Try redirects/wikidata/geographic hints for enhanced evidence
+        enhanced = await self._query_enhanced_evidence(claim)
+        evidence.extend(enhanced)
+
         # Multi-hop path search if subject and object are known
         if claim.subject and claim.object and max_hops > 1:
             path_evidence = await self._find_paths(claim.subject, claim.object, max_hops)
             evidence.extend(path_evidence)
 
-        return evidence
+        return self._dedupe_evidence(evidence)
 
     async def _entity_search(self, claim: Claim, evidence: list[Evidence]) -> None:
         """Entity search based on capitalized words in claim."""
@@ -423,6 +496,326 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
         except Exception as e:
             logger.debug(f"Path search failed: {e}")
             return []
+
+    def _dedupe_evidence(self, evidence: list[Evidence]) -> list[Evidence]:
+        """Deduplicate evidence by content hash to avoid redundancy."""
+        seen: set[str] = set()
+        unique: list[Evidence] = []
+        for ev in evidence:
+            content_key = ev.content[:200].lower().strip()
+            if content_key not in seen:
+                seen.add(content_key)
+                unique.append(ev)
+        return unique
+
+    async def _query_enhanced_evidence(self, claim: Claim) -> list[Evidence]:
+        """
+        Query enhanced evidence using Wikidata, redirects, and geographic hints.
+
+        Leverages enriched metadata from ingestion:
+        - Wikidata entity matching for structured lookups
+        - Redirect resolution for alternative titles
+        - Geographic proximity for location-based claims
+        - Quality filtering to prioritize authoritative sources
+        """
+        if self._driver is None:
+            return []
+
+        evidence: list[Evidence] = []
+
+        # Skip if claim has no useful entities to search
+        if not claim.subject and not claim.text:
+            return evidence
+
+        search_term = claim.subject or claim.text[:100]
+
+        # Query high-quality articles matching the claim subject
+        # Excludes disambiguation and redirect pages
+        query = """
+        MATCH (a:Article)
+        WHERE (toLower(a.title) CONTAINS toLower($term)
+               OR toLower(a.first_paragraph) CONTAINS toLower($term))
+          AND (a.is_disambiguation IS NULL OR a.is_disambiguation = false)
+          AND (a.is_redirect IS NULL OR a.is_redirect = false)
+          AND a.quality_score IS NOT NULL
+        RETURN a.title AS title,
+               a.first_paragraph AS content,
+               a.url AS url,
+               a.quality_score AS quality_score,
+               a.wikidata_id AS wikidata_id,
+               a.pagerank AS pagerank
+        ORDER BY a.quality_score DESC, a.pagerank DESC
+        LIMIT 5
+        """
+
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                result = await session.run(query, {"term": search_term})
+                records = await result.data()
+
+                for r in records:
+                    if r.get("content"):
+                        evidence.append(
+                            Evidence(
+                                id=uuid4(),
+                                source=EvidenceSource.GRAPH_INFERRED,
+                                content=r.get("content", ""),
+                                source_uri=r.get("url"),
+                                structured_data={
+                                    "title": r.get("title"),
+                                    "wikidata_id": r.get("wikidata_id"),
+                                    "quality_score": r.get("quality_score"),
+                                    "pagerank": r.get("pagerank"),
+                                },
+                                similarity_score=r.get("quality_score"),
+                                match_type="enhanced_quality",
+                                retrieved_at=datetime.now(UTC),
+                            )
+                        )
+        except Exception as e:
+            logger.debug(f"Enhanced evidence query failed: {e}")
+
+        return evidence
+
+    async def query_by_wikidata_id(
+        self,
+        wikidata_id: str,
+        limit: int = 10,
+    ) -> list[Evidence]:
+        """
+        Find articles by Wikidata Q-ID.
+
+        Uses the wikidata_id property on Article nodes.
+        """
+        if self._driver is None:
+            raise Neo4jError("Not connected to Neo4j")
+
+        # Normalize QID format
+        qid = wikidata_id.upper()
+        if not qid.startswith("Q"):
+            qid = f"Q{qid}"
+
+        query = """
+        MATCH (a:Article)
+        WHERE a.wikidata_id = $qid
+        RETURN a.title AS title,
+               a.first_paragraph AS content,
+               a.url AS url,
+               a.quality_score AS quality_score,
+               a.wikidata_id AS wikidata_id
+        ORDER BY a.quality_score DESC
+        LIMIT $limit
+        """
+
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                result = await session.run(query, {"qid": qid, "limit": limit})
+                records = await result.data()
+
+                return [
+                    Evidence(
+                        id=uuid4(),
+                        source=EvidenceSource.GRAPH_EXACT,
+                        content=r.get("content", r.get("title", "")),
+                        source_uri=r.get("url"),
+                        structured_data={
+                            "title": r.get("title"),
+                            "wikidata_id": r.get("wikidata_id"),
+                            "quality_score": r.get("quality_score"),
+                        },
+                        match_type="wikidata_lookup",
+                        retrieved_at=datetime.now(UTC),
+                    )
+                    for r in records
+                    if r.get("content") or r.get("title")
+                ]
+        except Exception as e:
+            logger.error(f"Wikidata query failed: {e}")
+            raise Neo4jError(f"Wikidata query failed: {e}") from e
+
+    async def query_geographic_proximity(
+        self,
+        latitude: float,
+        longitude: float,
+        radius_km: float = 50.0,
+        min_quality: float = 0.3,
+        limit: int = 20,
+    ) -> list[Evidence]:
+        """
+        Find articles within geographic radius using Neo4j point distance.
+
+        Uses the location_point property created during ingestion.
+        """
+        if self._driver is None:
+            raise Neo4jError("Not connected to Neo4j")
+
+        radius_meters = radius_km * 1000
+
+        query = """
+        MATCH (a:Article)
+        WHERE a.location_point IS NOT NULL
+          AND point.distance(a.location_point, point({latitude: $lat, longitude: $lon})) < $radius
+          AND (a.quality_score IS NULL OR a.quality_score >= $min_quality)
+          AND (a.is_disambiguation IS NULL OR a.is_disambiguation = false)
+        WITH a, point.distance(a.location_point, point({latitude: $lat, longitude: $lon})) / 1000.0 AS distance_km
+        RETURN a.title AS title,
+               a.first_paragraph AS content,
+               a.url AS url,
+               a.quality_score AS quality_score,
+               a.wikidata_id AS wikidata_id,
+               distance_km
+        ORDER BY a.quality_score DESC, distance_km ASC
+        LIMIT $limit
+        """
+
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                result = await session.run(
+                    query,
+                    {
+                        "lat": latitude,
+                        "lon": longitude,
+                        "radius": radius_meters,
+                        "min_quality": min_quality,
+                        "limit": limit,
+                    },
+                )
+                records = await result.data()
+
+                return [
+                    Evidence(
+                        id=uuid4(),
+                        source=EvidenceSource.GRAPH_INFERRED,
+                        content=r.get("content", r.get("title", "")),
+                        source_uri=r.get("url"),
+                        structured_data={
+                            "title": r.get("title"),
+                            "wikidata_id": r.get("wikidata_id"),
+                            "quality_score": r.get("quality_score"),
+                            "distance_km": r.get("distance_km"),
+                            "latitude": latitude,
+                            "longitude": longitude,
+                        },
+                        match_type="geographic_proximity",
+                        retrieved_at=datetime.now(UTC),
+                    )
+                    for r in records
+                    if r.get("content") or r.get("title")
+                ]
+        except Exception as e:
+            logger.error(f"Geographic query failed: {e}")
+            return []
+
+    async def query_with_quality_filter(
+        self,
+        entity: str,
+        min_quality_score: float = 0.5,
+        min_pagerank: float | None = None,
+        exclude_disambiguation: bool = True,
+        exclude_redirects: bool = True,
+        limit: int = 10,
+    ) -> list[Evidence]:
+        """
+        Query with quality/importance filtering.
+
+        Prioritizes high-quality, authoritative articles using
+        quality_score and pagerank from the optimizer.
+        """
+        if self._driver is None:
+            raise Neo4jError("Not connected to Neo4j")
+
+        conditions = [
+            "(toLower(a.title) CONTAINS toLower($entity) OR toLower(a.first_paragraph) CONTAINS toLower($entity))",
+            "a.quality_score >= $min_quality",
+        ]
+
+        if min_pagerank is not None:
+            conditions.append("a.pagerank >= $min_pagerank")
+
+        if exclude_disambiguation:
+            conditions.append("(a.is_disambiguation IS NULL OR a.is_disambiguation = false)")
+
+        if exclude_redirects:
+            conditions.append("(a.is_redirect IS NULL OR a.is_redirect = false)")
+
+        where_clause = " AND ".join(conditions)
+
+        query = f"""
+        MATCH (a:Article)
+        WHERE {where_clause}
+        RETURN a.title AS title,
+               a.first_paragraph AS content,
+               a.url AS url,
+               a.quality_score AS quality_score,
+               a.pagerank AS pagerank,
+               a.wikidata_id AS wikidata_id,
+               a.incoming_links AS incoming_links
+        ORDER BY a.quality_score DESC, a.pagerank DESC
+        LIMIT $limit
+        """
+
+        params: dict[str, Any] = {
+            "entity": entity,
+            "min_quality": min_quality_score,
+            "min_pagerank": min_pagerank,
+            "limit": limit,
+        }
+
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                result = await session.run(query, params)
+                records = await result.data()
+
+                return [
+                    Evidence(
+                        id=uuid4(),
+                        source=EvidenceSource.GRAPH_INFERRED,
+                        content=r.get("content", r.get("title", "")),
+                        source_uri=r.get("url"),
+                        structured_data={
+                            "title": r.get("title"),
+                            "quality_score": r.get("quality_score"),
+                            "pagerank": r.get("pagerank"),
+                            "wikidata_id": r.get("wikidata_id"),
+                            "incoming_links": r.get("incoming_links"),
+                        },
+                        similarity_score=r.get("quality_score"),
+                        match_type="quality_filtered",
+                        retrieved_at=datetime.now(UTC),
+                    )
+                    for r in records
+                    if r.get("content") or r.get("title")
+                ]
+        except Exception as e:
+            logger.error(f"Quality filter query failed: {e}")
+            return []
+
+    async def resolve_redirects(self, title: str, max_hops: int = 3) -> str | None:
+        """
+        Follow REDIRECTS_TO chain to find canonical article title.
+
+        Uses the redirect relationships created during ingestion optimization.
+        """
+        if self._driver is None:
+            return None
+
+        query = f"""
+        MATCH (start:Article {{title: $title}})
+        WHERE start.is_redirect = true
+        MATCH path = (start)-[:REDIRECTS_TO*1..{max_hops}]->(target:Article)
+        WHERE target.is_redirect IS NULL OR target.is_redirect = false
+        RETURN target.title AS canonical_title
+        LIMIT 1
+        """
+
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                result = await session.run(query, {"title": title})
+                record = await result.single()
+                return record["canonical_title"] if record else None
+        except Exception as e:
+            logger.debug(f"Redirect resolution failed: {e}")
+            return None
 
     async def entity_exists(self, entity: str) -> bool:
         """Check if an entity exists in the knowledge graph."""
@@ -792,12 +1185,18 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
 
         query = f"""
             MATCH {pattern}
-            WHERE toLower(s.name) CONTAINS toLower($entity)
-               OR toLower(s.title) CONTAINS toLower($entity)
-            RETURN s.name AS subject, s.title AS subject_title,
+            WHERE toLower(coalesce(s.name, s.title, s.qid, s.code, '')) CONTAINS toLower($entity)
+            RETURN s.name AS subject,
+                   s.title AS subject_title,
+                   s.qid AS subject_qid,
+                   s.code AS subject_code,
                    type(r) AS relationship,
-                   o.name AS object, o.title AS object_title,
-                   labels(s) AS subject_labels, labels(o) AS object_labels
+                   o.name AS object,
+                   o.title AS object_title,
+                   o.qid AS object_qid,
+                   o.code AS object_code,
+                   labels(s) AS subject_labels,
+                   labels(o) AS object_labels
             LIMIT $limit
         """
 
@@ -808,8 +1207,8 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                 records = await result.data()
 
                 for r in records:
-                    subj = r.get("subject") or r.get("subject_title") or "Unknown"
-                    obj = r.get("object") or r.get("object_title") or "Unknown"
+                    subj = r.get("subject") or r.get("subject_title") or r.get("subject_qid") or "Unknown"
+                    obj = r.get("object") or r.get("object_title") or r.get("object_qid") or "Unknown"
                     rel = r.get("relationship", "RELATED")
 
                     evidence.append(
@@ -823,6 +1222,10 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                                 "object": obj,
                                 "subject_labels": r.get("subject_labels", []),
                                 "object_labels": r.get("object_labels", []),
+                                "subject_qid": r.get("subject_qid"),
+                                "object_qid": r.get("object_qid"),
+                                "subject_code": r.get("subject_code"),
+                                "object_code": r.get("object_code"),
                             },
                             match_type="relationship_query",
                             retrieved_at=datetime.now(UTC),

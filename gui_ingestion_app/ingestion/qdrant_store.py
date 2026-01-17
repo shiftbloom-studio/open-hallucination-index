@@ -7,12 +7,17 @@ Features:
 - GPU-accelerated embeddings with multi-process support
 - Non-blocking batch uploads for pipeline efficiency
 - Full-text payload indexing
+- Geographic coordinate support for location-based queries
+- Quality score indexing for evidence ranking
+- Wikidata ID indexing for structured knowledge linking
 """
 
 from __future__ import annotations
 
 import logging
+import random
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, Queue
 from typing import TYPE_CHECKING
@@ -22,7 +27,12 @@ import torch
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
+    FloatIndexParams,
+    FloatIndexType,
+    GeoIndexParams,
     HnswConfigDiff,
+    IntegerIndexParams,
+    IntegerIndexType,
     KeywordIndexParams,
     KeywordIndexType,
     Modifier,
@@ -49,6 +59,12 @@ logger = logging.getLogger("ingestion.qdrant")
 DENSE_VECTOR_SIZE = 384
 MAX_TEXT_LENGTH = 4000
 MAX_POINTS_PER_UPLOAD = 200
+
+# Retry settings for upload resilience
+MAX_UPLOAD_RETRIES = 5
+BASE_RETRY_DELAY = 0.5  # seconds
+MAX_RETRY_DELAY = 8.0  # seconds
+CONNECTION_CHECK_INTERVAL = 30.0  # seconds
 
 
 class QdrantHybridStore:
@@ -83,6 +99,14 @@ class QdrantHybridStore:
     ):
         self.collection = collection
         self.embedding_batch_size = embedding_batch_size
+        
+        # Store connection parameters for reconnection
+        self._host = host
+        self._port = port
+        self._grpc_port = grpc_port
+        self._prefer_grpc = prefer_grpc
+        self._connection_lock = threading.Lock()
+        self._last_health_check = 0.0
 
         # Initialize Qdrant client (sync for uploads - more stable)
         # Try gRPC first if preferred, fall back to HTTP if connection fails
@@ -274,7 +298,7 @@ class QdrantHybridStore:
                 "country",
                 "occupation",
                 "nationality",
-                # NEW: Additional filterable fields
+                # Additional filterable fields
                 "industry",
                 "location",
                 "headquarters",
@@ -284,6 +308,10 @@ class QdrantHybridStore:
                 "part_of",
                 "predecessor",
                 "successor",
+                # NEW: Wikidata and geo fields
+                "wikidata_id",
+                "geo_type",
+                "geo_country_code",
             ]:
                 self.client.create_payload_index(
                     collection_name=self.collection,
@@ -291,9 +319,124 @@ class QdrantHybridStore:
                     field_schema=KeywordIndexParams(type=KeywordIndexType.KEYWORD),
                 )
 
-            logger.info("✅ Payload indexes created")
+            # NEW: Geographic coordinate index for location-based queries
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection,
+                    field_name="geo",
+                    field_schema=GeoIndexParams(),
+                )
+                logger.info("✅ Geographic index created")
+            except Exception as e:
+                logger.debug(f"Geo index: {e}")
+
+            # NEW: Quality score index for ranking
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection,
+                    field_name="quality_score",
+                    field_schema=FloatIndexParams(type=FloatIndexType.FLOAT),
+                )
+            except Exception as e:
+                logger.debug(f"Quality score index: {e}")
+
+            # NEW: Page length index for importance filtering
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection,
+                    field_name="page_length",
+                    field_schema=IntegerIndexParams(type=IntegerIndexType.INTEGER),
+                )
+            except Exception as e:
+                logger.debug(f"Page length index: {e}")
+
+            # NEW: Boolean indexes
+            for bool_field in ["is_disambiguation", "is_redirect", "has_coordinates", "has_wikidata"]:
+                try:
+                    self.client.create_payload_index(
+                        collection_name=self.collection,
+                        field_name=bool_field,
+                        field_schema=KeywordIndexParams(type=KeywordIndexType.KEYWORD),
+                    )
+                except Exception as e:
+                    logger.debug(f"Bool index {bool_field}: {e}")
+
+            logger.info("✅ Payload indexes created with enhanced fields")
         except Exception as e:
             logger.warning(f"Payload index creation: {e}")
+
+    def _check_connection(self) -> bool:
+        """
+        Check if Qdrant connection is healthy.
+        
+        Returns:
+            True if connection is healthy, False otherwise
+        """
+        try:
+            self.client.get_collections()
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ Qdrant connection check failed: {e}")
+            return False
+
+    def _reconnect(self) -> bool:
+        """
+        Attempt to reconnect to Qdrant with exponential backoff.
+        
+        Returns:
+            True if reconnection succeeded, False otherwise
+        """
+        with self._connection_lock:
+            logger.warning("🔄 Attempting to reconnect to Qdrant...")
+            
+            for attempt in range(MAX_UPLOAD_RETRIES):
+                try:
+                    # Try gRPC first if preferred
+                    if self._prefer_grpc and self._grpc_port is not None:
+                        try:
+                            new_client = QdrantClient(
+                                host=self._host,
+                                port=self._port,
+                                grpc_port=self._grpc_port,
+                                timeout=30,
+                                prefer_grpc=True,
+                            )
+                            new_client.get_collections()
+                            self.client = new_client
+                            logger.info(f"✅ Reconnected to Qdrant via gRPC")
+                            self._last_health_check = time.time()
+                            return True
+                        except Exception:
+                            pass
+                    
+                    # Fall back to HTTP
+                    new_client = QdrantClient(
+                        host=self._host,
+                        port=self._port,
+                        timeout=120,
+                        prefer_grpc=False,
+                    )
+                    new_client.get_collections()
+                    self.client = new_client
+                    logger.info(f"✅ Reconnected to Qdrant via HTTP")
+                    self._last_health_check = time.time()
+                    return True
+                    
+                except Exception as e:
+                    if attempt < MAX_UPLOAD_RETRIES - 1:
+                        delay = min(
+                            BASE_RETRY_DELAY * (2 ** attempt) + random.uniform(0, 0.2),
+                            MAX_RETRY_DELAY
+                        )
+                        logger.warning(
+                            f"Reconnection attempt {attempt + 1}/{MAX_UPLOAD_RETRIES} failed: {e}. "
+                            f"Retrying in {delay:.2f}s..."
+                        )
+                        time.sleep(delay)
+                    else:
+                        logger.error(f"❌ Failed to reconnect to Qdrant after {MAX_UPLOAD_RETRIES} attempts")
+            
+            return False
 
     def _embed_worker(self):
         """Worker thread that computes embeddings and enqueues uploads."""
@@ -327,31 +470,89 @@ class QdrantHybridStore:
                     done_event = None
 
     def _upload_worker(self):
-        """Worker thread that processes upload queue."""
+        """Worker thread that processes upload queue with retry logic."""
         while not self._shutdown:
             try:
                 points, done_event = self._upload_queue.get(timeout=1.0)
                 if points is None:  # Shutdown signal
                     break
-                self._do_upload(points)
+                
+                # Try upload with retries
+                success = self._do_upload_with_retry(points)
+                if not success:
+                    logger.error(f"❌ Failed to upload batch of {len(points)} points after retries")
+                
                 done_event.set()
             except Empty:
                 continue
             except Exception as e:
                 logger.error(f"Upload worker error: {e}")
 
-    def _do_upload(self, points: list[PointStruct]):
-        """Actually upload points to Qdrant."""
+    def _do_upload_with_retry(self, points: list[PointStruct]) -> bool:
+        """
+        Upload points to Qdrant with retry logic and connection recovery.
+        
+        Returns:
+            True if upload succeeded, False if all retries exhausted
+        """
         for i in range(0, len(points), MAX_POINTS_PER_UPLOAD):
             chunk = points[i : i + MAX_POINTS_PER_UPLOAD]
-            try:
-                self.client.upsert(
-                    collection_name=self.collection,
-                    points=chunk,
-                    wait=False,  # Don't wait for indexing
-                )
-            except Exception as e:
-                logger.error(f"Qdrant upsert error: {e}")
+            
+            # Retry loop for this chunk
+            for attempt in range(MAX_UPLOAD_RETRIES):
+                try:
+                    # Periodic health check
+                    now = time.time()
+                    if now - self._last_health_check > CONNECTION_CHECK_INTERVAL:
+                        if not self._check_connection():
+                            if not self._reconnect():
+                                # Connection lost and reconnection failed
+                                if attempt < MAX_UPLOAD_RETRIES - 1:
+                                    continue  # Try again in retry loop
+                                else:
+                                    return False
+                        self._last_health_check = now
+                    
+                    # Attempt upload
+                    self.client.upsert(
+                        collection_name=self.collection,
+                        points=chunk,
+                        wait=False,  # Don't wait for indexing
+                    )
+                    # Success!
+                    break
+                    
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    is_transient = any(
+                        keyword in error_msg
+                        for keyword in ["connection", "timeout", "network", "unavailable", "refused"]
+                    )
+                    
+                    if is_transient and attempt < MAX_UPLOAD_RETRIES - 1:
+                        # Transient error - try to reconnect and retry
+                        delay = min(
+                            BASE_RETRY_DELAY * (2 ** attempt) + random.uniform(0, 0.2),
+                            MAX_RETRY_DELAY
+                        )
+                        logger.warning(
+                            f"⚠️ Qdrant upload failed (attempt {attempt + 1}/{MAX_UPLOAD_RETRIES}): {e}. "
+                            f"Retrying in {delay:.2f}s..."
+                        )
+                        time.sleep(delay)
+                        
+                        # Try to reconnect before retry
+                        if not self._check_connection():
+                            self._reconnect()
+                    else:
+                        # Non-transient error or final attempt
+                        logger.error(
+                            f"❌ Qdrant upload error (chunk {i // MAX_POINTS_PER_UPLOAD + 1}): {e}"
+                        )
+                        if attempt >= MAX_UPLOAD_RETRIES - 1:
+                            return False
+        
+        return True
 
     def compute_embeddings(
         self, chunks: list[ProcessedChunk]
@@ -408,58 +609,92 @@ class QdrantHybridStore:
             if len(text) > MAX_TEXT_LENGTH:
                 text = text[:MAX_TEXT_LENGTH] + "..."
 
+            # Prepare geographic coordinates in Qdrant format
+            geo_point = None
+            if article.article.latitude is not None and article.article.longitude is not None:
+                geo_point = {
+                    "lat": article.article.latitude,
+                    "lon": article.article.longitude,
+                }
+
+            payload = {
+                "page_id": chunk.page_id,
+                "article_id": chunk.page_id,
+                "title": chunk.title,
+                "text": text,
+                "section": chunk.section,
+                "url": chunk.url,
+                "chunk_id": chunk.chunk_id,
+                "word_count": chunk.word_count,
+                "is_first": chunk.is_first_chunk,
+                "source": "wikipedia",
+                "infobox_type": article.article.infobox.type if article.article.infobox else None,
+                "instance_of": article.article.instance_of,
+                # Person-related metadata
+                "birth_date": article.article.birth_date,
+                "death_date": article.article.death_date,
+                "location": article.article.location,
+                "occupation": article.article.occupation,
+                "nationality": article.article.nationality,
+                "spouse": article.article.spouse,
+                "children": list(article.article.children)[:10],
+                "parents": list(article.article.parents)[:10],
+                "education": list(article.article.education)[:10],
+                "employer": list(article.article.employer)[:10],
+                "awards": list(article.article.awards)[:10],
+                # Creative/Influence metadata
+                "author_of": list(article.article.author_of)[:10],
+                "genre": list(article.article.genre)[:10],
+                "influenced_by": list(article.article.influenced_by)[:10],
+                "influenced": list(article.article.influenced)[:10],
+                # Organization metadata
+                "founded_by": article.article.founded_by,
+                "founding_date": article.article.founding_date,
+                "headquarters": article.article.headquarters,
+                "industry": article.article.industry,
+                # Geographic metadata (existing)
+                "country": article.article.country,
+                "capital_of": article.article.capital_of,
+                "part_of": article.article.part_of,
+                # Temporal metadata
+                "predecessor": article.article.predecessor,
+                "successor": article.article.successor,
+                # Categories and entities
+                "categories": list(article.article.categories)[:20],
+                "entities": list(article.article.entities)[:20],
+                # =============================================================
+                # NEW: Enhanced metadata from SQL dumps
+                # =============================================================
+                # Wikidata integration
+                "wikidata_id": article.article.wikidata_id,
+                "has_wikidata": article.article.has_wikidata,
+                # Geographic coordinates (for geo queries)
+                "latitude": article.article.latitude,
+                "longitude": article.article.longitude,
+                "geo_type": article.article.geo_type,
+                "geo_country_code": article.article.geo_country_code,
+                "has_coordinates": article.article.has_coordinates,
+                # Page metadata
+                "is_redirect": article.article.is_redirect,
+                "redirect_target": article.article.redirect_target,
+                "is_disambiguation": article.article.is_disambiguation,
+                "page_length": article.article.page_length,
+                # Quality indicators
+                "quality_score": article.article.quality_score,
+                "has_infobox": article.article.has_infobox,
+            }
+
+            # Add geo point if available (Qdrant's geo format)
+            if geo_point:
+                payload["geo"] = geo_point
+
             point = PointStruct(
                 id=point_id,
                 vector={
                     "dense": dense_vectors[i].tolist(),
                     "sparse": SparseVector(indices=indices, values=values),
                 },
-                payload={
-                    "page_id": chunk.page_id,
-                    "article_id": chunk.page_id,
-                    "title": chunk.title,
-                    "text": text,
-                    "section": chunk.section,
-                    "url": chunk.url,
-                    "chunk_id": chunk.chunk_id,
-                    "word_count": chunk.word_count,
-                    "is_first": chunk.is_first_chunk,
-                    "source": "wikipedia",
-                    "infobox_type": article.article.infobox.type if article.article.infobox else None,
-                    "instance_of": article.article.instance_of,
-                    # Person-related metadata
-                    "birth_date": article.article.birth_date,
-                    "death_date": article.article.death_date,
-                    "location": article.article.location,
-                    "occupation": article.article.occupation,
-                    "nationality": article.article.nationality,
-                    "spouse": article.article.spouse,
-                    "children": list(article.article.children)[:10],
-                    "parents": list(article.article.parents)[:10],
-                    "education": list(article.article.education)[:10],
-                    "employer": list(article.article.employer)[:10],
-                    "awards": list(article.article.awards)[:10],
-                    # Creative/Influence metadata
-                    "author_of": list(article.article.author_of)[:10],
-                    "genre": list(article.article.genre)[:10],
-                    "influenced_by": list(article.article.influenced_by)[:10],
-                    "influenced": list(article.article.influenced)[:10],
-                    # Organization metadata
-                    "founded_by": article.article.founded_by,
-                    "founding_date": article.article.founding_date,
-                    "headquarters": article.article.headquarters,
-                    "industry": article.article.industry,
-                    # Geographic metadata
-                    "country": article.article.country,
-                    "capital_of": article.article.capital_of,
-                    "part_of": article.article.part_of,
-                    # Temporal metadata
-                    "predecessor": article.article.predecessor,
-                    "successor": article.article.successor,
-                    # Categories and entities
-                    "categories": list(article.article.categories)[:20],
-                    "entities": list(article.article.entities)[:20],
-                },
+                payload=payload,
             )
             points.append(point)
 
@@ -506,7 +741,7 @@ class QdrantHybridStore:
 
         # Build and upload points
         points = self.prepare_points(chunk_items, dense_vectors, sparse_vectors)
-        self._do_upload(points)
+        self._do_upload_with_retry(points)
 
         return len(points)
 
@@ -527,7 +762,7 @@ class QdrantHybridStore:
                     continue
                 dense_vectors, sparse_vectors = self.compute_embeddings(chunks)
                 points = self.prepare_points(chunk_items, dense_vectors, sparse_vectors)
-                self._do_upload(points)
+                self._do_upload_with_retry(points)
                 event.set()
             except Empty:
                 break
@@ -540,7 +775,7 @@ class QdrantHybridStore:
                     if event is not None:
                         event.set()
                     continue
-                self._do_upload(points)
+                self._do_upload_with_retry(points)
                 event.set()
             except Empty:
                 break

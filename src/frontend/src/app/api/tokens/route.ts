@@ -116,7 +116,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { text, context, mode } = await request.json();
+    const {
+      text,
+      context,
+      mode,
+      return_evidence: returnEvidence = false,
+    } = await request.json();
 
     if (typeof text !== "string") {
       return NextResponse.json(
@@ -126,10 +131,13 @@ export async function POST(request: Request) {
     }
 
     // Calculate tokens needed (1 token per 100 characters, 2 tokens for expert mode)
+    // Include evidence adds 1 token per 200 characters
     // We derive this from the actual strings, not a self-reported length
     const totalLength = text.length + (context?.length ?? 0);
     const baseTokensNeeded = Math.max(1, Math.ceil(totalLength / 100));
-    const tokensNeeded = mode === "expert" ? baseTokensNeeded * 2 : baseTokensNeeded;
+    const modeMultiplier = mode === "expert" ? 2 : 1;
+    const evidenceTokensNeeded = returnEvidence ? Math.ceil(totalLength / 200) : 0;
+    const tokensNeeded = baseTokensNeeded * modeMultiplier + evidenceTokensNeeded;
 
     // Atomic deduction using RPC to prevent race conditions and ensure non-negative balance
     const { data, error: rpcError } = await supabase.rpc(
