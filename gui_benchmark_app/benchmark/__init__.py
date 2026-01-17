@@ -55,7 +55,7 @@ from benchmark.comparison_config import (
     OpenAIConfig,
     VectorRAGConfig,
 )
-from benchmark.comparison_metrics import (
+from benchmark.comparison_benchmark import (
     ComparisonReport,
     EvaluatorMetrics,
     FActScoreMetrics,

@@ -20,7 +20,7 @@ from rich.panel import Panel
 from rich.rule import Rule
 
 from benchmark.comparison_config import ComparisonBenchmarkConfig
-from benchmark.comparison_metrics import EvaluatorMetrics
+from benchmark.comparison_benchmark import EvaluatorMetrics
 from benchmark.runner._benchmarks import (
     run_factscore_benchmark,
     run_hallucination_benchmark,
@@ -34,7 +34,7 @@ from benchmark.runner._types import LiveStats
 if TYPE_CHECKING:
     from rich.console import Console
 
-    from benchmark.comparison_metrics import ComparisonReport
+    from benchmark.comparison_benchmark import ComparisonReport
     from benchmark.evaluators import BaseEvaluator
 
 logger = logging.getLogger(__name__)

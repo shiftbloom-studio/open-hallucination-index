@@ -241,9 +241,9 @@ class TestComparisonMetrics:
     def test_metrics_import(self):
         """Test metrics can be imported."""
         try:
-            from benchmark.comparison_metrics import ComparisonMetrics
+            from benchmark.comparison_benchmark import ComparisonReport
 
-            assert ComparisonMetrics is not None
+            assert ComparisonReport is not None
         except ImportError:
             pytest.skip("Comparison metrics not available")
 

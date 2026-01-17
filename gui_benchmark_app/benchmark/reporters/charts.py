@@ -38,7 +38,7 @@ import numpy as np
 from benchmark.reporters.base import BaseReporter
 
 if TYPE_CHECKING:
-    from benchmark.comparison_metrics import ComparisonReport, EvaluatorMetrics
+    from benchmark.comparison_benchmark import ComparisonReport, EvaluatorMetrics
     from benchmark.models import BenchmarkReport, ResultMetric
 
 

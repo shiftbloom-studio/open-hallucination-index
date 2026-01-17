@@ -161,7 +161,7 @@ async def test_charts_reporter():
     try:
         import tempfile
 
-        from benchmark.comparison_metrics import (
+        from benchmark.comparison_benchmark import (
             ComparisonReport,
             EvaluatorMetrics,
             FActScoreMetrics,

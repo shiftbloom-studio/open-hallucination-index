@@ -32,7 +32,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from benchmark.comparison_config import ComparisonBenchmarkConfig
-from benchmark.comparison_metrics import ComparisonReport
+from benchmark.comparison_benchmark import ComparisonReport
 from benchmark.evaluators import BaseEvaluator, get_evaluator
 from benchmark.runner._cache import CacheManager
 from benchmark.runner._modes import (

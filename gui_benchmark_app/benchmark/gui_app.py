@@ -45,7 +45,7 @@ from PySide6.QtWidgets import (
 )
 
 from benchmark.comparison_config import ComparisonBenchmarkConfig
-from benchmark.comparison_metrics import ComparisonReport
+from benchmark.comparison_benchmark import ComparisonReport
 from benchmark.evaluators import BaseEvaluator, get_evaluator
 from benchmark.reporters.charts import ChartsReporter
 from benchmark.runner._modes import benchmark_single_evaluator
