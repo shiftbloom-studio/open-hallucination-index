@@ -32,10 +32,18 @@ services:
     ports:
       - "127.0.0.1:6333:6333" # localhost only for dev
       - "127.0.0.1:6334:6334" # gRPC for ingestion
+    environment:
+      - QDRANT__STORAGE__STRICT_MODE=false
+      - QDRANT__SERVICE__ENABLE_TLS=true
+      - QDRANT__TLS__CERT=/qdrant/tls/origin.pem
+      - QDRANT__TLS__KEY=/qdrant/tls/origin.key
     volumes:
-      - ../data/data/qdrant:/qdrant/storage
+      - qdrant-data:/qdrant/storage
+      - ../nginx/certs:/qdrant/tls:ro
     networks:
       - ohi-net
+
+
 
   # 3. Cache (Redis)
   redis:
@@ -184,6 +192,10 @@ services:
       QDRANT_HOST: "qdrant"
       QDRANT_COLLECTION: "wikipedia_hybrid"
       QDRANT_VECTOR_SIZE: "384"
+      QDRANT_USE_GRPC: "true"
+      QDRANT_HTTPS: "true"
+      QDRANT_TLS_CA_CERT: "/etc/qdrant-certs/origin.pem"
+
       
       # Redis cache (follows env)
       REDIS_ENABLED: "${REDIS_ENABLED}"
@@ -240,7 +252,9 @@ services:
       start_period: 40s
     volumes:
       - redis-socket:/run/redis
+      - ../nginx/certs:/etc/qdrant-certs:ro
     restart: unless-stopped
+
 
   # 8. Nginx Reverse Proxy with SSL
   nginx:
@@ -321,3 +335,4 @@ networks:
 
 volumes:
   redis-socket:
+  qdrant-data:

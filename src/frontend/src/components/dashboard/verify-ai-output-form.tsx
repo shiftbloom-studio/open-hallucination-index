@@ -242,7 +242,7 @@ export default function VerifyAIOutputForm({ userTokens, onTokensUpdated }: Veri
               <Label htmlFor="ai-text">AI Output Text</Label>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <FileText className="h-4 w-4" />
-                <span>{textLength.toLocaleString()} characters</span>
+                <span>{text.length.toLocaleString()} characters</span>
                 <span className="text-muted-foreground/50">•</span>
                 <Coins className="h-4 w-4" />
                 <span className={cn(

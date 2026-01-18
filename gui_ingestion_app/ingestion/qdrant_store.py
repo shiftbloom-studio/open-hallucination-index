@@ -30,11 +30,13 @@ from qdrant_client.models import (
     FloatIndexParams,
     FloatIndexType,
     GeoIndexParams,
+    GeoIndexType,
     HnswConfigDiff,
     IntegerIndexParams,
     IntegerIndexType,
     KeywordIndexParams,
     KeywordIndexType,
+
     Modifier,
     OptimizersConfigDiff,
     PointStruct,
@@ -96,6 +98,8 @@ class QdrantHybridStore:
         embedding_workers: int = 2,
         prefer_grpc: bool = True,
         embedding_device: str = "auto",
+        https: bool = False,
+        tls_ca_cert: str | None = None,
     ):
         self.collection = collection
         self.embedding_batch_size = embedding_batch_size
@@ -107,11 +111,24 @@ class QdrantHybridStore:
         self._prefer_grpc = prefer_grpc
         self._connection_lock = threading.Lock()
         self._last_health_check = 0.0
+        self._https = https
+        self._tls_ca_cert = tls_ca_cert
+
 
         # Initialize Qdrant client (sync for uploads - more stable)
         # Try gRPC first if preferred, fall back to HTTP if connection fails
         client: QdrantClient | None = None
         
+        grpc_options = None
+        http_verify = None
+        if self._tls_ca_cert:
+            try:
+                with open(self._tls_ca_cert, "rb") as cert_file:
+                    grpc_options = {"root_certificates": cert_file.read()}
+                http_verify = self._tls_ca_cert
+            except OSError as exc:
+                logger.warning(f"⚠️ Failed to read Qdrant TLS CA cert: {exc}")
+
         if prefer_grpc and grpc_port is not None:
             try:
                 # Try gRPC connection first
@@ -121,7 +138,11 @@ class QdrantHybridStore:
                     grpc_port=grpc_port,
                     timeout=30,
                     prefer_grpc=True,
+                    https=self._https,
+                    grpc_options=grpc_options,
+                    verify=http_verify,
                 )
+
                 # Test connection
                 grpc_client.get_collections()
                 client = grpc_client
@@ -136,7 +157,11 @@ class QdrantHybridStore:
                 port=port,
                 timeout=120,
                 prefer_grpc=False,
+                https=self._https,
+                grpc_options=grpc_options,
+                verify=http_verify,
             )
+
             logger.info(f"✅ Connected to Qdrant via HTTP (port {port})")
         
         self.client: QdrantClient = client
@@ -332,7 +357,8 @@ class QdrantHybridStore:
                 self.client.create_payload_index(
                     collection_name=self.collection,
                     field_name="geo",
-                    field_schema=GeoIndexParams(),
+                field_schema=GeoIndexParams(type=GeoIndexType.GEO),
+
                 )
                 logger.info("✅ Geographic index created")
             except Exception as e:

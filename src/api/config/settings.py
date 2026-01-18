@@ -87,6 +87,9 @@ class QdrantSettings(BaseSettings):
         description="Embedding dimension (384 for all-MiniLM-L12-v2)",
     )
     use_grpc: bool = Field(default=False)
+    https: bool = Field(default=False)
+    tls_ca_cert: str | None = Field(default=None)
+
 
 
 class RedisSettings(BaseSettings):

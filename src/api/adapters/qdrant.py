@@ -123,12 +123,27 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             if self._settings.use_grpc:
                 client_kwargs["grpc_port"] = self._settings.grpc_port
 
+            grpc_options: dict[str, bytes] | None = None
+            http_verify: str | bool | None = None
+            if self._settings.tls_ca_cert:
+                try:
+                    with open(self._settings.tls_ca_cert, "rb") as cert_file:
+                        grpc_options = {"root_certificates": cert_file.read()}
+                    http_verify = self._settings.tls_ca_cert
+                except OSError as exc:
+                    logger.warning(f"Failed to read Qdrant TLS CA cert: {exc}")
+
             # Force IPv4 by using a custom httpx transport
             ipv4_transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
-            client_kwargs["https"] = False
+            client_kwargs["https"] = self._settings.https
+            if grpc_options is not None:
+                client_kwargs["grpc_options"] = grpc_options
+            if http_verify is not None:
+                client_kwargs["verify"] = http_verify
             self._client = AsyncQdrantClient(
                 **client_kwargs,  # type: ignore[arg-type]
             )
+
             # Override the internal httpx client to use IPv4
             if hasattr(self._client, "_client") and self._client._client is not None:
                 self._client._client._transport = ipv4_transport

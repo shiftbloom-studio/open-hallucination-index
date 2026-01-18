@@ -58,8 +58,19 @@ def parse_args() -> argparse.Namespace:
         "--qdrant-grpc-port", type=int, default=6334, help="Qdrant gRPC port"
     )
     conn_group.add_argument(
+        "--qdrant-https",
+        action="store_true",
+        help="Use HTTPS/TLS when connecting to Qdrant",
+    )
+    conn_group.add_argument(
+        "--qdrant-tls-ca-cert",
+        default=None,
+        help="Path to Qdrant TLS CA certificate",
+    )
+    conn_group.add_argument(
         "--neo4j-uri", default="bolt://localhost:7687", help="Neo4j Bolt URI"
     )
+
     conn_group.add_argument(
         "--neo4j-user", default="neo4j", help="Neo4j username"
     )
@@ -206,7 +217,10 @@ def main():
         qdrant_host=args.qdrant_host,
         qdrant_port=args.qdrant_port,
         qdrant_grpc_port=args.qdrant_grpc_port,
+        qdrant_https=args.qdrant_https,
+        qdrant_tls_ca_cert=args.qdrant_tls_ca_cert,
         neo4j_uri=args.neo4j_uri,
+
         neo4j_user=args.neo4j_user,
         neo4j_password=args.neo4j_pass,
         neo4j_database=args.neo4j_db,

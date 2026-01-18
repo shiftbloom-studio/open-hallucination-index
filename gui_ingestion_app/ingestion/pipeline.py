@@ -143,7 +143,10 @@ class IngestionPipeline:
             upload_workers=config.upload_workers,
             embedding_workers=config.embedding_workers,
             embedding_device=config.embedding_device,
+            https=config.qdrant_https,
+            tls_ca_cert=config.qdrant_tls_ca_cert,
         )
+
 
         self.neo4j = Neo4jGraphStore(
             uri=config.neo4j_uri,

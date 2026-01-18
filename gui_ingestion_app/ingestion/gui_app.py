@@ -124,7 +124,10 @@ class IngestionWorker(QThread):
                 host=self._config.qdrant_host,
                 port=self._config.qdrant_port,
                 timeout=10,
+                https=self._config.qdrant_https,
+                verify=self._config.qdrant_tls_ca_cert,
             )
+
             qdrant.get_collections()
             self.log_message.emit("✅ Qdrant connection OK")
         except Exception as e:
@@ -220,7 +223,10 @@ class IngestionWindow(QMainWindow):
         self.qdrant_grpc_port = QSpinBox()
         self.qdrant_grpc_port.setRange(1, 65535)
         self.qdrant_grpc_port.setValue(6334)
+        self.qdrant_https = QCheckBox("Use TLS")
+        self.qdrant_tls_ca_cert = QLineEdit("")
         self.qdrant_collection = QLineEdit("wikipedia_hybrid")
+
 
         self.neo4j_uri = QLineEdit("bolt://localhost:7687")
         self.neo4j_user = QLineEdit("neo4j")
@@ -248,7 +254,10 @@ class IngestionWindow(QMainWindow):
         form.addRow("Qdrant host", self.qdrant_host)
         form.addRow("Qdrant port", self.qdrant_port)
         form.addRow("Qdrant gRPC", self.qdrant_grpc_port)
+        form.addRow("Qdrant TLS", self.qdrant_https)
+        form.addRow("Qdrant TLS CA", self.qdrant_tls_ca_cert)
         form.addRow("Qdrant collection", self.qdrant_collection)
+
         form.addRow("Neo4j URI", self.neo4j_uri)
         form.addRow("Neo4j user", self.neo4j_user)
         form.addRow("Neo4j password", self.neo4j_pass)
@@ -343,7 +352,10 @@ class IngestionWindow(QMainWindow):
             qdrant_host=self.qdrant_host.text().strip(),
             qdrant_port=self.qdrant_port.value(),
             qdrant_grpc_port=self.qdrant_grpc_port.value(),
+            qdrant_https=self.qdrant_https.isChecked(),
+            qdrant_tls_ca_cert=self.qdrant_tls_ca_cert.text().strip() or None,
             qdrant_collection=self.qdrant_collection.text().strip(),
+
             neo4j_uri=self.neo4j_uri.text().strip(),
             neo4j_user=self.neo4j_user.text().strip(),
             neo4j_password=self.neo4j_pass.text(),

@@ -25,12 +25,11 @@ class TestWikiArticle:
             title="Test Article",
             text="Test content",
             url="https://en.wikipedia.org/wiki/Test_Article",
-            revision_id=456,
         )
         assert article.id == 123
         assert article.title == "Test Article"
         assert article.text == "Test content"
-        assert article.revision_id == 456
+
 
 
 class TestWikiSection:
@@ -42,25 +41,26 @@ class TestWikiSection:
             title="Introduction",
             level=2,
             content="This is the introduction.",
-            subsections=[],
+            start_pos=0,
+            end_pos=24,
         )
         assert section.title == "Introduction"
         assert section.level == 2
-        assert len(section.subsections) == 0
+        assert section.start_pos == 0
 
-    def test_nested_sections(self):
-        """Test nested section structure."""
-        subsection = WikiSection(
-            title="Subsection", level=3, content="Sub content", subsections=[]
-        )
-        parent = WikiSection(
-            title="Parent",
+
+    def test_section_positions(self):
+        """Test section position metadata."""
+        section = WikiSection(
+            title="Body",
             level=2,
-            content="Parent content",
-            subsections=[subsection],
+            content="Body content",
+            start_pos=10,
+            end_pos=22,
         )
-        assert len(parent.subsections) == 1
-        assert parent.subsections[0].title == "Subsection"
+        assert section.start_pos == 10
+        assert section.end_pos == 22
+
 
 
 class TestWikiInfobox:
@@ -70,10 +70,11 @@ class TestWikiInfobox:
         """Test creating an infobox."""
         infobox = WikiInfobox(
             type="programming language",
-            data={"name": "Python", "paradigm": "multi-paradigm"},
+            properties={"name": "Python", "paradigm": "multi-paradigm"},
         )
         assert infobox.type == "programming language"
-        assert infobox.data["name"] == "Python"
+        assert infobox.properties["name"] == "Python"
+
 
 
 class TestProcessedChunk:
@@ -84,13 +85,18 @@ class TestProcessedChunk:
         chunk = ProcessedChunk(
             chunk_id="chunk_123_0",
             text="This is a chunk of text.",
-            section_title="Introduction",
-            section_level=2,
-            bm25_tokens=["chunk", "text"],
-            bm25_weights=[0.5, 0.3],
+            contextualized_text="Title: This is a chunk of text.",
+            section="Introduction",
+            start_char=0,
+            end_char=27,
+            page_id=1,
+            title="Test Article",
+            url="https://example.com",
+            word_count=6,
         )
         assert chunk.chunk_id == "chunk_123_0"
-        assert "chunk" in chunk.bm25_tokens
+        assert chunk.word_count == 6
+
 
 
 class TestProcessedArticle:
@@ -101,22 +107,29 @@ class TestProcessedArticle:
         chunk = ProcessedChunk(
             chunk_id="chunk_1_0",
             text="Test chunk",
-            section_title="Test",
-            section_level=2,
-            bm25_tokens=["test"],
-            bm25_weights=[1.0],
-        )
-        article = ProcessedArticle(
-            article_id=1,
+            contextualized_text="Title: Test chunk",
+            section="Test",
+            start_char=0,
+            end_char=10,
+            page_id=1,
             title="Test",
             url="https://example.com",
-            chunks=[chunk],
-            sections=[],
-            infoboxes=[],
-            metadata={},
+            word_count=2,
         )
-        assert article.article_id == 1
-        assert len(article.chunks) == 1
+        article = WikiArticle(
+            id=1,
+            title="Test",
+            text="Test chunk",
+            url="https://example.com",
+        )
+        processed = ProcessedArticle(
+            article=article,
+            chunks=[chunk],
+            clean_text="Test chunk",
+        )
+        assert processed.article.id == 1
+        assert len(processed.chunks) == 1
+
 
 
 class TestIngestionConfig:
@@ -128,13 +141,16 @@ class TestIngestionConfig:
             neo4j_uri="bolt://localhost:7687",
             neo4j_user="neo4j",
             neo4j_password="password",
-            qdrant_url="http://localhost:6333",
+            qdrant_host="localhost",
+            qdrant_port=6333,
             qdrant_collection="test",
-            download_dir=tmp_path / "downloads",
-            checkpoint_file=tmp_path / "checkpoint.json",
+            download_dir=str(tmp_path / "downloads"),
+            checkpoint_file=str(tmp_path / "checkpoint.json"),
         )
         assert config.neo4j_uri == "bolt://localhost:7687"
         assert config.qdrant_collection == "test"
+
+
 
     def test_config_defaults(self, tmp_path: Path):
         """Test config default values."""
@@ -142,12 +158,15 @@ class TestIngestionConfig:
             neo4j_uri="bolt://localhost:7687",
             neo4j_user="neo4j",
             neo4j_password="password",
-            qdrant_url="http://localhost:6333",
+            qdrant_host="localhost",
+            qdrant_port=6333,
             qdrant_collection="test",
-            download_dir=tmp_path / "downloads",
-            checkpoint_file=tmp_path / "checkpoint.json",
+            download_dir=str(tmp_path / "downloads"),
+            checkpoint_file=str(tmp_path / "checkpoint.json"),
         )
+
         # Check defaults
+
         assert config.embedding_batch_size > 0
         assert config.chunk_size > 0
         assert config.preprocess_workers > 0
@@ -161,7 +180,8 @@ class TestPipelineStats:
         stats = PipelineStats()
         assert stats.articles_processed == 0
         assert stats.chunks_created == 0
-        assert stats.articles_uploaded == 0
+        assert stats.errors == 0
+
 
     def test_stats_update(self):
         """Test updating stats."""

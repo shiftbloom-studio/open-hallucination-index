@@ -29,7 +29,10 @@ class IngestionConfig:
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     qdrant_grpc_port: int = 6334
+    qdrant_https: bool = False
+    qdrant_tls_ca_cert: str | None = None
     neo4j_uri: str = "bolt://localhost:7687"
+
     neo4j_user: str = "neo4j"
     neo4j_password: str = "password123"
     neo4j_database: str = "neo4j"
