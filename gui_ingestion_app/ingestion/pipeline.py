@@ -86,6 +86,7 @@ class BatchResult:
     neo4j_event: threading.Event
     batch_data: list[ProcessedArticle]  # Keep data for retry if needed
     article_ids: list[int]  # For checkpoint recording
+    part_index: int | None = None  # For mid-file checkpoint tracking
     upload_attempts: int = 0
     max_attempts: int = 3
     checkpoint_recorded: bool = False
@@ -201,6 +202,37 @@ class IngestionPipeline:
             self.checkpoint.load()
 
         logger.info(f"📍 {self.checkpoint.get_resume_info()}")
+
+    def recover_checkpoint_from_databases(self) -> int:
+        """
+        Recover checkpoint by scanning existing data in Qdrant and Neo4j.
+        
+        This is useful when the checkpoint file is lost but data exists
+        in the databases. It will scan both databases and merge found
+        article IDs into the checkpoint.
+        
+        Returns:
+            Number of article IDs recovered
+        """
+        logger.info("🔄 Attempting to recover checkpoint from databases...")
+        
+        def qdrant_fetch() -> set[int]:
+            return self.qdrant.get_existing_article_ids()
+        
+        def neo4j_fetch() -> set[int]:
+            return self.neo4j.get_existing_article_ids()
+        
+        recovered = self.checkpoint.recover_from_database(
+            qdrant_fetch_fn=qdrant_fetch,
+            neo4j_fetch_fn=neo4j_fetch,
+        )
+        
+        if recovered > 0:
+            logger.info(f"✅ Recovered {recovered:,} article IDs from databases")
+        else:
+            logger.info("📍 No existing articles found in databases")
+        
+        return recovered
 
     def run(
         self,
@@ -371,6 +403,8 @@ class IngestionPipeline:
 
         This method is designed to run in parallel with other dump workers.
         All shared state access is thread-safe.
+        
+        Now supports mid-file recovery by tracking progress within BZ2 files.
         """
         if not part.download_complete or not part.local_path:
             return
@@ -379,6 +413,13 @@ class IngestionPipeline:
             # Get snapshot of processed IDs for skip checking
             with self._checkpoint_lock:
                 skip_ids = set(self.checkpoint.processed_ids)
+                # Check for mid-file resume position
+                resume_from_id = self.checkpoint.get_part_resume_position(part.index)
+            
+            if resume_from_id:
+                logger.info(
+                    f"📍 Resuming part {part.index} from article ID {resume_from_id}"
+                )
 
             article_batch: list[WikiArticle] = []
 
@@ -394,7 +435,7 @@ class IngestionPipeline:
                 # Process batch when full
                 if len(article_batch) >= self.config.batch_size:
                     self._process_article_batch(
-                        article_batch, limit, pbar, progress_callback
+                        article_batch, limit, pbar, progress_callback, part.index
                     )
                     article_batch = []
 
@@ -405,7 +446,7 @@ class IngestionPipeline:
             # Process remaining articles in partial batch
             if article_batch and not self._stop_event.is_set():
                 self._process_article_batch(
-                    article_batch, limit, pbar, progress_callback
+                    article_batch, limit, pbar, progress_callback, part.index
                 )
 
             # Mark part complete (thread-safe)
@@ -431,6 +472,9 @@ class IngestionPipeline:
 
         except Exception as e:
             logger.error(f"Error processing part {part.index}: {e}")
+            # Force save checkpoint on error to preserve progress
+            with self._checkpoint_lock:
+                self.checkpoint.force_save()
             with self._stats_lock:
                 self.stats.errors += 1
             raise  # Re-raise so future.result() captures it
@@ -441,6 +485,7 @@ class IngestionPipeline:
         limit: int | None,
         pbar: tqdm,
         progress_callback: Callable[[PipelineStats], None] | None,
+        part_index: int | None = None,
     ) -> None:
         """
         Preprocess a batch of articles and enqueue for upload.
@@ -457,7 +502,7 @@ class IngestionPipeline:
         upload_batch = [pa for pa in processed if pa.chunks]
         if upload_batch:
             batch_id = next(self._batch_id_counter)
-            self._process_batch(upload_batch, batch_id)
+            self._process_batch(upload_batch, batch_id, part_index)
 
         # Update stats and checkpoint (thread-safe)
         with self._stats_lock:
@@ -484,7 +529,9 @@ class IngestionPipeline:
         
         # Note: Checkpoint recording now happens in _process_batch after upload verification
 
-    def _process_batch(self, batch: list[ProcessedArticle], batch_id: int) -> None:
+    def _process_batch(
+        self, batch: list[ProcessedArticle], batch_id: int, part_index: int | None = None
+    ) -> None:
         """Process a batch: compute embeddings and upload."""
         if not batch:
             return
@@ -507,6 +554,7 @@ class IngestionPipeline:
             neo4j_event=neo4j_event,
             batch_data=batch,  # Keep data for potential retry
             article_ids=article_ids,
+            part_index=part_index,  # Track which part this batch belongs to
         )
         self._pending_uploads.append(result)
 
@@ -519,7 +567,7 @@ class IngestionPipeline:
         for r in self._pending_uploads:
             if r.qdrant_event.is_set() and r.neo4j_event.is_set() and not r.checkpoint_recorded:
                 with self._checkpoint_lock:
-                    self.checkpoint.record_batch(r.article_ids, r.chunk_count)
+                    self.checkpoint.record_batch(r.article_ids, r.chunk_count, r.part_index)
                 r.checkpoint_recorded = True
                 completed.append(r)
 
@@ -626,7 +674,9 @@ class IngestionPipeline:
             with self._checkpoint_lock:
                 for result in successful_batches:
                     if not result.checkpoint_recorded:
-                        self.checkpoint.record_batch(result.article_ids, result.chunk_count)
+                        self.checkpoint.record_batch(
+                            result.article_ids, result.chunk_count, result.part_index
+                        )
                         result.checkpoint_recorded = True
             
             logger.info(f"💾 Recorded {len(successful_batches)} successful batches in checkpoint")
