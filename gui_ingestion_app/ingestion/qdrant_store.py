@@ -10,17 +10,19 @@ Features:
 - Geographic coordinate support for location-based queries
 - Quality score indexing for evidence ranking
 - Wikidata ID indexing for structured knowledge linking
+- Segfault-resilient batch processing with adaptive batch sizes
 """
 
 from __future__ import annotations
 
+import gc
 import logging
 import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, Queue
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 import torch
@@ -60,13 +62,20 @@ logger = logging.getLogger("ingestion.qdrant")
 # Constants
 DENSE_VECTOR_SIZE = 384
 MAX_TEXT_LENGTH = 4000
-MAX_POINTS_PER_UPLOAD = 200
+# Reduced from 200 to prevent Qdrant memory issues that can cause segfaults
+MAX_POINTS_PER_UPLOAD = 100
+# Minimum batch size for adaptive sizing
+MIN_POINTS_PER_UPLOAD = 10
 
 # Retry settings for upload resilience
 MAX_UPLOAD_RETRIES = 5
 BASE_RETRY_DELAY = 0.5  # seconds
 MAX_RETRY_DELAY = 8.0  # seconds
 CONNECTION_CHECK_INTERVAL = 30.0  # seconds
+
+# Memory safety settings
+MEMORY_CHECK_INTERVAL = 10  # Check memory every N batches
+GC_INTERVAL = 50  # Force garbage collection every N batches
 
 
 class QdrantHybridStore:
@@ -79,6 +88,8 @@ class QdrantHybridStore:
     - Full-text payload index for fallback search
     - Non-blocking upload queue for pipeline efficiency
     - Multi-GPU support for embedding computation
+    - Adaptive batch sizing to prevent segfaults
+    - Memory-aware processing with automatic GC
 
     Architecture:
     - Embedding thread: Computes embeddings from queue
@@ -103,6 +114,16 @@ class QdrantHybridStore:
     ):
         self.collection = collection
         self.embedding_batch_size = embedding_batch_size
+        
+        # Adaptive batch size tracking - start conservative and adjust based on success/failure
+        self._current_batch_size = MAX_POINTS_PER_UPLOAD
+        self._consecutive_failures = 0
+        self._batch_count = 0
+        
+        # Normalize localhost to 127.0.0.1 to avoid IPv6 resolution issues
+        # gRPC on Windows tries IPv6 first (::1) which fails when Docker binds to IPv4 only
+        if host.lower() == "localhost":
+            host = "127.0.0.1"
         
         # Store connection parameters for reconnection
         self._host = host
@@ -437,7 +458,7 @@ class QdrantHybridStore:
                             )
                             new_client.get_collections()
                             self.client = new_client
-                            logger.info(f"✅ Reconnected to Qdrant via gRPC")
+                            logger.info("✅ Reconnected to Qdrant via gRPC")
                             self._last_health_check = time.time()
                             return True
                         except Exception:
@@ -452,7 +473,7 @@ class QdrantHybridStore:
                     )
                     new_client.get_collections()
                     self.client = new_client
-                    logger.info(f"✅ Reconnected to Qdrant via HTTP")
+                    logger.info("✅ Reconnected to Qdrant via HTTP")
                     self._last_health_check = time.time()
                     return True
                     
@@ -524,13 +545,30 @@ class QdrantHybridStore:
 
     def _do_upload_with_retry(self, points: list[PointStruct]) -> bool:
         """
-        Upload points to Qdrant with retry logic and connection recovery.
+        Upload points to Qdrant with retry logic, connection recovery, and adaptive batch sizing.
+        
+        Features:
+        - Adaptive batch sizing that reduces on failures to prevent segfaults
+        - Automatic batch size recovery after successful uploads
+        - Memory management with periodic garbage collection
+        - Exponential backoff on transient errors
         
         Returns:
             True if upload succeeded, False if all retries exhausted
         """
-        for i in range(0, len(points), MAX_POINTS_PER_UPLOAD):
-            chunk = points[i : i + MAX_POINTS_PER_UPLOAD]
+        self._batch_count += 1
+        
+        # Periodic garbage collection to prevent memory buildup
+        if self._batch_count % GC_INTERVAL == 0:
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        
+        # Use adaptive batch size
+        batch_size = self._current_batch_size
+        
+        for i in range(0, len(points), batch_size):
+            chunk = points[i : i + batch_size]
             
             # Retry loop for this chunk
             for attempt in range(MAX_UPLOAD_RETRIES):
@@ -544,6 +582,7 @@ class QdrantHybridStore:
                                 if attempt < MAX_UPLOAD_RETRIES - 1:
                                     continue  # Try again in retry loop
                                 else:
+                                    self._record_failure()
                                     return False
                         self._last_health_check = now
                     
@@ -553,7 +592,9 @@ class QdrantHybridStore:
                         points=chunk,
                         wait=False,  # Don't wait for indexing
                     )
-                    # Success!
+                    
+                    # Success! Record and potentially increase batch size
+                    self._record_success()
                     break
                     
                 except Exception as e:
@@ -563,7 +604,20 @@ class QdrantHybridStore:
                         for keyword in ["connection", "timeout", "network", "unavailable", "refused"]
                     )
                     
-                    if is_transient and attempt < MAX_UPLOAD_RETRIES - 1:
+                    # Check for memory-related errors that might precede segfaults
+                    is_memory_issue = any(
+                        keyword in error_msg
+                        for keyword in ["memory", "oom", "allocation", "resource", "exhausted"]
+                    )
+                    
+                    if is_memory_issue:
+                        # Reduce batch size more aggressively on memory issues
+                        self._reduce_batch_size(aggressive=True)
+                        logger.warning(
+                            f"⚠️ Memory issue detected, reducing batch size to {self._current_batch_size}"
+                        )
+                    
+                    if (is_transient or is_memory_issue) and attempt < MAX_UPLOAD_RETRIES - 1:
                         # Transient error - try to reconnect and retry
                         delay = min(
                             BASE_RETRY_DELAY * (2 ** attempt) + random.uniform(0, 0.2),
@@ -578,15 +632,71 @@ class QdrantHybridStore:
                         # Try to reconnect before retry
                         if not self._check_connection():
                             self._reconnect()
+                        
+                        # If memory issue, try with smaller batch
+                        if is_memory_issue and len(chunk) > MIN_POINTS_PER_UPLOAD:
+                            # Split the chunk and try smaller batches
+                            half = len(chunk) // 2
+                            logger.info(f"Splitting batch: {len(chunk)} -> {half} + {len(chunk) - half}")
+                            success1 = self._upload_small_batch(chunk[:half])
+                            success2 = self._upload_small_batch(chunk[half:])
+                            if success1 and success2:
+                                break  # Success with smaller batches
                     else:
                         # Non-transient error or final attempt
                         logger.error(
-                            f"❌ Qdrant upload error (chunk {i // MAX_POINTS_PER_UPLOAD + 1}): {e}"
+                            f"❌ Qdrant upload error (chunk {i // batch_size + 1}): {e}"
                         )
+                        self._record_failure()
                         if attempt >= MAX_UPLOAD_RETRIES - 1:
                             return False
         
         return True
+
+    def _upload_small_batch(self, points: list[PointStruct]) -> bool:
+        """Upload a small batch with minimal retries - used for recovery after larger batch failures."""
+        try:
+            self.client.upsert(
+                collection_name=self.collection,
+                points=points,
+                wait=True,  # Wait for this one to ensure it completes
+            )
+            return True
+        except Exception as e:
+            logger.error(f"❌ Small batch upload failed: {e}")
+            return False
+
+    def _record_success(self) -> None:
+        """Record successful upload and potentially increase batch size."""
+        self._consecutive_failures = 0
+        # Gradually increase batch size after consecutive successes
+        if self._current_batch_size < MAX_POINTS_PER_UPLOAD:
+            # Increase by 10% but cap at max
+            new_size = min(
+                int(self._current_batch_size * 1.1),
+                MAX_POINTS_PER_UPLOAD
+            )
+            if new_size > self._current_batch_size:
+                self._current_batch_size = new_size
+                logger.debug(f"Increased batch size to {self._current_batch_size}")
+
+    def _record_failure(self) -> None:
+        """Record failed upload and reduce batch size."""
+        self._consecutive_failures += 1
+        self._reduce_batch_size(aggressive=self._consecutive_failures >= 2)
+
+    def _reduce_batch_size(self, aggressive: bool = False) -> None:
+        """Reduce batch size to prevent future failures."""
+        if aggressive:
+            # Halve the batch size on aggressive reduction
+            new_size = max(self._current_batch_size // 2, MIN_POINTS_PER_UPLOAD)
+        else:
+            # Reduce by 25%
+            new_size = max(int(self._current_batch_size * 0.75), MIN_POINTS_PER_UPLOAD)
+        
+        if new_size < self._current_batch_size:
+            self._current_batch_size = new_size
+            logger.info(f"Reduced batch size to {self._current_batch_size}")
 
     def compute_embeddings(
         self, chunks: list[ProcessedChunk]
@@ -855,3 +965,64 @@ class QdrantHybridStore:
         except Exception as e:
             logger.error(f"Failed to get collection info: {e}")
             return {}
+
+    def get_existing_article_ids(
+        self,
+        limit: int = 100000,
+        batch_size: int = 1000,
+        progress_callback: Callable[[int], None] | None = None,
+    ) -> set[int]:
+        """
+        Retrieve all existing article IDs from the collection for checkpoint recovery.
+        
+        This is used when the checkpoint file is lost but data exists in Qdrant.
+        It scrolls through all points and extracts unique article_id values.
+        
+        Args:
+            limit: Maximum number of unique article IDs to retrieve
+            batch_size: Number of points to fetch per scroll request
+            progress_callback: Optional callback called with count of IDs found
+            
+        Returns:
+            Set of article IDs that exist in the collection
+        """
+        article_ids: set[int] = set()
+        offset = None
+        
+        try:
+            logger.info("🔍 Scanning Qdrant collection for existing article IDs...")
+            
+            while len(article_ids) < limit:
+                # Scroll through points
+                result = self.client.scroll(
+                    collection_name=self.collection,
+                    offset=offset,
+                    limit=batch_size,
+                    with_payload=["article_id"],  # Only fetch article_id to minimize transfer
+                    with_vectors=False,
+                )
+                
+                points, next_offset = result
+                
+                if not points:
+                    break
+                
+                # Extract article IDs from payloads
+                for point in points:
+                    if point.payload and "article_id" in point.payload:
+                        article_ids.add(int(point.payload["article_id"]))
+                
+                if progress_callback:
+                    progress_callback(len(article_ids))
+                
+                # Check if we've reached the end
+                if next_offset is None:
+                    break
+                offset = next_offset
+            
+            logger.info(f"✅ Found {len(article_ids):,} existing article IDs in Qdrant")
+            return article_ids
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to scan for existing article IDs: {e}")
+            return set()

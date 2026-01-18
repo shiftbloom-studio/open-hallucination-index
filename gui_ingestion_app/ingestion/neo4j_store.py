@@ -21,6 +21,7 @@ import random
 import threading
 import time
 from queue import Empty, Queue
+from typing import Callable
 
 from neo4j import GraphDatabase
 from neo4j.exceptions import ConfigurationError, TransientError
@@ -302,7 +303,7 @@ class Neo4jGraphStore:
                     with self.driver.session(database=self.database) as session:
                         session.run("RETURN 1")
                     
-                    logger.info(f"✅ Reconnected to Neo4j")
+                    logger.info("✅ Reconnected to Neo4j")
                     self._last_health_check = time.time()
                     return True
                     
@@ -1040,3 +1041,63 @@ class Neo4jGraphStore:
         except Exception as e:
             logger.error(f"Failed to get stats: {e}")
         return {}
+
+    def get_existing_article_ids(
+        self,
+        limit: int = 100000,
+        batch_size: int = 5000,
+        progress_callback: Callable[[int], None] | None = None,
+    ) -> set[int]:
+        """
+        Retrieve all existing article IDs from Neo4j for checkpoint recovery.
+        
+        This is used when the checkpoint file is lost but data exists in Neo4j.
+        
+        Args:
+            limit: Maximum number of article IDs to retrieve
+            batch_size: Number of records to fetch per query
+            progress_callback: Optional callback called with count of IDs found
+            
+        Returns:
+            Set of article IDs that exist in Neo4j
+        """
+        article_ids: set[int] = set()
+        
+        try:
+            logger.info("🔍 Scanning Neo4j for existing article IDs...")
+            
+            with self.driver.session(database=self.database) as session:
+                # Use SKIP/LIMIT pagination for large datasets
+                skip = 0
+                while len(article_ids) < limit:
+                    result = session.run(
+                        """
+                        MATCH (a:Article)
+                        WHERE a.article_id IS NOT NULL
+                        RETURN a.article_id AS article_id
+                        ORDER BY a.article_id
+                        SKIP $skip LIMIT $limit
+                        """,
+                        skip=skip,
+                        limit=batch_size,
+                    )
+                    
+                    records = list(result)
+                    if not records:
+                        break
+                    
+                    for record in records:
+                        if record["article_id"] is not None:
+                            article_ids.add(int(record["article_id"]))
+                    
+                    if progress_callback:
+                        progress_callback(len(article_ids))
+                    
+                    skip += batch_size
+            
+            logger.info(f"✅ Found {len(article_ids):,} existing article IDs in Neo4j")
+            return article_ids
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to scan for existing article IDs: {e}")
+            return set()

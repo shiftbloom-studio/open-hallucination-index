@@ -34,12 +34,13 @@ services:
       - "127.0.0.1:6334:6334" # gRPC for ingestion
     environment:
       - QDRANT__STORAGE__STRICT_MODE=false
-      - QDRANT__SERVICE__ENABLE_TLS=true
-      - QDRANT__TLS__CERT=/qdrant/tls/origin.pem
-      - QDRANT__TLS__KEY=/qdrant/tls/origin.key
+      # TLS disabled for local dev (enable for production with valid certs)
+      # - QDRANT__SERVICE__ENABLE_TLS=true
+      # - QDRANT__TLS__CERT=/qdrant/tls/origin.pem
+      # - QDRANT__TLS__KEY=/qdrant/tls/origin.key
     volumes:
       - qdrant-data:/qdrant/storage
-      - ../nginx/certs:/qdrant/tls:ro
+      # - ../nginx/certs:/qdrant/tls:ro  # TLS certs (enable with TLS)
     networks:
       - ohi-net
 
