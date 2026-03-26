@@ -23,6 +23,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from config.settings import get_settings
+from models.entities import Claim
+from models.results import CitationTrace, ClaimVerification, VerificationStatus
+from pipeline.scorer import WeightedScorer
 from server.services.live_logs import live_log_service
 
 router = APIRouter()
@@ -814,9 +817,10 @@ async def test_verify(
 
     test_data = TEST_TEXTS.get(request.test_type, TEST_TEXTS["simple"])
     start_time = time_module.perf_counter()
+    scorer = WeightedScorer()
 
     # Simulate verification (in production, this would call the actual verify endpoint)
-    # For now, return mock results based on test type
+    # Return mock claim verdicts and compute score using the real scorer
     if request.test_type == "hallucination":
         mock_results = [
             {
@@ -838,7 +842,6 @@ async def test_verify(
                 "evidence": "The Great Wall spans over 21,000 kilometers",
             },
         ]
-        score = 0.15  # Low score for hallucination
     else:
         mock_results = [
             {
@@ -848,7 +851,30 @@ async def test_verify(
                 "evidence": "Verified against multiple knowledge sources",
             },
         ]
-        score = 0.92 if request.test_type == "simple" else 0.89
+
+    claim_verifications: list[ClaimVerification] = []
+    for result in mock_results:
+        status_value = VerificationStatus.SUPPORTED if result["verdict"] == "true" else VerificationStatus.REFUTED
+        confidence = float(result["confidence"])
+        claim = Claim(text=result["claim"], confidence=confidence)
+        trace = CitationTrace(
+            claim_id=claim.id,
+            status=status_value,
+            reasoning=result["evidence"],
+            confidence=confidence,
+            verification_strategy="mock_admin_test",
+        )
+        claim_verifications.append(
+            ClaimVerification(
+                claim=claim,
+                status=status_value,
+                trace=trace,
+                score_contribution=confidence,
+            )
+        )
+
+    trust_score = await scorer.compute_score(claim_verifications)
+    score = trust_score.overall
 
     duration_ms = (time_module.perf_counter() - start_time) * 1000 + 150  # Add simulated processing time
 
