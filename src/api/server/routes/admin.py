@@ -869,7 +869,7 @@ async def test_verify(
                 claim=claim,
                 status=status_value,
                 trace=trace,
-                score_contribution=0.5,
+                score_contribution=confidence,
             )
         )
 
