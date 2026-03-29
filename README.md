@@ -43,7 +43,7 @@ The project is organized into **three distinct parts**, each with its own purpos
 │                                                                          │
 │  ┌──────────────────┐  ┌──────────────────────┐  ┌───────────────────┐  │
 │  │  Part 1: SaaS    │  │  Part 2: OHI Service │  │  Part 3: Bench-  │  │
-│  │  Web Application │  │  & Algorithm         │  │  marking & Eval  │  │
+│  │  Web Application │  │  & Algorithm         │  │  mark & Evaluate │  │
 │  │                  │  │                      │  │                   │  │
 │  │  Next.js UI      │─▶│  FastAPI API          │◀─│  Benchmark Suite  │  │
 │  │  Supabase Auth   │  │  MCP Server          │  │  Statistical      │  │
@@ -167,7 +167,7 @@ The API follows a **hexagonal (ports & adapters)** design, making knowledge sour
 | **📊 Multi-Source Verification** | Validates against Neo4j graph, Qdrant vectors, and MCP sources |
 | **⚡ High Performance** | Session pooling, batch processing, parallel verification, Redis caching |
 | **🧭 Adaptive Evidence** | Adaptive strategy balances speed and coverage with tiered retrieval |
-| **🎯 Trust Scoring** | Evidence-ratio based scoring with confidence intervals (0.0–1.0) |
+| **🎯 Trust Scoring** | Evidence-ratio-based scoring with confidence intervals (0.0–1.0) |
 | **🧩 Knowledge Track** | Source-aware provenance and 3D-mesh graph for each verified claim |
 | **🔌 Pluggable Architecture** | Hexagonal design — easily swap knowledge sources and strategies |
 
@@ -238,7 +238,7 @@ ohi-server         # Start the API server
 
 ## 📊 Part 3 — Benchmarking & Evaluation
 
-A research-grade benchmark suite that measures how accurate and fast OHI is compared to other broadly used hallucination detection approaches (VectorRAG, GraphRAG). Produces publication-ready reports with statistical rigor.
+A research-grade benchmark suite that evaluates OHI's accuracy and performance relative to other broadly used hallucination detection approaches (VectorRAG, GraphRAG). Produces publication-ready reports with statistical rigor.
 
 **Directory:** [`gui_benchmark_app/`](gui_benchmark_app/) · **Guide:** [gui_benchmark_app/README.md](gui_benchmark_app/README.md)
 
