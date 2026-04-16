@@ -1,0 +1,10 @@
+framework:
+  - terraform
+soft-fail: true          # don't block plan; we surface warnings as PR annotations
+skip-check:
+  - CKV_AWS_18           # S3 access logging — not needed for <100 users, overkill
+  - CKV_AWS_21           # S3 versioning — we set it where it matters (state bucket), skip elsewhere
+  - CKV2_AWS_6           # S3 MFA delete — single-operator, no
+  - CKV_AWS_144          # S3 cross-region replication — out of scope
+  - CKV_AWS_158          # CloudWatch log groups KMS encryption — we use the default AWS-managed key
+  - CKV_AWS_272          # Lambda code-signing — deferred to Phase 2
