@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+concurrency:
+  group: release-rollout
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: write # creates/updates GitHub Release
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  build-and-push-image:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-release-image-${{ github.ref_name }}
+
+      - id: tag
+        run: echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/lambda/Dockerfile
+          push: true
+          tags: |
+            ${{ vars.ECR_REPOSITORY_URL }}:${{ steps.tag.outputs.tag }}
+            ${{ vars.ECR_REPOSITORY_URL }}:prod
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-compute:
+    needs: build-and-push-image
+    runs-on: ubuntu-latest
+    environment: prod
+    defaults:
+      run:
+        working-directory: infra/terraform/compute
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-release-compute-${{ github.ref_name }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.3"
+
+      - name: Terraform init
+        run: |
+          ACCT=$(aws sts get-caller-identity --query Account --output text)
+          terraform init -backend-config="bucket=ohi-tfstate-${ACCT}"
+
+      - name: Apply compute with image_tag
+        run: |
+          terraform apply -auto-approve \
+            -var="image_tag=${{ needs.build-and-push-image.outputs.image_tag }}"
+
+      - name: Health check
+        run: |
+          sleep 10
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "X-OHI-Edge-Secret: ${{ secrets.CF_EDGE_SECRET }}" \
+            https://ohi.shiftbloom.studio/health/live)
+          if [[ "$code" -ne 200 && "$code" -ne 503 ]]; then
+            echo "::error::Health check returned $code"
+            exit 1
+          fi
+          echo "Health check: HTTP $code (200 or 503=bootstrapping both acceptable)"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          PREV=$(aws ecr describe-images --repository-name ohi-api \
+            --query 'reverse(sort_by(imageDetails[?imageTags!=null] | [?not_null(imageTags)],&imagePushedAt))[1].imageTags[0]' \
+            --output text)
+          echo "::warning::Rolling back to $PREV"
+          terraform apply -auto-approve -var="image_tag=${PREV}"
+
+  notify:
+    needs: deploy-compute
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: OHI ${{ github.ref_name }}
+          body: |
+            Automated release.
+
+            **Deploy status:** ${{ needs.deploy-compute.result }}
+            **Image tag:** `${{ github.ref_name }}`
+
+            See spec `docs/superpowers/specs/2026-04-16-ohi-v2-infrastructure-design.md` §3.3.3.
+          generate_release_notes: true
