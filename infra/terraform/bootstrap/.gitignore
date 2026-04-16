@@ -1,0 +1,5 @@
+# Bootstrap uses LOCAL state — commit lockfile but not state.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.tfstate.lock.info
