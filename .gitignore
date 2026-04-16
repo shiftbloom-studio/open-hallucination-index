@@ -150,6 +150,7 @@ infra/local/data/
 # ==============================================================================
 models/
 !src/api/models/
+!tests/api/models/
 *.onnx
 *.pt
 *.pth

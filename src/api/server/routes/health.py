@@ -14,9 +14,9 @@ from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 
 from config.dependencies import (
-    get_cache_provider,
     get_graph_store,
     get_llm_provider,
+    get_trace_store,
     get_vector_store,
 )
 from config.settings import get_settings
@@ -118,8 +118,10 @@ async def readiness() -> ReadinessStatus:
     services["qdrant"] = qdrant_status
     ready = ready and qdrant_ready
 
+    # Redis readiness via the trace store (v1 cache provider has been
+    # removed; Task 1.10 re-adds a v2 Redis cache for DocumentVerdict).
     redis_status, redis_ready = await check_service(
-        get_cache_provider,
+        get_trace_store,
         enabled=settings.redis.enabled,
     )
     services["redis"] = redis_status

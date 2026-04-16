@@ -2,7 +2,18 @@
 OHI Models - Domain Entities
 ============================
 
-Core data structures for verification: claims, evidence, trust scores.
+Core data structures for the v2 verification pipeline.
+
+v1 result models (CitationTrace, ClaimVerification, TrustScore,
+VerificationResult, VerificationStatus, EvidenceClassification) have been
+removed. v2 equivalents live in `models.results` (ClaimVerdict,
+DocumentVerdict, ClaimEdge, EdgeType).
+
+The `models.track` module is kept for now — it powers the in-memory
+KnowledgeMesh used by L1 retrieval (pipeline.mesh). Its EdgeType enum is
+distinct from the v2 PCG EdgeType in `models.results`; callers importing
+from this package get the v2 one by default. Import directly from
+`models.track` when you need the track/mesh-specific version.
 """
 
 from models.entities import (
@@ -11,24 +22,13 @@ from models.entities import (
     Evidence,
     EvidenceSource,
 )
+from models.nli import NLIDistribution
+from models.pcg import PosteriorBelief
 from models.results import (
-    CitationTrace,
-    ClaimVerification,
-    EvidenceClassification,
-    TrustScore,
-    VerificationResult,
-    VerificationStatus,
-)
-from models.track import (
+    ClaimEdge,
+    ClaimVerdict,
+    DocumentVerdict,
     EdgeType,
-    KnowledgeEdge,
-    KnowledgeMesh,
-    KnowledgeNode,
-    KnowledgeTrackResult,
-    MCPSource,
-    NodeType,
-    SourceReference,
-    TraceData,
 )
 
 __all__ = [
@@ -37,21 +37,13 @@ __all__ = [
     "ClaimType",
     "Evidence",
     "EvidenceSource",
-    # Results
-    "CitationTrace",
-    "ClaimVerification",
-    "EvidenceClassification",
-    "TrustScore",
-    "VerificationResult",
-    "VerificationStatus",
-    # Track
+    # v2 results
+    "ClaimEdge",
+    "ClaimVerdict",
+    "DocumentVerdict",
     "EdgeType",
-    "KnowledgeEdge",
-    "KnowledgeMesh",
-    "KnowledgeNode",
-    "KnowledgeTrackResult",
-    "MCPSource",
-    "NodeType",
-    "SourceReference",
-    "TraceData",
+    # v2 NLI
+    "NLIDistribution",
+    # v2 PCG
+    "PosteriorBelief",
 ]

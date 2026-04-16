@@ -1,8 +1,9 @@
-"""OHI Server Routes."""
+"""OHI Server Routes.
 
-from server.routes.admin import router as admin_router
+v1 routes (admin, track, verify) have been removed; v2 routes land in
+Phase 1 tasks 1.8-1.12.
+"""
+
 from server.routes.health import router as health_router
-from server.routes.track import router as track_router
-from server.routes.verify import router as verify_router
 
-__all__ = ["admin_router", "health_router", "track_router", "verify_router"]
+__all__ = ["health_router"]
