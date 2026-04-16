@@ -57,6 +57,12 @@ class Claim(BaseModel):
     )
     normalized_form: str | None = Field(default=None, description="Canonicalized form for matching")
 
+    # v2 normalization metadata (Task 1.3): entities resolved to Wikidata
+    # QIDs by the decomposer's normalization pass (best-effort; empty
+    # dict when the Wikidata MCP isn't available or no entities matched).
+    # Keys are surface-form entity mentions, values are QIDs like "Q937".
+    entity_qids: dict[str, str] = Field(default_factory=dict)
+
     model_config = {"frozen": True}
 
 

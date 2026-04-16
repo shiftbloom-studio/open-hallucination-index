@@ -16,6 +16,13 @@ from uuid import uuid4
 from interfaces.decomposition import ClaimDecomposer
 from interfaces.llm import LLMMessage
 from models.entities import Claim, ClaimType
+from pipeline.decomposer_chunking import chunk_text
+from pipeline.decomposer_normalization import (
+    normalize_claim_text,
+    normalize_date_expression,
+    normalize_number_expression,
+    resolve_entity_qids,
+)
 
 if TYPE_CHECKING:
     from interfaces.llm import LLMProvider
@@ -108,20 +115,47 @@ class LLMClaimDecomposer(ClaimDecomposer):
         """
         Decompose text with additional context for disambiguation.
 
+        Task 1.3: inputs longer than ~7k characters (≈1800 tokens) are
+        chunked with co-reference overlap; per-chunk claims are merged,
+        deduplicated by normalized form, then each claim passes through
+        the normalization pipeline (date ISO, number SI, entity QID).
+
         Args:
             text: Unstructured input text to analyze.
             context: Optional context (e.g., document title, topic).
             max_claims: Optional limit on number of claims to extract.
 
         Returns:
-            List of extracted claims.
+            List of extracted claims, normalized and deduplicated.
         """
         if not text or not text.strip():
             return []
 
         limit = max_claims or self._max_claims
 
-        # Build the user message
+        chunks = chunk_text(text, max_tokens=1800, overlap_tokens=200)
+        if len(chunks) <= 1:
+            # Single-chunk path: no merge/dedup work, keeps old behaviour
+            raw = await self._decompose_chunk(text, context=context, limit=limit)
+            merged = raw
+        else:
+            logger.info("Chunked decomposition: %d chunks (%d chars total)", len(chunks), len(text))
+            per_chunk: list[list[Claim]] = []
+            for ch in chunks:
+                chunk_claims = await self._decompose_chunk(ch.text, context=context, limit=limit)
+                # Re-base source_span to the original text offsets
+                per_chunk.append(
+                    [self._rebase_span(c, origin_offset=ch.start) for c in chunk_claims]
+                )
+            merged = self._dedupe_merge(per_chunk)[:limit]
+
+        # Normalization pass: stamp normalized_form, try date/number
+        # normalization, resolve entity QIDs (stub until MCP wired).
+        return [await self._normalize_claim_obj(c) for c in merged]
+
+    async def _decompose_chunk(self, text: str, *, context: str | None, limit: int) -> list[Claim]:
+        """Single-LLM-call decomposition for one chunk. Preserves the
+        original v1 behaviour for one shot."""
         user_content = f"Extract up to {limit} factual claims from the following text:\n\n{text}"
         if context:
             user_content = f"Context: {context}\n\n{user_content}"
@@ -262,12 +296,80 @@ class LLMClaimDecomposer(ClaimDecomposer):
         return mapping.get(type_str, ClaimType.UNCLASSIFIED)
 
     def _normalize_claim(self, text: str) -> str:
-        """Normalize claim text for matching."""
-        # Lowercase, remove extra whitespace, remove punctuation
-        normalized = text.lower().strip()
-        normalized = re.sub(r"\s+", " ", normalized)
-        normalized = re.sub(r"[.,;:!?]$", "", normalized)
-        return normalized
+        """Canonical text form for matching (delegates to
+        ``decomposer_normalization.normalize_claim_text``)."""
+        return normalize_claim_text(text)
+
+    # ---- Task 1.3 helpers ------------------------------------------------
+
+    @staticmethod
+    def _rebase_span(claim: Claim, *, origin_offset: int) -> Claim:
+        """Shift a claim's source_span back into the parent document's
+        coordinate system. Chunked decomposition extracts each chunk
+        independently so spans land relative to the chunk; we translate
+        them to parent-document offsets before returning to the caller.
+        """
+        if claim.source_span is None or origin_offset == 0:
+            return claim
+        lo, hi = claim.source_span
+        return claim.model_copy(update={"source_span": (lo + origin_offset, hi + origin_offset)})
+
+    def _dedupe_merge(self, per_chunk_claims: list[list[Claim]]) -> list[Claim]:
+        """Merge per-chunk claim lists, deduping by normalized_form.
+
+        Phase 1 dedup is exact-string match on the canonical form; cosine-
+        similarity dedup via the embedding model lands in Phase 2 along
+        with the bi-encoder infrastructure (Task 2.3).
+        """
+        seen: dict[str, Claim] = {}
+        order: list[str] = []
+        for chunk_claims in per_chunk_claims:
+            for c in chunk_claims:
+                key = c.normalized_form or normalize_claim_text(c.text)
+                if key in seen:
+                    continue
+                seen[key] = c
+                order.append(key)
+        return [seen[k] for k in order]
+
+    async def _normalize_claim_enrich(self, claim: Claim) -> Claim:
+        """Attach normalized_form + date/number/entity metadata to a
+        freshly-extracted claim.
+
+        Writes:
+          - ``normalized_form`` — canonical text (always populated).
+          - ``entity_qids`` — Wikidata QIDs (empty dict when MCP stub).
+        Returns a new frozen Claim; the original is not mutated.
+        """
+        updates: dict[str, object] = {}
+        if not claim.normalized_form:
+            updates["normalized_form"] = normalize_claim_text(claim.text)
+
+        # Try date + number normalization on temporal / quantitative types.
+        # The normalized values are logged for now; Phase 3 can surface
+        # them as additional Claim fields if we find a use case.
+        if claim.claim_type == ClaimType.TEMPORAL:
+            iso = normalize_date_expression(claim.text)
+            if iso:
+                logger.debug("Temporal claim normalized: %r -> %s", claim.text[:60], iso)
+        if claim.claim_type == ClaimType.QUANTITATIVE:
+            value = normalize_number_expression(claim.text)
+            if value is not None:
+                logger.debug("Quantitative claim normalized: %r -> %s", claim.text[:60], value)
+
+        # Entity QIDs (stub — empty until Wikidata MCP is wired).
+        entities = [claim.subject, claim.object]
+        entities_clean = [e for e in entities if e]
+        if entities_clean:
+            qids = await resolve_entity_qids(entities_clean)
+            if qids:
+                updates["entity_qids"] = qids
+
+        return claim.model_copy(update=updates) if updates else claim
+
+    # Kept under the old private name for call-sites inside this class.
+    async def _normalize_claim_obj(self, claim: Claim) -> Claim:
+        return await self._normalize_claim_enrich(claim)
 
     def _fallback_decomposition(self, text: str) -> list[Claim]:
         """Simple sentence-based fallback when LLM parsing fails."""
