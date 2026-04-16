@@ -107,24 +107,32 @@ docker/
 
 ### FastAPI code (`src/api/`)
 
+The `src/api` package layout is **flat**: the `pyproject.toml` declares `packages = ["config", "server", "models", …]` at `src/api/` level, and tests live at **repo-root `tests/api/...`**, not under `src/api/tests/`. Imports are bare: `from config.secrets_loader import …` NOT `from api.config.secrets_loader import …`.
+
 ```
-src/api/
-├── src/api/config/
-│   └── infra_env.py                # NEW — infra env var accessor; does NOT touch settings.py
-├── src/api/config/
-│   └── secrets_loader.py           # NEW — SecretsLoader singleton with TTL cache
-├── src/api/server/middleware/
-│   ├── __init__.py                 # MODIFIED — export EdgeSecretMiddleware
-│   └── edge_secret.py              # NEW — X-OHI-Edge-Secret enforcement
-├── src/api/server/app.py           # MODIFIED — register EdgeSecretMiddleware
-└── tests/
-    ├── server/middleware/
-    │   └── test_edge_secret.py     # NEW
-    └── config/
-        └── test_secrets_loader.py  # NEW
+src/api/config/
+├── infra_env.py                    # NEW — infra env var accessor; does NOT touch settings.py
+└── secrets_loader.py               # NEW — SecretsLoader singleton with TTL cache
+
+src/api/server/middleware/
+├── __init__.py                     # MODIFIED — also export EdgeSecretMiddleware
+└── edge_secret.py                  # NEW — X-OHI-Edge-Secret enforcement
+
+src/api/server/app.py               # MODIFIED — register EdgeSecretMiddleware (env-gated)
+
+tests/api/config/
+└── test_secrets_loader.py          # NEW
+
+tests/api/server/middleware/
+└── test_edge_secret.py             # NEW
+
+tests/api/server/
+└── test_app_edge_secret_wiring.py  # NEW
 ```
 
 > **Hands-off rule.** Per the handoff checkpoint, `src/api/config/settings.py`, `src/api/config/dependencies.py`, `src/api/adapters/null_graph.py`, the `gui_ingestion_app/*` tree, and any stray `nul` / `api/` artifacts are user WIP and MUST NOT be edited. This plan only creates new files in `src/api/config/` and `src/api/server/middleware/` and modifies `src/api/server/app.py` + `src/api/server/middleware/__init__.py` (both of which are part of the V2 algorithm Phase 1 work already shipped).
+>
+> **Pytest invocation**: run `pytest` from `$REPO/src/api/` (the pyproject.toml lives there; `testpaths = ["tests"]` resolves to the repo-root `tests/` via a pytest `rootdir` walk-up — confirm during execution that `pytest tests/api/...` from `src/api/` picks up the right files; if it doesn't, invoke pytest from the repo root with `pytest -c src/api/pyproject.toml tests/api/...`).
 
 ### GitHub Actions (`.github/workflows/`)
 
@@ -193,7 +201,21 @@ cd "$REPO" && git fetch origin && git checkout -b feat/ohi-v2-infra origin/feat/
 
 - [ ] **Step 2: Copy spec + plan docs into the branch workspace (untracked)**
 
-Copy `docs/superpowers/specs/2026-04-16-ohi-v2-infrastructure-design.md` and `docs/superpowers/plans/2026-04-16-ohi-v2-infrastructure-implementation.md` from local main's workspace into this branch's workspace. The files stay gitignored; they exist so the executor can `Read` them without jumping branches.
+The spec + plan live on `main` but `docs/superpowers/` is gitignored on `feat/*`. Copy them as working-copies so the executor can read them from the branch:
+
+```bash
+# From the feat branch worktree (wherever $REPO points):
+mkdir -p "$REPO/docs/superpowers/specs" "$REPO/docs/superpowers/plans"
+
+# Extract from main's git tree directly (avoids path-resolution on Windows)
+cd "$REPO" && git show main:docs/superpowers/specs/2026-04-16-ohi-v2-infrastructure-design.md > docs/superpowers/specs/2026-04-16-ohi-v2-infrastructure-design.md
+cd "$REPO" && git show main:docs/superpowers/plans/2026-04-16-ohi-v2-infrastructure-implementation.md > docs/superpowers/plans/2026-04-16-ohi-v2-infrastructure-implementation.md
+
+# Also grab the algorithm spec for cross-reference
+cd "$REPO" && git show main:docs/superpowers/specs/2026-04-16-ohi-v2-algorithm-design.md > docs/superpowers/specs/2026-04-16-ohi-v2-algorithm-design.md 2>/dev/null || true
+```
+
+The .gitignore on the branch keeps these untracked; no accidental commit.
 
 - [ ] **Step 3: Verify branch state**
 
@@ -759,13 +781,17 @@ data "aws_iam_policy_document" "apply_policy" {
     resources = ["*"]
   }
 
+  # NOTE: `iam:AttachRolePolicy` appears both in the broad allow above AND in
+  # this deny. Because Deny always wins, the net effect is: CI can attach any
+  # managed policy to roles EXCEPT AdministratorAccess. That's the desired
+  # "no admin escalation" guardrail.
   statement {
     sid       = "DenyIAMUserAndAdminEscalation"
     effect    = "Deny"
     actions   = [
       "iam:CreateUser", "iam:DeleteUser", "iam:CreateAccessKey", "iam:DeleteAccessKey",
       "iam:AttachUserPolicy", "iam:PutUserPolicy",
-      "iam:AttachRolePolicy",  # explicitly denied when target is AdminAccess
+      "iam:AttachRolePolicy",
     ]
     resources = ["*"]
     condition {
@@ -935,7 +961,12 @@ so provider versions stay reproducible.
 1. AWS account with admin credentials, temporarily available as CLI profile `ohi-admin`.
 2. Terraform `>= 1.10.0` installed locally.
 3. `aws` CLI configured: `aws sts get-caller-identity --profile ohi-admin` returns your account.
-4. Cloudflare account with the `ohi.shiftbloom.studio` zone added (see `docs/runbooks/cloudflare-api-token-rotate.md` for token scopes; you'll create the initial token after this bootstrap, as a GitHub secret).
+4. **Cloudflare zone `ohi.shiftbloom.studio` must be created and DNS-delegated BEFORE any `cloudflare/` PR is opened.** The `cloudflare/` Terraform layer uses `data "cloudflare_zone"` which fails if the zone doesn't exist, which would break every `infra-plan.yml` CI run. Steps:
+   a. In Cloudflare dashboard → Add Site → enter `ohi.shiftbloom.studio` → pick Free plan.
+   b. Cloudflare shows 2–4 NS records (e.g. `xxx.ns.cloudflare.com`).
+   c. At the DNS provider that hosts `shiftbloom.studio`, add those NS records under the `ohi` subdomain, delegating `ohi.shiftbloom.studio` → Cloudflare.
+   d. Wait for propagation: `dig NS ohi.shiftbloom.studio @1.1.1.1` must show CF nameservers.
+5. Cloudflare API token with scopes listed in `docs/runbooks/cloudflare-api-token-rotate.md`; store as GitHub repo secret `CLOUDFLARE_API_TOKEN` after bootstrap applies.
 
 ## Apply
 
@@ -1415,7 +1446,7 @@ Reads secret ARNs from env vars, fetches via boto3 with 10-min TTL cache. Critic
 
 - [ ] **Step 1: Write the failing test**
 
-Create `$REPO/src/api/tests/config/test_secrets_loader.py`:
+Create `$REPO/tests/api/config/test_secrets_loader.py`:
 
 ```python
 """Tests for SecretsLoader."""
@@ -1427,7 +1458,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from api.config.secrets_loader import (
+from config.secrets_loader import (
     BootstrapGraceSecret,
     ConfigurationError,
     SecretsLoader,
@@ -1490,7 +1521,7 @@ def test_loader_tolerates_empty_bootstrap_grace_value(fake_boto_client):
 
 def test_loader_cache_expires_after_ttl(fake_boto_client, monkeypatch):
     """After TTL elapses, the next get() re-fetches."""
-    from api.config import secrets_loader as sl
+    from config import secrets_loader as sl
     now = [1000.0]
     monkeypatch.setattr(sl.time, "monotonic", lambda: now[0])
     loader = SecretsLoader(client=fake_boto_client, ttl_seconds=600)
@@ -1503,9 +1534,9 @@ def test_loader_cache_expires_after_ttl(fake_boto_client, monkeypatch):
 - [ ] **Step 2: Run the test, verify it fails**
 
 ```bash
-cd "$REPO/src/api" && pytest tests/config/test_secrets_loader.py -v
+cd "$REPO/src/api" && pytest ../../tests/api/config/test_secrets_loader.py -v
 ```
-Expected: collection error (module doesn't exist yet).
+Expected: collection error (module doesn't exist yet). If pytest can't find `tests/api/…` from `src/api`, invoke from repo root instead: `cd "$REPO" && pytest -c src/api/pyproject.toml tests/api/config/test_secrets_loader.py -v`.
 
 - [ ] **Step 3: Create `src/api/config/infra_env.py`**
 
@@ -1687,34 +1718,32 @@ def get_loader() -> SecretsLoader:
 - [ ] **Step 5: Run the tests, verify they pass**
 
 ```bash
-cd "$REPO/src/api" && pytest tests/config/test_secrets_loader.py -v
+cd "$REPO" && pytest -c src/api/pyproject.toml tests/api/config/test_secrets_loader.py -v
 ```
 Expected: all 6 tests PASS.
 
 - [ ] **Step 6: Run ruff + mypy**
 
 ```bash
-cd "$REPO/src/api" && ruff format api/config/secrets_loader.py api/config/infra_env.py tests/config/test_secrets_loader.py && ruff check api/config/secrets_loader.py api/config/infra_env.py && mypy api/config/secrets_loader.py api/config/infra_env.py
+cd "$REPO/src/api" && ruff format config/secrets_loader.py config/infra_env.py && ruff check config/secrets_loader.py config/infra_env.py && mypy config/secrets_loader.py config/infra_env.py
 ```
 Expected: no errors. If `mypy` complains about boto3 stubs, add a `# type: ignore[import-not-found]` to the boto3 import — boto3-stubs is not in dev deps by default.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "$REPO" && git add src/api/src/api/config/infra_env.py src/api/src/api/config/secrets_loader.py src/api/tests/config/test_secrets_loader.py && git commit -m "feat(api): SecretsLoader with TTL cache + bootstrap-grace semantics"
+cd "$REPO" && git add src/api/config/infra_env.py src/api/config/secrets_loader.py tests/api/config/test_secrets_loader.py && git commit -m "feat(api): SecretsLoader with TTL cache + bootstrap-grace semantics"
 ```
-
-> Note: path prefix `src/api/src/api/` reflects the existing package layout (repo-root src dir + package dir). Adjust if the branch's actual layout differs — `find src/api -maxdepth 3 -type d -name config` shows the truth.
 
 ### Task I.1.4: `EdgeSecretMiddleware` (TDD)
 
 **Files:**
-- Create: `src/api/src/api/server/middleware/edge_secret.py`
-- Create: `src/api/tests/server/middleware/test_edge_secret.py`
+- Create: `src/api/server/middleware/edge_secret.py`
+- Create: `tests/api/server/middleware/test_edge_secret.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `$REPO/src/api/tests/server/middleware/test_edge_secret.py`:
+Create `$REPO/tests/api/server/middleware/test_edge_secret.py`:
 
 ```python
 """Tests for EdgeSecretMiddleware."""
@@ -1726,7 +1755,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.server.middleware.edge_secret import EdgeSecretMiddleware
+from server.middleware.edge_secret import EdgeSecretMiddleware
 
 
 @pytest.fixture
@@ -1789,7 +1818,7 @@ def test_timing_safe_comparison_used(app_with_middleware, monkeypatch):
         called.append((a, b))
         return real_compare(a, b)
 
-    monkeypatch.setattr("api.server.middleware.edge_secret.hmac.compare_digest", spy)
+    monkeypatch.setattr("server.middleware.edge_secret.hmac.compare_digest", spy)
 
     client = TestClient(app_with_middleware)
     client.get("/hello", headers={"X-OHI-Edge-Secret": "correct-secret-abc123"})
@@ -1799,12 +1828,12 @@ def test_timing_safe_comparison_used(app_with_middleware, monkeypatch):
 - [ ] **Step 2: Run, verify fails**
 
 ```bash
-cd "$REPO/src/api" && pytest tests/server/middleware/test_edge_secret.py -v
+cd "$REPO" && pytest -c src/api/pyproject.toml tests/api/server/middleware/test_edge_secret.py -v
 ```
 
 Expected: collection error (module missing).
 
-- [ ] **Step 3: Create `api/server/middleware/edge_secret.py`**
+- [ ] **Step 3: Create `src/api/server/middleware/edge_secret.py`**
 
 ```python
 """Enforce the X-OHI-Edge-Secret header set by Cloudflare's Transform Rule.
@@ -1866,41 +1895,49 @@ class EdgeSecretMiddleware(BaseHTTPMiddleware):
 - [ ] **Step 4: Run tests, verify pass**
 
 ```bash
-cd "$REPO/src/api" && pytest tests/server/middleware/test_edge_secret.py -v
+cd "$REPO" && pytest -c src/api/pyproject.toml tests/api/server/middleware/test_edge_secret.py -v
 ```
 Expected: all 5 tests PASS.
 
 - [ ] **Step 5: ruff + mypy**
 
 ```bash
-cd "$REPO/src/api" && ruff format api/server/middleware/edge_secret.py tests/server/middleware/test_edge_secret.py && ruff check api/server/middleware/edge_secret.py && mypy api/server/middleware/edge_secret.py
+cd "$REPO/src/api" && ruff format server/middleware/edge_secret.py && ruff check server/middleware/edge_secret.py && mypy server/middleware/edge_secret.py
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd "$REPO" && git add src/api/src/api/server/middleware/edge_secret.py src/api/tests/server/middleware/test_edge_secret.py && git commit -m "feat(api): EdgeSecretMiddleware enforces CF-injected shared secret"
+cd "$REPO" && git add src/api/server/middleware/edge_secret.py tests/api/server/middleware/test_edge_secret.py && git commit -m "feat(api): EdgeSecretMiddleware enforces CF-injected shared secret"
 ```
 
 ### Task I.1.5: Wire `EdgeSecretMiddleware` into the FastAPI app
 
 **Files:**
-- Modify: `src/api/src/api/server/middleware/__init__.py`
-- Modify: `src/api/src/api/server/app.py`
+- Modify: `src/api/server/middleware/__init__.py`
+- Modify: `src/api/server/app.py`
 
 - [ ] **Step 1: Read current state of both files** to preserve whatever's already there
 
 ```bash
-cat "$REPO/src/api/src/api/server/middleware/__init__.py"
-cat "$REPO/src/api/src/api/server/app.py"
+cat "$REPO/src/api/server/middleware/__init__.py"
+cat "$REPO/src/api/server/app.py"
 ```
 
-- [ ] **Step 2: Update `server/middleware/__init__.py`** — add EdgeSecretMiddleware to the exports alongside RetentionMiddleware
+- [ ] **Step 2: Update `server/middleware/__init__.py`** — add EdgeSecretMiddleware alongside the existing (flat-import) RetentionMiddleware line
 
+Current file (do NOT change the retention import — keep the bare `server.middleware.retention` path):
+```python
+from server.middleware.retention import RetentionMiddleware
+
+__all__ = ["RetentionMiddleware"]
+```
+
+Updated:
 ```python
 """Server middleware exports."""
-from api.server.middleware.edge_secret import EdgeSecretMiddleware
-from api.server.middleware.retention import RetentionMiddleware
+from server.middleware.edge_secret import EdgeSecretMiddleware
+from server.middleware.retention import RetentionMiddleware
 
 __all__ = ["EdgeSecretMiddleware", "RetentionMiddleware"]
 ```
@@ -1937,9 +1974,9 @@ Add the EdgeSecretMiddleware registration BEFORE RetentionMiddleware (Starlette 
     import os as _os  # local import to avoid polluting module scope
 
     if _os.environ.get("OHI_CF_EDGE_SECRET_ARN"):
-        from api.config.infra_env import edge_secret_arn
-        from api.config.secrets_loader import get_loader
-        from api.server.middleware.edge_secret import EdgeSecretMiddleware
+        from config.infra_env import edge_secret_arn
+        from config.secrets_loader import get_loader
+        from server.middleware.edge_secret import EdgeSecretMiddleware
 
         app.add_middleware(
             EdgeSecretMiddleware,
@@ -1949,7 +1986,7 @@ Add the EdgeSecretMiddleware registration BEFORE RetentionMiddleware (Starlette 
 
 - [ ] **Step 4: Add an integration test** that the wiring works end-to-end
 
-Create `$REPO/src/api/tests/server/test_app_edge_secret_wiring.py`:
+Create `$REPO/tests/api/server/test_app_edge_secret_wiring.py`:
 
 ```python
 """Integration test: app.py must register EdgeSecretMiddleware when env is set."""
@@ -1967,12 +2004,12 @@ def test_edge_secret_middleware_registered_when_env_set(monkeypatch):
     fake_loader = MagicMock()
     fake_loader.get.return_value = "test-secret-value"
 
-    with patch("api.config.secrets_loader.get_loader", return_value=fake_loader):
+    with patch("config.secrets_loader.get_loader", return_value=fake_loader):
         from fastapi.testclient import TestClient
 
         # Re-import to trigger create_app() with the patched env
         import importlib
-        from api.server import app as app_module
+        from server import app as app_module
         importlib.reload(app_module)
 
         client = TestClient(app_module.app)
@@ -1989,7 +2026,7 @@ def test_edge_secret_middleware_registered_when_env_set(monkeypatch):
 def test_edge_secret_middleware_not_registered_when_env_unset(monkeypatch):
     monkeypatch.delenv("OHI_CF_EDGE_SECRET_ARN", raising=False)
     import importlib
-    from api.server import app as app_module
+    from server import app as app_module
     importlib.reload(app_module)
 
     from fastapi.testclient import TestClient
@@ -2002,21 +2039,21 @@ def test_edge_secret_middleware_not_registered_when_env_unset(monkeypatch):
 - [ ] **Step 5: Run tests, verify**
 
 ```bash
-cd "$REPO/src/api" && pytest tests/server/test_app_edge_secret_wiring.py -v
+cd "$REPO" && pytest -c src/api/pyproject.toml tests/api/server/test_app_edge_secret_wiring.py -v
 ```
 Expected: both tests PASS.
 
 - [ ] **Step 6: Full test suite regression**
 
 ```bash
-cd "$REPO/src/api" && pytest
+cd "$REPO" && pytest -c src/api/pyproject.toml tests/api
 ```
 Expected: all tests pass (147 pre-existing + new ones from this phase).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "$REPO" && git add src/api/src/api/server/middleware/__init__.py src/api/src/api/server/app.py src/api/tests/server/test_app_edge_secret_wiring.py && git commit -m "feat(api): wire EdgeSecretMiddleware into create_app() (env-gated)"
+cd "$REPO" && git add src/api/server/middleware/__init__.py src/api/server/app.py tests/api/server/test_app_edge_secret_wiring.py && git commit -m "feat(api): wire EdgeSecretMiddleware into create_app() (env-gated)"
 ```
 
 ### Task I.1.6: Lambda Dockerfile — stub
@@ -2101,18 +2138,26 @@ cd "$REPO" && git add docker/lambda/Dockerfile.stub && git commit -m "feat(infra
 FROM public.ecr.aws/docker/library/python:3.12-slim AS builder
 
 WORKDIR /build
-COPY src/api/pyproject.toml /build/
-COPY src/api/README.md /build/
-# The `src/api` layout puts code at src/api/api/. Copy it in so pip install -e works.
-COPY src/api/src /build/src
 
-RUN pip install --no-cache-dir --target /deps /build
-# Install runtime-only packages into /deps (no -e for the app itself in final image)
+# IMPORTANT: base pyproject.toml pulls sentence-transformers + torch (~800MB).
+# Those belong on the PC/ingestion side, NOT in Lambda. We install a TRIMMED
+# runtime set directly instead of `pip install /build`. If you need a new dep
+# in the Lambda image, add it here explicitly — the full pyproject is for
+# local dev + ingestion, not for Lambda.
 RUN pip install --no-cache-dir --target /deps \
-    boto3>=1.34 \
-    structlog>=24.1 \
-    httpx>=0.27 \
-    orjson>=3.10
+    "fastapi>=0.128,<1.0" \
+    "uvicorn[standard]>=0.40" \
+    "pydantic>=2.12" \
+    "pydantic-settings>=2.12" \
+    "httpx>=0.28" \
+    "openai>=2.14" \
+    "neo4j>=6.0" \
+    "qdrant-client>=1.16" \
+    "redis>=7.1" \
+    "pyyaml>=6.0" \
+    "orjson>=3.11" \
+    "structlog>=24.1" \
+    "boto3>=1.34"
 
 # --- Stage 2: runtime ------------------------------------------------------
 FROM public.ecr.aws/lambda/python:3.12
@@ -2554,6 +2599,10 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 4.40"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 
   backend "s3" {
@@ -2926,18 +2975,9 @@ resource "cloudflare_record" "tunnel" {
   comment = "OHI tunnel public hostname — protected by CF Access (see access.tf)"
 }
 
-# Provider for random (pinned separately — add to required_providers in versions.tf if not already)
-terraform {
-  required_providers {
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.6"
-    }
-  }
-}
 ```
 
-> The trailing `terraform { required_providers { ... random } }` block is legal — Terraform merges provider requirements across files in a root module.
+> The `random` provider is declared in `versions.tf` (Task I.1.12). No separate `terraform {}` block here.
 
 - [ ] **Step 2: Write back the tunnel token to AWS Secrets Manager**
 
@@ -3516,14 +3556,16 @@ for layer in "${layers[@]}"; do
   popd > /dev/null
 done
 
-# App-side checks
-pushd src/api > /dev/null
-if pytest tests/config/test_secrets_loader.py tests/server/middleware/test_edge_secret.py tests/server/test_app_edge_secret_wiring.py -q > /tmp/pytest.log 2>&1; then
+# App-side checks (flat-layout: invoke pytest from repo root against the src/api pyproject)
+if pytest -c src/api/pyproject.toml \
+    tests/api/config/test_secrets_loader.py \
+    tests/api/server/middleware/test_edge_secret.py \
+    tests/api/server/test_app_edge_secret_wiring.py \
+    -q > /tmp/pytest.log 2>&1; then
   ok "middleware + loader tests pass"
 else
   bad "middleware or loader tests failed: $(tail -20 /tmp/pytest.log)"
 fi
-popd > /dev/null
 
 # Docker check (Dockerfile syntax via docker buildx parse)
 if docker buildx build --no-cache --progress=plain -f docker/lambda/Dockerfile --target builder -t ohi-api:plan-check . > /tmp/docker.log 2>&1; then
@@ -3664,27 +3706,27 @@ jobs:
           checkov -d . --framework terraform --quiet --config-file $GITHUB_WORKSPACE/infra/terraform/.checkov.yml || true
 
       - name: Terraform plan
+        id: plan
         env:
           TF_VAR_edge_secret: ${{ secrets.CF_EDGE_SECRET_PLACEHOLDER }}  # placeholder; not used for real apply
           TF_VAR_cf_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: terraform plan -no-color -out=tfplan
 
+      - name: Render plan text to file
+        id: plan_text
+        run: |
+          terraform show -no-color tfplan | head -c 60000 > $RUNNER_TEMP/plan.txt
+          echo "path=$RUNNER_TEMP/plan.txt" >> $GITHUB_OUTPUT
+
       - name: Comment plan on PR
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: plan-${{ matrix.layer }}
-          message: |
-            ### Plan — `${{ matrix.layer }}`
-
-            <details><summary>Click to expand</summary>
-
-            ```
-            $(terraform show -no-color tfplan | head -c 60000)
-            ```
-
-            </details>
+          path: ${{ steps.plan_text.outputs.path }}
 ```
+
+Note: `marocchino/sticky-pull-request-comment@v2` supports a `path:` input that reads a file — that avoids any shell-substitution inside YAML, which YAML does not evaluate. The former `message:` form with `$(...)` would have posted literal shell syntax to the PR.
 
 - [ ] **Step 2: Commit**
 
@@ -4921,15 +4963,15 @@ for r in "${runbooks[@]}"; do
   [[ -f "docs/runbooks/${r}.md" ]] && ok "runbook ${r}.md" || bad "runbook ${r}.md missing"
 done
 
-# Final ruff/mypy sweep on new API code
+# Final ruff/mypy sweep on new API code (flat layout)
 pushd src/api > /dev/null
-if ruff check api/config/secrets_loader.py api/config/infra_env.py api/server/middleware/edge_secret.py > /tmp/ruff.log 2>&1; then
+if ruff check config/secrets_loader.py config/infra_env.py server/middleware/edge_secret.py > /tmp/ruff.log 2>&1; then
   ok "ruff clean on new files"
 else
   bad "ruff errors: $(cat /tmp/ruff.log)"
 fi
 
-if mypy api/config/secrets_loader.py api/config/infra_env.py api/server/middleware/edge_secret.py > /tmp/mypy.log 2>&1; then
+if mypy config/secrets_loader.py config/infra_env.py server/middleware/edge_secret.py > /tmp/mypy.log 2>&1; then
   ok "mypy clean on new files"
 else
   bad "mypy errors: $(cat /tmp/mypy.log)"
