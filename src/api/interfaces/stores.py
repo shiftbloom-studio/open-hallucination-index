@@ -50,10 +50,10 @@ class QualityFilter:
 class VectorQuery:
     """
     Query specification for vector-based semantic search.
-    
-    Supports hybrid search (dense + sparse vectors) matching 
+
+    Supports hybrid search (dense + sparse vectors) matching
     the ingestion structure with BM25 sparse vectors.
-    
+
     Enhanced with geographic, quality, and Wikidata filtering
     to leverage enriched Wikipedia metadata from SQL dumps.
     """
