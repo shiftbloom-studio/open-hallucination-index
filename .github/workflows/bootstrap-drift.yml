@@ -1,0 +1,48 @@
+name: Bootstrap Drift
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC nightly
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform/bootstrap
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DRIFT_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-bootstrap-drift
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.3"
+
+      - name: Init (bootstrap uses local state; we init with no backend)
+        run: terraform init -backend=false
+
+      - name: Plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -detailed-exitcode -no-color > plan.txt 2>&1
+          code=$?
+          echo "exitcode=$code" >> $GITHUB_OUTPUT
+          cat plan.txt
+          # 0 = no change, 1 = error, 2 = changes detected
+          if [[ $code -eq 2 ]]; then echo "::warning::Drift detected"; fi
+          if [[ $code -eq 1 ]]; then echo "::error::Plan failed"; exit 1; fi
+
+      - name: Fail if drift
+        if: steps.plan.outputs.exitcode == '2'
+        run: exit 1
