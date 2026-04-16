@@ -1,0 +1,75 @@
+name: Infra Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      layer:
+        type: choice
+        description: Layer to apply
+        required: true
+        options: [storage, secrets, cloudflare, observability]
+      confirm:
+        type: string
+        description: 'Type "apply" to confirm'
+        required: true
+
+concurrency:
+  group: infra-apply
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: prod
+    defaults:
+      run:
+        working-directory: infra/terraform/${{ inputs.layer }}
+    steps:
+      - name: Guard
+        if: inputs.confirm != 'apply'
+        run: |
+          echo "::error::confirm input must equal 'apply'"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-apply-${{ inputs.layer }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.3"
+
+      - name: Resolve account id
+        id: acct
+        run: echo "id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=ohi-tfstate-${{ steps.acct.outputs.id }}"
+
+      - name: Plan
+        env:
+          TF_VAR_edge_secret: ${{ secrets.CF_EDGE_SECRET }}
+          TF_VAR_cf_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: terraform plan -out=tfplan
+
+      - name: Apply
+        env:
+          TF_VAR_edge_secret: ${{ secrets.CF_EDGE_SECRET }}
+          TF_VAR_cf_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: terraform apply tfplan
+
+      - name: Summary
+        if: always()
+        run: terraform output -no-color >> $GITHUB_STEP_SUMMARY
