@@ -63,6 +63,23 @@ def create_app() -> FastAPI:
     # caller explicitly opts in via ?retain=true. See spec §11.
     app.add_middleware(RetentionMiddleware)
 
+    # Edge-secret gate (infra sub-project): every request must carry the
+    # X-OHI-Edge-Secret header that Cloudflare's Transform Rule injects. See
+    # docs/superpowers/specs/2026-04-16-ohi-v2-infrastructure-design.md §7.5.
+    # Skipped gracefully if the secret ARN env var is unset — keeps local
+    # development (where there's no CF in front) working unchanged.
+    import os as _os  # local import to avoid polluting module scope
+
+    if _os.environ.get("OHI_CF_EDGE_SECRET_ARN"):
+        from config.infra_env import edge_secret_arn
+        from config.secrets_loader import get_loader
+        from server.middleware.edge_secret import EdgeSecretMiddleware
+
+        app.add_middleware(
+            EdgeSecretMiddleware,
+            get_expected_secret=lambda: get_loader().get(edge_secret_arn()),
+        )
+
     # Routers (more added in Phase 1 / 4 tasks)
     app.include_router(health_router, prefix="/health", tags=["health"])
     app.include_router(verify_router, prefix="/api/v2", tags=["verify"])
