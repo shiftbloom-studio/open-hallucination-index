@@ -2173,11 +2173,16 @@ ENV PYTHONUNBUFFERED=1
 # Copy deps first (cached layer when only app code changes)
 COPY --from=builder /deps ${LAMBDA_TASK_ROOT}
 
-# Copy app code
-COPY src/api/src/api ${LAMBDA_TASK_ROOT}/api
+# Copy app code. src/api is the *package root* in the flat layout; its immediate
+# children (config/, server/, models/, adapters/, pipeline/, interfaces/, services/)
+# each become importable top-level packages under ${LAMBDA_TASK_ROOT}.
+COPY src/api/ ${LAMBDA_TASK_ROOT}/
+# Strip files we don't want in the image (pyproject, README, tests).
+RUN rm -f ${LAMBDA_TASK_ROOT}/pyproject.toml ${LAMBDA_TASK_ROOT}/README.md \
+ && rm -rf ${LAMBDA_TASK_ROOT}/tests
 
-# Structlog boot: our create_app() handles everything else
-CMD ["uvicorn", "api.server.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+# Bare imports: `uvicorn server.app:app`, NOT `api.server.app:app`.
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
 ```
 
 - [ ] **Step 2: Write `.dockerignore`**
