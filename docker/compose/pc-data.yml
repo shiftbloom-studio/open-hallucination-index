@@ -1,0 +1,91 @@
+# Base compose for OHI v2 PC-side data stack (prod profile).
+# - No host ports exposed — only the cloudflared container reaches services.
+# - Services run in the `pc-prod` profile; local-dev profile is in
+#   pc-data.local-dev.yml (host ports bound on 127.0.0.1, no tunnel).
+#
+# Start: docker compose -f docker/compose/pc-data.yml --profile pc-prod up -d
+# Stop:  docker compose -f docker/compose/pc-data.yml --profile pc-prod down
+
+name: ohi-pc-data
+
+services:
+  neo4j:
+    image: neo4j:5-community
+    profiles: [pc-prod, local-dev]
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH}
+      NEO4J_server_memory_heap_initial__size: 1G
+      NEO4J_server_memory_heap_max__size: 2G
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.0
+    profiles: [pc-prod, local-dev]
+    restart: unless-stopped
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: [pc-prod, local-dev]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      retries: 10
+
+  postgrest:
+    image: postgrest/postgrest:v12.2.0
+    profiles: [pc-prod, local-dev]
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: ${PGRST_DB_URI}
+      PGRST_DB_SCHEMA: public
+      PGRST_JWT_SECRET: ${PGRST_JWT_SECRET}
+      PGRST_OPENAPI_SERVER_PROXY_URI: https://pg.ohi.shiftbloom.studio
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    profiles: [pc-prod, local-dev]
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+  webdis:
+    image: nicolas/webdis:0.1.23
+    profiles: [pc-prod, local-dev]
+    restart: unless-stopped
+    environment:
+      WEBDIS_REDIS_HOST: redis
+      WEBDIS_HTTP_AUTH: ${WEBDIS_HTTP_AUTH}
+    depends_on: [redis]
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.3.0
+    profiles: [pc-prod]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on: [neo4j, qdrant, postgrest, webdis]
+
+volumes:
+  neo4j-data:
+  neo4j-logs:
+  qdrant-data:
+  pg-data:
+  redis-data:
