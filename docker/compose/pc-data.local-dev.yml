@@ -1,0 +1,51 @@
+# Local-dev override for pc-data.yml. Exposes host ports on 127.0.0.1 only
+# and uses separate volumes so dev data never touches prod data.
+#
+# Start:
+#   docker compose -f docker/compose/pc-data.yml \
+#                  -f docker/compose/pc-data.local-dev.yml \
+#                  --profile local-dev up -d
+
+services:
+  neo4j:
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    volumes:
+      - neo4j-data-dev:/data
+      - neo4j-logs-dev:/logs
+
+  qdrant:
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - qdrant-data-dev:/qdrant/storage
+
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pg-data-dev:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+
+  postgrest:
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data-dev:/data
+
+  webdis:
+    ports:
+      - "127.0.0.1:7379:7379"
+
+volumes:
+  neo4j-data-dev:
+  neo4j-logs-dev:
+  qdrant-data-dev:
+  pg-data-dev:
+  redis-data-dev:
