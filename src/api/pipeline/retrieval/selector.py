@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from interfaces.llm import LLMProvider
-from pipeline.router import (
+from pipeline.retrieval.router import (
     ClaimDomain,
     RoutingDecision,
     SourceTier,
@@ -110,7 +110,7 @@ class SmartMCPSelector:
         # Get routing decision from ClaimRouter
         decision = await self._router.route(claim)
         logger.debug(f"Routing decision: {decision.domain}, confidence={decision.confidence}")
-        
+
         # Filter to MCP sources only (exclude local)
         mcp_recommendations = [
             r

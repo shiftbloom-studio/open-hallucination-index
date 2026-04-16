@@ -39,7 +39,7 @@ if TYPE_CHECKING:
         VectorKnowledgeStore,
     )
     from models.entities import Claim
-    from pipeline.selector import SmartMCPSelector
+    from pipeline.retrieval.selector import SmartMCPSelector
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,7 @@ class EvidenceQuality:
     def assess(cls, evidence: Evidence) -> EvidenceQuality:
         """
         Assess evidence quality.
-        
+
         Enhanced to leverage metadata from Wikipedia ingestion:
         - quality_score: Pre-computed article importance (0-1)
         - pagerank: Link-based importance score
@@ -177,43 +177,49 @@ class EvidenceQuality:
         # =================================================================
         if evidence.structured_data:
             sd = evidence.structured_data
-            
+
             # Use pre-computed quality_score from ingestion if available
             ingestion_quality = sd.get("quality_score")
             if ingestion_quality is not None and isinstance(ingestion_quality, (int, float)):
                 # Blend ingestion quality with computed quality
                 quality_score = (quality_score * 0.6) + (float(ingestion_quality) * 0.4)
-            
+
             # Pagerank bonus (logarithmic scale)
             pagerank = sd.get("pagerank")
             if pagerank is not None and isinstance(pagerank, (int, float)) and pagerank > 0:
                 # Small bonus for high-pagerank articles
                 import math
+
                 pr_bonus = min(0.1, math.log10(pagerank * 1000000 + 1) / 60)
                 quality_score = min(1.0, quality_score + pr_bonus)
-            
+
             # Penalty for disambiguation pages
             if sd.get("is_disambiguation") is True:
                 quality_score *= 0.6  # 40% penalty
                 source_reliability *= 0.7
-            
+
             # Penalty for redirect pages (shouldn't happen but guard)
             if sd.get("is_redirect") is True:
                 quality_score *= 0.5  # 50% penalty
                 source_reliability *= 0.5
-            
+
             # Bonus for Wikidata-linked articles
             if sd.get("wikidata_id") or sd.get("has_wikidata") is True:
                 quality_score = min(1.0, quality_score + 0.05)
-            
+
             # Bonus for articles with coordinates (well-defined entities)
             if sd.get("has_coordinates") is True:
                 quality_score = min(1.0, quality_score + 0.03)
-            
+
             # Incoming links bonus (popularity indicator)
             incoming_links = sd.get("incoming_links")
-            if incoming_links is not None and isinstance(incoming_links, int) and incoming_links > 100:
+            if (
+                incoming_links is not None
+                and isinstance(incoming_links, int)
+                and incoming_links > 100
+            ):
                 import math
+
                 links_bonus = min(0.08, math.log10(incoming_links + 1) / 50)
                 quality_score = min(1.0, quality_score + links_bonus)
 
@@ -392,7 +398,10 @@ class AdaptiveEvidenceCollector:
         target_evidence_count: int | None = None,
         *,
         allow_early_exit: bool = True,
-        classifier: Callable[[list[Evidence]], Coroutine[Any, Any, tuple[list[Evidence], list[Evidence]]]] | None = None,
+        classifier: Callable[
+            [list[Evidence]], Coroutine[Any, Any, tuple[list[Evidence], list[Evidence]]]
+        ]
+        | None = None,
     ) -> CollectionResult:
         """
         Collect evidence for a claim using adaptive tiered approach.
@@ -429,9 +438,7 @@ class AdaptiveEvidenceCollector:
         )
 
         effective_min_evidence = (
-            target_evidence_count
-            if target_evidence_count is not None
-            else self._min_evidence
+            target_evidence_count if target_evidence_count is not None else self._min_evidence
         )
 
         # Check if local evidence is sufficient
@@ -539,7 +546,10 @@ class AdaptiveEvidenceCollector:
         min_evidence: int | None = None,
         *,
         allow_early_exit: bool = True,
-        classifier: Callable[[list[Evidence]], Coroutine[Any, Any, tuple[list[Evidence], list[Evidence]]]] | None = None,
+        classifier: Callable[
+            [list[Evidence]], Coroutine[Any, Any, tuple[list[Evidence], list[Evidence]]]
+        ]
+        | None = None,
     ) -> tuple[list[Evidence], int]:
         """
         Collect evidence from MCP sources with early exit.
@@ -547,7 +557,9 @@ class AdaptiveEvidenceCollector:
         Returns (evidence_list, pending_background_tasks_count).
         """
         effective_min = min_evidence if min_evidence is not None else self._min_evidence
-        logger.debug(f"Entering _collect_mcp, mcp_sources count: {len(mcp_sources) if mcp_sources else 'None'}")
+        logger.debug(
+            f"Entering _collect_mcp, mcp_sources count: {len(mcp_sources) if mcp_sources else 'None'}"
+        )
         # Get MCP sources to query
         if mcp_sources:
             sources = mcp_sources
@@ -563,7 +575,7 @@ class AdaptiveEvidenceCollector:
 
         if not sources:
             return [], 0
-            
+
         # Create tasks for each source
         tasks: dict[asyncio.Task[list[Evidence]], str] = {}
         for source in sources:
