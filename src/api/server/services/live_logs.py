@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class LogLevel(str, Enum):
     """Log severity levels."""
+
     DEBUG = "debug"
     INFO = "info"
     WARNING = "warning"
@@ -30,6 +31,7 @@ class LogLevel(str, Enum):
 
 class LogType(str, Enum):
     """Types of log entries."""
+
     REQUEST = "request"
     RESPONSE = "response"
     ERROR = "error"
@@ -41,6 +43,7 @@ class LogType(str, Enum):
 @dataclass
 class LogEntry:
     """A single log entry."""
+
     id: str = field(default_factory=lambda: str(uuid4()))
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     level: LogLevel = LogLevel.INFO
@@ -283,7 +286,9 @@ class LiveLogService:
             level=LogLevel.INFO if success else LogLevel.WARNING,
             log_type=LogType.AUTH,
             key_prefix=key_prefix,
-            message=f"Auth {'success' if success else 'failed'}: {reason}" if reason else f"Auth {'success' if success else 'failed'}",
+            message=f"Auth {'success' if success else 'failed'}: {reason}"
+            if reason
+            else f"Auth {'success' if success else 'failed'}",
         )
         await self.add_log(entry)
 

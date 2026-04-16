@@ -30,6 +30,7 @@ from adapters.neo4j import Neo4jGraphAdapter
 from adapters.openai import OpenAILLMAdapter
 from adapters.qdrant import QdrantVectorAdapter
 from adapters.redis_trace import RedisTraceAdapter
+from adapters.verdict_store_memory import InMemoryVerdictStore
 from config.settings import get_settings
 from interfaces.decomposition import ClaimDecomposer
 from interfaces.llm import LLMProvider
@@ -38,10 +39,15 @@ from interfaces.stores import (
     GraphKnowledgeStore,
     VectorKnowledgeStore,
 )
-from pipeline.collector import AdaptiveEvidenceCollector
+from interfaces.verdict_store import VerdictStore
+from pipeline.conformal import InMemoryCalibrationStore, SplitConformalCalibrator
 from pipeline.decomposer import LLMClaimDecomposer
-from pipeline.mesh import KnowledgeMeshBuilder
-from pipeline.selector import SmartMCPSelector
+from pipeline.pipeline import Pipeline
+from pipeline.retrieval import (
+    AdaptiveEvidenceCollector,
+    KnowledgeMeshBuilder,
+    SmartMCPSelector,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +66,9 @@ _mcp_sources: list[MCPKnowledgeSource] = []
 _evidence_collector: AdaptiveEvidenceCollector | None = None
 _mcp_selector: SmartMCPSelector | None = None
 _mesh_builder: KnowledgeMeshBuilder | None = None
+_pipeline: Pipeline | None = None
+_verdict_store: VerdictStore | None = None
 
-# TODO(Task 1.7): v2 Pipeline orchestrator singleton + dependency function.
 # TODO(Task 1.10): v2 DocumentVerdict cache (Redis + in-process LRU).
 # TODO(Task 4.1): v2 Postgres feedback store.
 
@@ -120,6 +127,7 @@ async def _initialize_adapters() -> None:
     global _llm_provider, _embedding_adapter, _graph_store, _vector_store
     global _trace_store, _claim_decomposer, _mcp_sources
     global _evidence_collector, _mcp_selector, _mesh_builder
+    global _pipeline, _verdict_store
 
     settings = get_settings()
 
@@ -180,7 +188,22 @@ async def _initialize_adapters() -> None:
         vector_store=_vector_store,
     )
 
-    logger.info("DI container initialized (v2 pipeline wiring pending Task 1.7)")
+    # v2 Pipeline orchestrator — Phase 1 placeholder layers for L2/L3/L4/L6
+    # are active; concrete adapters swap in during Phase 2/3 without a
+    # signature change.
+    _verdict_store = InMemoryVerdictStore()
+    conformal_calibrator = SplitConformalCalibrator(InMemoryCalibrationStore())
+    _pipeline = Pipeline(
+        decomposer=_claim_decomposer,
+        retrieval=_evidence_collector,
+        conformal=conformal_calibrator,
+        domain_router=None,  # Phase 3 Task 3.2
+        nli=None,  # Phase 2 Task 2.1
+        pcg=None,  # Phase 2 Task 2.5
+        domain_adapters=None,  # Phase 3 Task 3.1
+    )
+
+    logger.info("DI container initialized — v2 pipeline live with Phase 1 placeholders")
 
 
 def _build_mcp_sources(settings: Any) -> list[MCPKnowledgeSource]:
@@ -269,3 +292,15 @@ def get_mesh_builder() -> KnowledgeMeshBuilder:
     if _mesh_builder is None:
         raise RuntimeError("Mesh builder not initialized")
     return _mesh_builder
+
+
+def get_pipeline() -> Pipeline:
+    if _pipeline is None:
+        raise RuntimeError("Pipeline not initialized (lifespan not started?)")
+    return _pipeline
+
+
+def get_verdict_store() -> VerdictStore:
+    if _verdict_store is None:
+        raise RuntimeError("Verdict store not initialized")
+    return _verdict_store

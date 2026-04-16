@@ -25,7 +25,8 @@ from fastapi.responses import ORJSONResponse
 
 from config.dependencies import lifespan_manager
 from config.settings import get_settings
-from server.routes import health_router
+from server.middleware import RetentionMiddleware
+from server.routes import health_router, verify_router
 
 
 def create_app() -> FastAPI:
@@ -57,12 +58,15 @@ def create_app() -> FastAPI:
     # TODO(Task 1.10): PerIPTokenBucketMiddleware (per-IP rate limit).
     # TODO(Task 1.10): CostCeilingMiddleware (daily $ ceiling).
     # TODO(Task 1.10): InternalAuthMiddleware (internal bearer token).
-    # TODO(Task 1.11): RetentionMiddleware (no raw-text persistence default).
+
+    # Retention policy (Task 1.11): raw text is NOT persisted unless the
+    # caller explicitly opts in via ?retain=true. See spec §11.
+    app.add_middleware(RetentionMiddleware)
 
     # Routers (more added in Phase 1 / 4 tasks)
     app.include_router(health_router, prefix="/health", tags=["health"])
+    app.include_router(verify_router, prefix="/api/v2", tags=["verify"])
 
-    # TODO(Task 1.8): app.include_router(verify_router, prefix="/api/v2", tags=["verify"])
     # TODO(Task 1.9): app.include_router(stream_router, prefix="/api/v2", tags=["stream"])
     # TODO(Task 4.2): app.include_router(feedback_router, prefix="/api/v2", tags=["feedback"])
     # TODO(Task 4.8): app.include_router(calibration_router, prefix="/api/v2", tags=["calibration"])
