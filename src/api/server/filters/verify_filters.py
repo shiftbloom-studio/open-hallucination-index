@@ -101,7 +101,9 @@ Respond with valid JSON only in this exact shape:
         try:
             response = await self._llm_provider.complete(
                 messages=[
-                    LLMMessage(role="system", content="You classify harmful content conservatively."),
+                    LLMMessage(
+                        role="system", content="You classify harmful content conservatively."
+                    ),
                     LLMMessage(role="user", content=prompt),
                 ],
                 temperature=0.1,

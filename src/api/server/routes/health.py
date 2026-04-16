@@ -8,18 +8,21 @@ Liveness and readiness probes for Kubernetes/container orchestration.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from time import perf_counter
 from typing import Literal
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
 from config.dependencies import (
     get_graph_store,
     get_llm_provider,
+    get_pipeline,
     get_trace_store,
     get_vector_store,
 )
 from config.settings import get_settings
+from pipeline.pipeline import Pipeline
 
 router = APIRouter()
 
@@ -141,3 +144,130 @@ async def readiness() -> ReadinessStatus:
 async def health() -> HealthStatus:
     """Basic health check - alias for liveness."""
     return await liveness()
+
+
+# ---------------------------------------------------------------------------
+# Deep health check (Task 1.12, spec §10)
+# ---------------------------------------------------------------------------
+
+
+class LayerStatus(BaseModel):
+    """Per-layer health telemetry."""
+
+    status: Literal["ok", "degraded", "down", "skipped"]
+    latency_ms: float | None = None
+    detail: str | None = None
+
+
+class DeepHealthStatus(BaseModel):
+    """Detailed per-layer health + model versions. Matches spec §10."""
+
+    status: Literal["ok", "degraded", "down"]
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    layers: dict[str, LayerStatus] = Field(default_factory=dict)
+    model_versions: dict[str, str] = Field(default_factory=dict)
+    calibration_freshness_hours: float | None = None
+
+
+@router.get(
+    "/deep",
+    response_model=DeepHealthStatus,
+    status_code=status.HTTP_200_OK,
+    summary="Deep health — per-layer status + latency + model versions",
+    description=(
+        "Exercises every pipeline layer with a synthetic payload and "
+        "returns per-layer latency + status, plus model versions and "
+        "calibration freshness. Used by ops for SLO monitoring and by "
+        "the frontend's status page."
+    ),
+)
+async def deep_health(
+    pipeline: Pipeline = Depends(get_pipeline),  # noqa: B008
+) -> DeepHealthStatus:
+    """Run a synthetic verify through the real pipeline to probe each layer."""
+    from config.dependencies import get_verdict_store
+
+    settings = get_settings()
+    layers: dict[str, LayerStatus] = {}
+    overall: Literal["ok", "degraded", "down"] = "ok"
+
+    # Simple probes for the infra layers (graph / vector / llm / trace).
+    async def probe(
+        name: str,
+        getter,
+        *,
+        enabled: bool = True,
+    ) -> None:
+        nonlocal overall
+        if not enabled:
+            layers[name] = LayerStatus(status="skipped", detail="disabled by config")
+            return
+        start = perf_counter()
+        try:
+            instance = await getter()
+        except Exception as exc:
+            layers[name] = LayerStatus(status="down", detail=f"init: {exc}")
+            overall = "degraded"
+            return
+        if instance is None:
+            layers[name] = LayerStatus(status="down", detail="not_initialized")
+            overall = "degraded"
+            return
+        try:
+            ok = await instance.health_check()
+            latency = (perf_counter() - start) * 1000.0
+            layers[name] = LayerStatus(
+                status="ok" if ok else "down",
+                latency_ms=round(latency, 2),
+                detail=None if ok else "health_check returned False",
+            )
+            if not ok:
+                overall = "degraded"
+        except Exception as exc:
+            layers[name] = LayerStatus(status="down", detail=f"probe: {exc}")
+            overall = "degraded"
+
+    await probe("L1.decompose", get_llm_provider)
+    await probe("L1.retrieve.neo4j", get_graph_store)
+    await probe("L1.retrieve.qdrant", get_vector_store)
+    await probe(
+        "L1.retrieve.trace",
+        get_trace_store,
+        enabled=settings.redis.enabled,
+    )
+
+    # Pipeline-level probe: verify that the orchestrator resolves
+    # and that a synthetic empty-text verify returns a valid result.
+    start = perf_counter()
+    try:
+        synth = await pipeline.verify("")
+        layers["pipeline.orchestrator"] = LayerStatus(
+            status="ok",
+            latency_ms=round((perf_counter() - start) * 1000.0, 2),
+            detail=None,
+        )
+        model_versions = dict(synth.model_versions)
+    except Exception as exc:
+        layers["pipeline.orchestrator"] = LayerStatus(status="down", detail=str(exc))
+        overall = "degraded"
+        model_versions = {}
+
+    # Verdict store — always in-memory in Phase 1, should never fail
+    start = perf_counter()
+    try:
+        get_verdict_store()
+        layers["L7.verdict_store"] = LayerStatus(
+            status="ok",
+            latency_ms=round((perf_counter() - start) * 1000.0, 2),
+        )
+    except Exception as exc:
+        layers["L7.verdict_store"] = LayerStatus(status="down", detail=str(exc))
+        overall = "degraded"
+
+    return DeepHealthStatus(
+        status=overall,
+        layers=layers,
+        model_versions=model_versions,
+        # Phase 4 fills this once calibration refits have a persistent timestamp.
+        calibration_freshness_hours=None,
+    )
