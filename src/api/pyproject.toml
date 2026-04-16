@@ -48,6 +48,9 @@ dev = [
     "ruff>=0.14.10",
     "mypy>=1.19.1",
     "pre-commit>=4.5.1",
+    # Phase 0 local dev stack (Postgres + MinIO smoke test)
+    "psycopg[binary]>=3.2",
+    "minio>=7.2",
 ]
 
 [project.scripts]
