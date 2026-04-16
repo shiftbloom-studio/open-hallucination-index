@@ -91,7 +91,6 @@ class QdrantSettings(BaseSettings):
     tls_ca_cert: str | None = Field(default=None)
 
 
-
 class RedisSettings(BaseSettings):
     """Configuration for Redis semantic cache."""
 

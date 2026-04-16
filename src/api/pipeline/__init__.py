@@ -1,31 +1,28 @@
 """
-OHI Pipeline - Verification Flow Stages
-========================================
+OHI Pipeline - v2 Verification Flow Stages
+===========================================
 
-The verification pipeline: decompose → route → collect → verify → score
+The v2 pipeline: L1 decompose + retrieve → L2 domain route → L3 NLI →
+L4 PCG → L5 conformal → L6 active-learning hook → L7 assembly.
+
+v1 classes (HybridVerificationOracle, WeightedScorer) have been removed.
+v2 layers land in Phase 1-4 tasks. This __init__ re-exports only the
+primitives that survive the rewrite (decomposer, retrieval router,
+collector, mesh, selector).
 """
 
 from pipeline.collector import AdaptiveEvidenceCollector
 from pipeline.decomposer import LLMClaimDecomposer
 from pipeline.mesh import KnowledgeMeshBuilder
-from pipeline.oracle import HybridVerificationOracle
 from pipeline.router import ClaimRouter
-from pipeline.scorer import WeightedScorer
 from pipeline.selector import SmartMCPSelector
 
 __all__ = [
-    # Stage 1: Decomposition
+    # L1 — Decomposition
     "LLMClaimDecomposer",
-    # Stage 2: Routing
+    # L1 — Retrieval primitives (moved into pipeline/retrieval/ in Task 1.4)
     "ClaimRouter",
-    # Stage 3: Source Selection
     "SmartMCPSelector",
-    # Stage 4: Evidence Collection
     "AdaptiveEvidenceCollector",
-    # Stage 5: Verification
-    "HybridVerificationOracle",
-    # Stage 6: Scoring
-    "WeightedScorer",
-    # Utilities
     "KnowledgeMeshBuilder",
 ]

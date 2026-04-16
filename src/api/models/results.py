@@ -1,154 +1,112 @@
 """
-Domain Results
-==============
+v2 Result Models
+================
 
-Value objects representing verification outcomes, scores, and traces.
-These flow from the verification pipeline to the API response.
+Frozen, immutable Pydantic models for the v2 verification API. Replaces
+the v1 VerificationResult / TrustScore / ClaimVerification trio.
+
+See docs/superpowers/specs/2026-04-16-ohi-v2-algorithm-design.md §9.
 """
 
 from __future__ import annotations
 
 from enum import StrEnum, auto
-from uuid import UUID, uuid4
+from typing import Literal
+from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from models.entities import Claim, Evidence
 
-
-class EvidenceClassification(StrEnum):
-    """Granular evidence classification with confidence levels."""
-
-    STRONG_SUPPORT = auto()  # 0.9 - Evidence directly confirms claim
-    WEAK_SUPPORT = auto()  # 0.7 - Evidence provides contextual support
-    NEUTRAL = auto()  # 0.5 - Evidence is unrelated or ambiguous
-    WEAK_REFUTE = auto()  # 0.3 - Evidence suggests claim might be false
-    STRONG_REFUTE = auto()  # 0.1 - Evidence directly contradicts claim
-
-    def to_confidence(self) -> float:
-        """Convert classification to confidence score."""
-        mapping = {
-            EvidenceClassification.STRONG_SUPPORT: 0.9,
-            EvidenceClassification.WEAK_SUPPORT: 0.7,
-            EvidenceClassification.NEUTRAL: 0.5,
-            EvidenceClassification.WEAK_REFUTE: 0.3,
-            EvidenceClassification.STRONG_REFUTE: 0.1,
-        }
-        return mapping[self]
+# ---------------------------------------------------------------------------
+# Edge types in the Probabilistic Claim Graph (Phase 2 fills these in;
+# Phase 1 emits empty pcg_neighbors lists).
+# ---------------------------------------------------------------------------
 
 
-class VerificationStatus(StrEnum):
-    """Outcome of verifying a single claim."""
-
-    SUPPORTED = auto()  # Evidence strongly supports the claim
-    REFUTED = auto()  # Evidence contradicts the claim
-    PARTIALLY_SUPPORTED = auto()  # Mixed or partial evidence
-    UNVERIFIABLE = auto()  # No relevant evidence found
-    UNCERTAIN = auto()  # Conflicting evidence, cannot determine
+class EdgeType(StrEnum):
+    ENTAIL = auto()
+    CONTRADICT = auto()
 
 
-class CitationTrace(BaseModel):
-    """
-    Provenance trail explaining a verification decision.
+class ClaimEdge(BaseModel):
+    neighbor_claim_id: UUID
+    edge_type: EdgeType
+    edge_strength: float = Field(..., ge=0.0, le=1.0)
 
-    Provides transparency into how a claim was verified,
-    enabling users to inspect the reasoning and sources.
-    """
+    model_config = {"frozen": True}
 
-    claim_id: UUID
-    status: VerificationStatus
-    reasoning: str = Field(..., description="Human-readable explanation")
 
-    # Evidence chain
+# ---------------------------------------------------------------------------
+# ClaimVerdict — the per-claim public output. Spec §9.
+# ---------------------------------------------------------------------------
+
+
+FallbackUsed = Literal["domain", "general", "non_converged"]
+
+
+class ClaimVerdict(BaseModel):
+    claim: Claim
+
+    # Calibrated probability + conformal interval
+    p_true: float = Field(..., ge=0.0, le=1.0)
+    interval: tuple[float, float]
+    coverage_target: float | None = Field(default=None, ge=0.0, le=1.0)
+
+    # Provenance & explainability
+    domain: str
+    domain_assignment_weights: dict[str, float]
     supporting_evidence: list[Evidence] = Field(default_factory=list)
     refuting_evidence: list[Evidence] = Field(default_factory=list)
+    pcg_neighbors: list[ClaimEdge] = Field(default_factory=list)
+    nli_self_consistency_variance: float = Field(..., ge=0.0)
+    bp_validated: bool | None = None  # None when Gibbs skipped (benign graph)
 
-    # Confidence in this specific verification
-    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence in verification outcome")
+    # Active learning
+    information_gain: float = Field(..., ge=0.0)
+    queued_for_review: bool = False
 
-    # Strategy used
-    verification_strategy: str = Field(
-        ..., description="Strategy that produced this result (graph, vector, hybrid)"
-    )
-
-    model_config = {"frozen": True}
-
-
-class ClaimVerification(BaseModel):
-    """
-    Complete verification result for a single claim.
-
-    Bundles the original claim with its verification outcome
-    and supporting citation trace.
-    """
-
-    claim: Claim
-    status: VerificationStatus
-    trace: CitationTrace
-
-    # Per-claim score contribution
-    score_contribution: float = Field(
-        ..., ge=0.0, le=1.0, description="This claim's contribution to overall score"
-    )
+    # Calibration metadata
+    calibration_set_id: str | None = None
+    calibration_n: int = Field(..., ge=0)
+    fallback_used: FallbackUsed | None = None
 
     model_config = {"frozen": True}
 
-
-class TrustScore(BaseModel):
-    """
-    Aggregated trust assessment for a piece of text.
-
-    Combines individual claim scores into a holistic measure
-    with breakdown for interpretability.
-    """
-
-    # Global score
-    overall: float = Field(
-        ..., ge=0.0, le=1.0, description="Global trust score (0=untrusted, 1=fully trusted)"
-    )
-
-    # Breakdown
-    claims_total: int = Field(..., ge=0)
-    claims_supported: int = Field(default=0, ge=0)
-    claims_refuted: int = Field(default=0, ge=0)
-    claims_unverifiable: int = Field(default=0, ge=0)
-
-    # Confidence in the score itself
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Meta-confidence in score reliability"
-    )
-
-    # Weighting info
-    scoring_method: str = Field(
-        default="weighted_average", description="Algorithm used for aggregation"
-    )
-
-    model_config = {"frozen": True}
+    @model_validator(mode="after")
+    def _validate_interval(self) -> ClaimVerdict:
+        lo, hi = self.interval
+        if not (0.0 <= lo <= hi <= 1.0):
+            raise ValueError(f"interval must satisfy 0 <= lo <= hi <= 1, got ({lo}, {hi})")
+        return self
 
 
-class VerificationResult(BaseModel):
-    """
-    Complete verification response for an input text.
+# ---------------------------------------------------------------------------
+# DocumentVerdict — top-level public output. Spec §9.
+# ---------------------------------------------------------------------------
 
-    This is the primary output of the verification pipeline,
-    containing the trust score, all claim verifications, and metadata.
-    """
 
-    id: UUID = Field(default_factory=uuid4)
+Rigor = Literal["fast", "balanced", "maximum"]
 
-    # Input reference
-    input_hash: str = Field(..., description="Hash of input text for deduplication")
-    input_length: int = Field(..., ge=0, description="Character count of input")
 
-    # Results
-    trust_score: TrustScore
-    claim_verifications: list[ClaimVerification] = Field(default_factory=list)
-
-    # Summary
-    summary: str | None = Field(default=None, description="Human-readable summary of findings")
-
-    # Metadata
+class DocumentVerdict(BaseModel):
+    document_score: float = Field(..., ge=0.0, le=1.0)
+    document_interval: tuple[float, float]
+    internal_consistency: float = Field(..., ge=0.0, le=1.0)
+    claims: list[ClaimVerdict] = Field(default_factory=list)
+    decomposition_coverage: float = Field(..., ge=0.0, le=1.0)
     processing_time_ms: float = Field(..., ge=0.0)
-    cached: bool = Field(default=False, description="Whether result was from cache")
+    rigor: Rigor
+    refinement_passes_executed: int = Field(..., ge=0)
+    pipeline_version: str = Field(default="ohi-v2.0")
+    model_versions: dict[str, str] = Field(default_factory=dict)
+    request_id: UUID
 
     model_config = {"frozen": True}
+
+    @model_validator(mode="after")
+    def _validate_doc_interval(self) -> DocumentVerdict:
+        lo, hi = self.document_interval
+        if not (0.0 <= lo <= hi <= 1.0):
+            raise ValueError(f"document_interval must satisfy 0 <= lo <= hi <= 1, got ({lo}, {hi})")
+        return self
