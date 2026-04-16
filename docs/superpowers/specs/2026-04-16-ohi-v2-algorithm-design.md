@@ -18,6 +18,7 @@ OHI v2 is a complete replacement of the current Open Hallucination Index verific
 3. **An open active learning loop with EWC++ regularized retraining.** Public users submit feedback through a `/feedback` endpoint with a 3-concordant consensus filter; nightly jobs refit per-domain conformal calibration and fine-tune NLI heads with elastic weight consolidation to prevent catastrophic forgetting.
 4. **Five-domain specialization.** General, biomedical, legal, code, and social each have their own NLI head, source-credibility prior, and calibration set, dispatched by a per-claim soft router.
 5. **Open-by-default API.** No authentication; rate-limit + traffic-protection at the edge; a deterministic daily cost ceiling that gracefully translates load spikes into 503 with `Retry-After`. A public `/calibration/report` endpoint exposes empirical coverage statistics for auditability.
+6. **Three rigor tiers (`fast` / `balanced` / `maximum`).** The pipeline trades latency for rigor explicitly via an API parameter — from sub-30s draft checks to multi-minute production verification to multi-hour paper-grade analyses with NLI ensembles, full-quadratic claim graphs, and Gibbs sampling sanity checks against TRW-BP marginals. There is no fixed wall-clock cap; long requests run to completion under the rigor tier they accepted.
 
 The combination — calibrated NLI + joint inference via PCG + auditable conformal coverage + active learning with catastrophic-forgetting protection — is, to the best of our knowledge, novel in the hallucination-detection literature. It is designed to be both a publishable methodological contribution and a production-grade verification service.
 
@@ -66,7 +67,7 @@ The combination — calibrated NLI + joint inference via PCG + auditable conform
 
 - **Quantitative.** Beat current OHI on FActScore, TruthfulQA, HaluEval, and one domain benchmark per vertical (PubMedQA, LegalBench-Entailment, custom code fact-check eval, LIAR/MultiFC/ClimateFEVER). Target: ≥5pt F1 improvement on at least 4 of the 5 domain benchmarks relative to v1.
 - **Calibration.** Expected Calibration Error (ECE) ≤ 0.05 per domain; conformal coverage ≥ 88% on held-out test set.
-- **Latency.** Simple inputs (1–3 claims) < 60s; typical (5–15 claims) ≤ 60s; complex (>30 claims) ≤ 120s hard cap. P95 within budget per tier.
+- **Latency.** No fixed wall-clock cap. The pipeline trades latency for rigor. Reference points (A100 inference, default `rigor=balanced`): simple inputs (1–3 claims) ≈ 10–30s; typical (5–15 claims) ≈ 1–3 min; complex (>30 claims) ≈ 5–10 min; maximum-rigor configuration on a long document may exceed 20 min and that is acceptable. Latency budgets are explicit per `rigor` tier in §2 and surfaced through the API `options.rigor` field.
 - **Active learning.** ≥10% F1 improvement after 2 weeks of feedback collection on the prioritized-review subset.
 
 ---
@@ -187,19 +188,43 @@ src/api/pipeline/
 
 `oracle.py` and `scorer.py` are removed. Their roles are dispersed across L3 (verification), L4 (joint inference), L5 (calibration), and L7 (assembly).
 
-### Latency budget (typical 10-claim document)
+### Rigor tiers and latency profile
 
-| Layer | Budget | Notes |
+OHI v2 trades latency for rigor explicitly through the API `options.rigor` field. There is no fixed wall-clock cap; the system commits to *finishing* every accepted request, with the per-tier work envelope below. All numbers assume one **NVIDIA A100 40GB**, FP16, batch 32, sequence 512 tokens (DeBERTa-v3-large measured at ~110–140 forward passes/sec on this configuration; A10G fallback is ~40–60/sec, which roughly doubles wall times below).
+
+| Tier | What changes | Use case |
 |---|---|---|
-| L1 (decompose + retrieve) | 8s | LLM decomp + parallel evidence pulls |
-| L2 (domain routing) | 1s | Lightweight classifier (~50ms × 10 claims, batched to ~500ms) |
-| L3 (NLI, K=3 self-consistency) | 25s | GPU/API bound; batched cross-encoder |
-| L4 (PCG + 8 BP iterations) | 5s | CPU-bound, NumPy vectorized |
-| L5 (conformal) | <1s | Lookup + arithmetic |
-| L6 + L7 | 1s | Assembly + queue post |
-| **Total** | **~40s** | Within 60s typical budget |
+| `fast` | K_self_consistency = 3, claim↔claim NLI top-K capped at 5N, PCG = TRW-BP only, no MCMC sanity, no refinement pass, no NLI ensemble | Real-time UX, draft checks |
+| `balanced` (default) | K = 10, full quadratic claim↔claim NLI for N ≤ 40 (top-K capped at 10N above), TRW-BP with optional Gibbs spot-check on flagged graphs, 1 refinement pass on contradiction-flagged claims | Production default; "I want a real answer in a couple of minutes" |
+| `maximum` | K = 30, full quadratic claim↔claim NLI regardless of size, TRW-BP + parallel Gibbs MCMC for full posterior validation, up to 3 refinement passes, NLI ensemble (DeBERTa-v3-large MNLI + RoBERTa-large MNLI averaged), expanded retrieval tier | High-stakes verification, research benchmarking, paper-grade results |
 
-Complex inputs (>30 claims) trade more time on L3 + L4 within the 120s hard cap.
+**Reference latencies (A100, default retrieval tier):**
+
+| Document size | `fast` | `balanced` | `maximum` |
+|---|---|---|---|
+| 3 claims | ~5s | ~15s | ~90s |
+| 10 claims | ~25s | ~90s | ~6 min |
+| 30 claims | ~75s | ~5 min | ~25 min |
+| 100 claims | ~5 min | ~25 min | ~2 h |
+
+These are upper-bound targets; we expect the actual numbers to come in materially faster after Phase 0 profiling. The `maximum` tier exists precisely so that we can publish results without latency-driven shortcuts.
+
+**Per-layer breakdown (default `balanced` tier, 10-claim document):**
+
+| Layer | Op count | Wall (A100) | Notes |
+|---|---|---|---|
+| L1 (decompose + retrieve) | 1 LLM decomp + ~300 retrievals | 10–20s | I/O bound; LLM is the long pole |
+| L2 (domain routing) | 10 distilbert | 1s | Batched |
+| L3 (NLI claim↔evidence, K=10) | 10 × 30 × 10 = 3,000 fwd | ~30s | ~94 batches of 32 |
+| L3 (NLI claim↔claim full, K=10) | 45 unique × 10 = 450 fwd | ~5s | Full quadratic; N ≤ 40 |
+| L4 (TRW-BP, up to 30 iterations) | ≤30 nodes | 5–10s | NumPy vectorized; converges quickly at this size |
+| L4 refinement pass (1×) | re-retrieve flagged + re-NLI on subset | 10–15s | Often skipped if no contradictions |
+| L5 + L6 + L7 | dict ops + SQS post | 1–2s | Negligible |
+| **Total balanced 10-claim** | | **≈ 60–90s** | Comfortably under 2 min |
+
+We deliberately do not budget L3 down by reducing K below 10 in `balanced`. K = 10 gives sample-variance confidence intervals that are usable as relative edge weights *and* as documented epistemic-uncertainty signals; K = 3 was a compromise driven by an obsolete latency target.
+
+The infrastructure sub-project chooses concrete hardware. Phase 0 benchmarks both A100 and A10G on the chosen checkpoint and writes the locked numbers into the runbook.
 
 ---
 
@@ -373,29 +398,36 @@ class NLIService(Port):
 
 ### Model
 
-- **Base encoder:** DeBERTa-v3-large (435M parameters), single shared instance, kept resident on GPU.
+- **Base checkpoint:** `microsoft/deberta-v3-large` further fine-tuned on MNLI (we will use the public `MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli` checkpoint as the starting point — already trained on MNLI + FEVER + ANLI + LingNLI + WANLI, so it knows the entailment task and is asymmetric in the standard MNLI sense). Single shared encoder instance, kept resident on GPU.
 - **Per-domain heads:** small classification heads (~5MB each) that swap on the encoder. Heads loaded lazily; only domains touched by the active document are pinned.
 - **Recommendation (tentative):** revisit per-domain base encoders if Phase 3 domain F1 underperforms. SciFive / BiomedBERT-NLI are the most likely candidates for biomedical.
 
-### Self-consistency (K=3)
+### Self-consistency (K configurable; default K=10)
 
-For each (claim, evidence) pair, do K=3 stochastic forward passes with input perturbation:
+For each (claim, evidence) pair, do K stochastic forward passes with input perturbation. `K` is set by the rigor tier: `fast`=3, `balanced`=10 (default), `maximum`=30.
 
-1. **Lexical paraphrase of the claim** via a small T5-paraphrase model (cached aggressively per claim).
-2. **Evidence sentence-window slide** (±1 sentence around the central retrieved span).
-3. **Premise/hypothesis order swap** (claim-as-hypothesis vs. claim-as-premise — DeBERTa-MNLI is asymmetric).
+The K passes are drawn (with replacement when K > the cross product of perturbation choices) from the following perturbation distribution:
 
-Final distribution = mean of softmax over K passes; variance = sample variance. The variance feeds L4 as the local-potential confidence inverse-weight.
+1. **Lexical paraphrases of the claim** via a small T5-paraphrase model. We pre-generate up to 8 paraphrases per claim, cached. Paraphrase quality is filtered: only paraphrases with bidirectional NLI entailment ≥ 0.9 against the original are retained.
+2. **Evidence sentence-window slides** (±1, ±2 sentences around the central retrieved span; up to 5 windows).
+3. **Premise/hypothesis order swap** — DeBERTa-MNLI fine-tunes are asymmetric on the (premise, hypothesis) ordering, so claim-as-premise vs. claim-as-hypothesis are independent estimates.
+4. **(maximum tier only) NLI checkpoint ensembling** — alternate between DeBERTa-v3-large MNLI head and RoBERTa-large MNLI; combine with the head identity as another perturbation axis.
+
+Final distribution = mean of softmax over K passes; variance = sample variance. With K = 10 (default), the variance estimate has tight enough confidence bands to function both as (a) a relative weight for L4 PCG edges and (b) a documented epistemic-uncertainty signal in the API output (`nli_self_consistency_variance` field). We still do not present this variance as a calibrated probability — that role remains exclusively L5's conformal interval, which has a real coverage guarantee.
 
 ### Claim ↔ claim NLI
 
-The most innovative piece. Naively O(N²); optimized via:
+Naively O(N²). Behavior is rigor-tier dependent:
 
-1. **Bi-encoder pre-filter** with `sentence-transformers/all-mpnet-base-v2`; prune pairs below `adapter.claim_pair_relatedness_threshold` (default 0.45).
-2. **Top-K cap**: never run cross-encoder on more than `min(N², 5N)` pairs.
-3. **Symmetry caching**: compute (i, j) only with i < j, then a cheap second softmax for the reverse direction.
+- **`fast`**: bi-encoder pre-filter + top-K cap (5N pairs). Bi-encoder = `sentence-transformers/all-mpnet-base-v2`; threshold = `adapter.claim_pair_relatedness_threshold` (default 0.45 for general; 0.30 for `social` and `legal` where contradictions are often lexically dissimilar).
+- **`balanced`** (default): full quadratic enumeration for `N ≤ 40` (≤ 780 unique pairs); above N=40, top-K cap at 10N. The bi-encoder is still run as a feature input to the PCG potential (high relatedness ⇒ stronger edge prior) but is *not* used to prune.
+- **`maximum`**: full quadratic enumeration regardless of N. No bi-encoder pruning at any N.
 
-For a 30-claim document this yields ~150 cross-encoder calls instead of 870.
+The bi-encoder threshold issue (lexically dissimilar contradictions get pruned in `fast`) is acknowledged in `fast` mode and largely solved by `balanced` and above doing full enumeration up to reasonable N.
+
+For a 30-claim document, full enumeration is `30 · 29 / 2 = 435` unique unordered pairs, well within budget at `balanced`.
+
+**Symmetry caching**: compute each unordered pair (i, j), i < j once; the reverse direction (j, i) is a cheap second softmax on the already-encoded pair (DeBERTa-MNLI is asymmetric so both orderings carry information).
 
 ### Calibrated logits
 
@@ -425,54 +457,131 @@ Treat the document as a structured probabilistic graphical model. Per-claim post
 
 `src/api/pipeline/pcg/`
 
-### Construction
+### Construction (Ising-style log-linear formulation)
 
-1. **Nodes** = claims. Each node `c` has a binary latent variable `T_c ∈ {true, false}`.
-
-2. **Local (unary) potentials** `φ_c(T_c)` from L3 claim↔evidence NLI:
-
-   ```
-   φ_c(T_c=true)  = ∑_e w_e · entail(c, e) + (1 - w_e) · 0.5
-   φ_c(T_c=false) = ∑_e w_e · contradict(c, e) + (1 - w_e) · 0.5
-
-   where w_e = source_credibility(e) · temporal_decay(e) · (1 - NLI_variance(c, e))
-   ```
-
-   Sources we trust more, that are fresher, and that NLI is more confident about, get more weight. Then normalize: `φ_c(·) ← φ_c(·) / Σ φ_c`.
-
-3. **Pairwise (edge) potentials** `ψ_{ij}(T_i, T_j)` from L3 claim↔claim NLI:
-
-   - **Entailment edge** (`entail(c_i, c_j) > 0.7`):
-     ```
-     ψ_{ij}(t, t) = entail
-     ψ_{ij}(t, f) = 1 - entail   (penalty)
-     ψ_{ij}(f, t) = neutral
-     ψ_{ij}(f, f) = neutral
-     ```
-   - **Contradiction edge** (`contradict(c_i, c_j) > 0.7`): symmetric penalty matrix encoding "if c_i true then c_j false".
-   - **Weak/neutral edges**: pruned (no edge).
-
-4. **Edge strength** is multiplied by `(1 - variance(NLI(c_i, c_j)))` so noisy edges contribute less.
-
-### Inference: Loopy Belief Propagation
-
-The graph is generally cyclic. We use loopy BP with damping factor δ = 0.5 (standard for stability):
+We model the joint distribution over claim-truth assignments as a pairwise Ising model. Encode `T_c ∈ {-1, +1}` (false / true). The energy is:
 
 ```
-m_{i→j}^{k+1}(T_j) = (1-δ) · m_{i→j}^k(T_j)
-                   + δ · Σ_{T_i} φ_i(T_i) · ψ_{ij}(T_i, T_j) ·
-                                  ∏_{n ∈ N(i)\{j}} m_{n→i}^k(T_i)
+E(T) = − ∑_c α_c · T_c   −   ∑_{(i,j) ∈ E} J_ij · T_i · T_j
 
-Belief: b_i(T_i) ∝ φ_i(T_i) · ∏_{n ∈ N(i)} m_{n→i}(T_i)
+P(T) ∝ exp(−E(T))
 ```
 
-Convergence: max message change < 10⁻³ or 8 iterations, whichever first. Messages computed in log-space to avoid underflow; final beliefs renormalized and clamped to `[ε, 1-ε]`.
+**1. Node prior log-odds** `α_c` from L3 claim↔evidence NLI.
 
-### Why loopy BP
+Define per-evidence true/false probability mass (the `neutral` softmax mass is split evenly):
 
-- **Exact** (junction tree): exponential in tree-width, intractable for cyclic graphs.
-- **Variational** (mean-field): cleaner math, but ignores edge correlations — exactly what we want to capture.
-- **Loopy BP**: converges to a stationary point of Bethe free energy (Yedidia et al., 2003); strong empirical results on similar structured-prediction tasks; interpretable enough to debug.
+```
+p_t(c, e) = entail(c, e)     + 0.5 · neutral(c, e)
+p_f(c, e) = contradict(c, e) + 0.5 · neutral(c, e)
+```
+
+Then aggregate, evidence-weighted by source credibility, freshness, and NLI confidence:
+
+```
+w_e = source_credibility(e) · temporal_decay(e) · (1 − NLI_variance(c, e))
+
+S_t = ∑_e w_e · log p_t(c, e)
+S_f = ∑_e w_e · log p_f(c, e)
+
+α_c = (S_t − S_f) / max(1, ∑_e w_e)
+```
+
+`α_c` is a well-defined real-valued log-odds. Positive = evidence favors `T_c = +1` (true); negative = favors false. Magnitude scales with the agreement of weighted evidence. Normalization by `∑ w_e` prevents documents with more retrieved evidence from automatically getting stronger priors.
+
+**2. Edge interaction parameters** `J_ij` from L3 claim↔claim NLI.
+
+Let `e_ij = entail(c_i, c_j)`, `r_ij = contradict(c_i, c_j)`, `n_ij = neutral(c_i, c_j)`.
+
+```
+strength_ij = max(e_ij, r_ij) − n_ij                   ∈ [-1, 1]
+sign_ij     = +1 if e_ij ≥ r_ij else −1                # entail vs contradict
+J_ij        = sign_ij · max(0, strength_ij) · γ · (1 − NLI_variance(c_i, c_j))
+```
+
+`γ` is a global edge-temperature hyperparameter (initial value 1.0; tuned on FEVER dev). `J_ij > 0` for entailment edges (favors same label); `J_ij < 0` for contradiction edges (favors opposite label). Weak edges (low strength) auto-decay to ~0 and contribute nothing — no need for a separate prune threshold beyond the bi-encoder pre-filter in L3.
+
+**3. The graph is well-defined and identifiable.**
+
+Both unary and pairwise terms are real-valued log-potentials; `P(T) ∝ exp(−E(T))` is a proper Boltzmann distribution. No normalization division-by-zero; no constant-row edge cases.
+
+### Inference: Tree-Reweighted Belief Propagation (primary)
+
+The graph is generally cyclic and can have strong contradiction edges. Plain loopy BP is known to oscillate or converge to non-Bethe-stationary points in such cases (Murphy, Weiss & Jordan, 1999). We use **tree-reweighted belief propagation** (Wainwright, Jaakkola & Willsky, 2005) as the primary inference algorithm, with damped loopy BP as a fallback.
+
+**Why TRW-BP:**
+- **Convergent** under broad conditions (vs. LBP's possible oscillation on adversarial graphs).
+- **Provides upper bound** on the log-partition function — useful when the document-level normalization matters for L7 aggregation.
+- **Interpolates between mean-field and LBP** via tree-reweighting coefficients `ρ_e ∈ [0, 1]`, allowing tuning toward more conservative inference on graphs we are less sure about.
+
+**Update rule** (for binary nodes, message in log-space):
+
+```
+m_{i→j}^{k+1}(T_j) = (1 − δ) · m_{i→j}^k(T_j)
+                   + δ · ρ_{ij}⁻¹ · log ∑_{T_i} exp(
+                         α_i · T_i / ρ_i
+                       + J_ij · T_i · T_j / ρ_{ij}
+                       + ∑_{n ∈ N(i)\{j}} ρ_{ni} · m_{n→i}^k(T_i)
+                     )
+
+Belief: b_i(T_i) ∝ exp( α_i · T_i / ρ_i + ∑_{n ∈ N(i)} ρ_{ni} · m_{n→i}(T_i) )
+```
+
+`ρ_e` are computed once per graph from a uniform distribution over spanning trees (cheap — N log N with Kirchhoff's matrix-tree theorem). Damping δ = 0.5. Convergence criterion: max message change < 10⁻³ or 8 iterations.
+
+**LBP fallback.** If TRW-BP fails to converge (max message change still > 10⁻² after 8 iterations), we re-run with damped LBP (δ = 0.3), accept the result if it converges, and otherwise emit `converged=False` and `algorithm_used="LBP-nonconvergent"`. The conformal layer (L5) treats non-converged claims as out-of-calibration — see L5 changes below.
+
+### Gibbs sampling sanity check (rigor=`balanced` opt-in, `maximum` always)
+
+To validate TRW-BP's variational approximation against actual posterior samples, we run a Gibbs MCMC chain in parallel:
+
+- 2,000 burn-in iterations + 8,000 sampled iterations (single chain; configurable up to 4 chains in `maximum` for Gelman-Rubin diagnostic).
+- For each node, compute the posterior marginal as the empirical fraction of samples with `T_c = +1`.
+- Compare TRW-BP marginal `b_TRW(c)` to Gibbs marginal `b_Gibbs(c)`. If `|b_TRW − b_Gibbs| > 0.10` for any node, mark that node `bp_validated=False` and use `b_Gibbs` as the authoritative belief; otherwise keep `b_TRW` (it is faster to compute and well-validated for that graph).
+- In `balanced` tier: only invoke Gibbs when the TRW-BP graph has any `J_ij` with `|J_ij| > 0.6` (strong edges) or any frustrated cycle. Otherwise skip — the variational approximation is reliable on benign graphs.
+- In `maximum` tier: always invoke Gibbs.
+
+This converts "approximate inference" from a hope into a measured property of each individual document.
+
+### Iterative refinement (rigor ≥ `balanced`)
+
+After TRW-BP / Gibbs converges, we identify claims with high *evidence-belief disagreement*: claims where the L4 posterior `b_c` strongly disagrees with the L1-retrieved evidence (e.g., `b_c < 0.3` despite predominantly supporting evidence). These are the claims where joint inference has overridden local evidence — exactly the cases where re-retrieval is most likely to surface a missing piece of disambiguating context.
+
+For each flagged claim:
+1. Re-issue the retrieval at one tier deeper (e.g., `default` → `max`) plus a query expansion based on the contradicting neighbors in the PCG.
+2. Re-run L3 NLI for the new evidence and the affected edges.
+3. Re-run TRW-BP on the (potentially updated) graph.
+
+`balanced` allows up to 1 refinement pass per request; `maximum` allows up to 3. Each pass adds ~10–20s on a 10-claim document. Refinement passes are bounded by both per-request count and by a "no-progress" detector (if marginals don't move > 0.02 between passes, stop early).
+
+### Acknowledged limitations
+
+- TRW-BP does not exactly recover the marginal posteriors of the joint Ising model; LBP and TRW-BP are both approximate. We claim "tractable approximation with tighter convergence guarantees than LBP, an explicit log-partition bound, and Gibbs-sampling validation in `balanced`+ tiers". For pathological graphs the Gibbs check catches the disagreement and substitutes the MCMC marginal.
+- Gibbs sampling itself can mix slowly on multimodal posteriors. We use Gelman-Rubin in `maximum` tier (4 chains, R̂ < 1.05 required); in `balanced` we accept the single-chain estimate with a documented caveat.
+
+### Output
+
+Per claim: `PosteriorBelief(p_true, p_false, converged: bool, algorithm: str, iterations: int, edge_count: int, log_partition_bound: float)`.
+
+Document-level: **internal consistency score** = average `KL(b_i || softmax(α_i))` over all nodes — i.e., how much the joint inference moved each node's belief from its evidence-only prior. We map this to [0, 1] via `1 − exp(−KL_avg / τ)` with `τ = log 2` chosen so a one-bit average shift maps to ~0.5. The `τ` choice is documented and kept fixed so the score is comparable across documents; it is not a calibrated probability and is presented in the API as `internal_consistency` (not `internal_consistency_probability`).
+
+### Why this is the publishable contribution
+
+Existing hallucination-detection systems (FActScore, SelfCheckGPT, RefChecker, ChainPoll) treat claims as i.i.d. Treating them as a structured Ising model with calibrated NLI-derived parameters and conformal-wrapped output is, to our knowledge, novel. The architecture admits natural extensions (temporal/causal edges from L1 normalized SPO; soft constraints from external knowledge graphs as additional unary terms) for follow-up work.
+
+### Edge cases
+
+- **Single-claim document**: graph has one node; belief = `softmax(α_c)`; trivial.
+- **Disconnected components**: each runs TRW-BP independently; document-level aggregation in L7 still treats all claims jointly via the copula.
+- **Non-convergence**: emit `converged=False`, exclude from calibration set (see L5), L6 high-information signal.
+- **Numerical underflow**: log-space messages; final beliefs clamped to `[ε, 1−ε]`.
+
+### Tests
+
+- Unit tests on small synthetic graphs (chain, V-structure, triangle, frustrated cycle) with closed-form / exhaustive-enumeration ground truth.
+- Convergence test: TRW-BP convergence rate on 30-claim documents from the held-out benchmark set.
+- Ablation: edges removed → posteriors equal `softmax(α_c)`, modulo clamping.
+- Stress test: adversarial frustrated graphs (every triangle contains an odd number of contradiction edges) — TRW-BP should converge or gracefully fall back to LBP-with-flag.
 
 ### Output
 
@@ -513,35 +622,74 @@ Take the joint posterior `b_i(T_i=true) ∈ [0, 1]` from L4 and wrap it with a d
 
 Bayesian credible intervals require a prior and are calibrated only if the prior is right — which it never is for foundation-model NLI outputs. Split conformal makes one assumption (exchangeability of test ↔ calibration) and gives finite-sample distribution-free coverage guarantees.
 
-### Algorithm (per-domain split conformal)
+### Algorithm (per-domain split conformal with full re-scoring)
 
 For each domain `d`:
 
-1. **Calibration set** `D_d = {(claim_k, true_label_k, b_k) : k=1..n_d}` — claims with human feedback labels, with their L4 posterior `b_k` recorded *at feedback time*.
-2. **Nonconformity score**: `s_k = |b_k - 𝟙[true_label_k]|`.
-3. **Quantile**: `q̂_d = ⌈(n_d + 1)(1 - α)⌉ / n_d` empirical quantile of `{s_k}`. For α=0.10, the 90th percentile.
-4. **Test-time interval**:
+1. **Calibration set** `D_d = {(claim_k, true_label_k) : k=1..n_d}` — claims with human feedback labels (only the labels are stored long-term; *not* the historical posteriors).
+2. **Re-scoring under the current model.** Each calibration example is re-scored at deploy time with the *current* model `M_t`, producing fresh `b_k = M_t.posterior(claim_k)`. This is the key methodological commitment: scores `b_k` and the test-time `b_test` come from the *same* model, preserving exchangeability under the i.i.d. assumption on claims. (See §12 for how nightly retraining triggers a full re-scoring stage.)
+3. **Nonconformity score**: `s_k = |b_k − 𝟙[true_label_k]|`.
+4. **Quantile**: `q̂_d = ⌈(n_d + 1)(1 − α)⌉ / n_d` empirical quantile of `{s_k}`. For α = 0.10, the 90th percentile.
+5. **Test-time interval**:
    ```
-   P_lower = max(0, b_test - q̂_d)
+   P_lower = max(0, b_test − q̂_d)
    P_upper = min(1, b_test + q̂_d)
    ```
-   Coverage guarantee: `Pr[true_label ∈ [P_lower, P_upper]] ≥ 1 - α` under exchangeability.
+   Coverage guarantee: `Pr[true_label ∈ [P_lower, P_upper]] ≥ 1 − α` under exchangeability of test and calibration claims under model `M_t`.
+
+**Why full re-scoring (and not Adaptive Conformal Inference).** ACI (Gibbs & Candès, 2021) is a valid alternative for the online-retraining setting and we mark it as a "Phase 5+ research extension". For Phase 4 we choose full re-scoring because (a) it preserves the standard split-conformal coverage guarantee with no asterisks, (b) the calibration set is small relative to inference cost (target 1k–5k examples per domain × stratum), so re-scoring all of it during nightly maintenance is tractable (~5–15 min per domain on the inference cluster), and (c) the published coverage report (`/api/v2/calibration/report`) can cite a clean theorem.
 
 ### Mondrian stratification
 
-Stratify the calibration set by `claim_type × domain` (5 × 8 = up to 40 strata). Each requires `n ≥ 50` for reliability; below threshold falls back to per-domain; below per-domain falls back to global `general` (logged + flagged).
+Stratify the calibration set by `claim_type × domain` (up to 5 domains × 8 claim types = 40 strata). Per-stratum minimum sample size: `n ≥ 50`.
+
+**Fallback cascade with explicit semantics:**
+
+```
+For test claim with stratum (d, t):
+  1. If |D_{d,t}| ≥ 50:
+       use stratum-specific quantile q̂_{d,t}
+       fallback_used = false
+       interval = [b - q̂_{d,t}, b + q̂_{d,t}]   ← preserves coverage guarantee
+  2. Else if |D_d| ≥ 200:
+       use per-domain quantile q̂_d (pooled across claim types in d)
+       fallback_used = "domain"
+       interval = [b - q̂_d, b + q̂_d]   ← coverage guarantee holds for the pooled distribution, NOT for stratum t specifically
+  3. Else:
+       use global "general" quantile q̂_general
+       fallback_used = "general"
+       interval = [b - q̂_general, b + q̂_general]   ← out-of-domain; coverage guarantee does NOT hold
+       coverage_target = null in output schema
+```
+
+When fallback fires, the API response sets `fallback_used` to the level used and (in the "general" case) sets `coverage_target = null` to signal that no calibration guarantee is being made. The frontend renders this as a "limited calibration" badge. We deliberately do *not* apply post-hoc multiplicative widening — that would invalidate the coverage promise on the rest of the data without delivering a real coverage promise on the fallback case.
 
 ### Mixture conformal for soft domain assignments
 
-When L2 returned `{d → w_d}`, use Tibshirani's weighted exchangeability:
+When L2 returned `{d → w_d}`, we use Tibshirani's weighted exchangeability formulation. Concretely, the mixture nonconformity quantile is computed as the `(1 − α)`-quantile of the pooled distribution of nonconformity scores reweighted by `w_d`:
+
 ```
-q̂_mix = quantile_{1-α}( ∑_d w_d · F_d^{-1} )
+For each calibration example k in domain d':
+    weight_k = w_{d'} / |D_{d'}|         (down-weights examples from less-likely domains)
+q̂_mix = weighted_quantile_{1-α}({s_k}, weights={weight_k})
 ```
-where `F_d` is the empirical CDF of nonconformity scores in domain `d`.
+
+This preserves the coverage guarantee under the standard exchangeability assumption within each domain (Tibshirani et al., 2019, "Conformal Prediction Under Covariate Shift").
+
+### Behavior on non-converged L4 outputs
+
+Claims with `converged=False` from L4 are **not** added to the calibration set (they don't represent the model's normal output distribution). At test time, a non-converged claim's calibrated verdict is emitted with:
+
+- `coverage_target = null`
+- `fallback_used = "non_converged"`
+- The point estimate `p_true` is still emitted (best effort)
+- `interval = [0.0, 1.0]` (uninformative — accurately reflects that we have no calibration story for non-converged claims)
+
+This is the honest move: no fake guarantees, no post-hoc widening that secretly violates exchangeability.
 
 ### Coverage validation in nightly job
 
-After each refit, the job runs k-fold cross-coverage on the calibration set itself and asserts empirical coverage ∈ [α - 0.02, α + 0.05]. Outside this range gates the deployment (alarm, no auto-promote).
+After each refit + re-scoring, the job runs k-fold cross-coverage on the calibration set and asserts empirical coverage ∈ **[0.88, 0.92]** for α = 0.10 (symmetric ±0.02 around the target). Outside this range gates the deployment (alarm, no auto-promote). Symmetric bounds because both under-coverage (intervals too narrow → false confidence) and over-coverage (intervals too wide → wasted information) are operationally bad.
 
 ### Output
 
@@ -630,16 +778,38 @@ Take per-claim `CalibratedVerdict[]` from L5, the L4 internal consistency signal
 
 `src/api/pipeline/assembly/`
 
-### Document-level aggregation: Gaussian copula
+### Document-level aggregation: Gaussian copula joint probability
 
-Naively averaging per-claim probabilities discards the joint structure. We use a Gaussian copula:
+Naively averaging per-claim probabilities discards the joint structure. We compute the proper joint probability `P(all claims true)` using a Gaussian copula:
 
-1. Map each `b_c ∈ (0, 1)` to a Gaussian via probit: `z_c = Φ⁻¹(b_c)`.
-2. Build the empirical claim-claim correlation matrix `R` from L3 claim↔claim entailment scores (entail correlations positive, contradict negative).
-3. Sample `Z ~ N(0, R)`, transform back: `b' = Φ(Z)`.
-4. Document score = expectation of `min(b'_c)` (joint truth requires *all* claims to be true; min is the natural aggregator).
+```
+For each claim c:
+    z_c = Φ⁻¹(b_c)               # probit transform of L4 posterior
 
-This properly accounts for contradictory claims that can't both be true. Naïve averaging would give a high score to a self-contradicting document; copula correctly penalizes it.
+Build correlation matrix R from L3 claim↔claim NLI:
+    raw[i,j] = entail(c_i, c_j) − contradict(c_i, c_j)   ∈ [−1, +1]
+    raw[i,i] = 1
+    R = nearest_psd(raw)         # eigenvalue clipping: any eigenvalue < ε → ε
+
+Document score = Φ_R(z_1, z_2, ..., z_N)
+```
+
+`Φ_R` is the multivariate Gaussian CDF with correlation `R`. This is the natural Gaussian-copula joint probability that all `N` claims are true.
+
+**Computation.** For `N ≤ 10` the multivariate Gaussian CDF has fast, accurate quasi-Monte Carlo estimators (Genz algorithm via SciPy `scipy.stats.multivariate_normal.cdf`). For `N > 10` we approximate by Monte Carlo: draw 10,000 samples from `N(0, R)`, count the fraction where every coordinate `Z_c > z_c`. Sample size 10,000 gives standard error < 0.005 on the resulting probability — adequate for our use.
+
+**Document-level interval.** Same Monte Carlo procedure applied to the conformal lower / upper bounds gives `[document_lower, document_upper]`:
+
+```
+document_lower = Φ_R(Φ⁻¹(P_lower_1), ..., Φ⁻¹(P_lower_N))
+document_upper = Φ_R(Φ⁻¹(P_upper_1), ..., Φ⁻¹(P_upper_N))
+```
+
+This is a valid lower / upper bound on the true joint probability under the copula model (monotonicity of the multivariate CDF).
+
+**PSD enforcement.** `R` constructed from raw NLI scores is generally not positive-semi-definite. We project to the nearest PSD matrix in Frobenius norm via eigenvalue clipping: compute `R = U Λ Uᵀ`, set every `λ_i < ε` (we use `ε = 10⁻⁴`) to `ε`, and reconstruct. The clipped matrix is then re-normalized to keep unit diagonal. The Frobenius distance from the raw matrix is reported in `model_versions` for auditability.
+
+**Why joint-truth probability and not weakest-link.** The joint probability is the answer to the question users actually want to ask: "what is the probability this entire document is correct?" Weakest-link `min(b_c)` would discard the correlation structure and double-penalize correlated claims. The copula-derived joint truthfully encodes "if these two claims are mutually entailing, count them once; if they contradict, the joint is forced low." This is the methodologically correct aggregator.
 
 ### Internal consistency score
 
@@ -652,7 +822,7 @@ class ClaimVerdict(BaseModel):
     claim: Claim
     p_true: float
     interval: tuple[float, float]
-    coverage_target: float = 0.90
+    coverage_target: float | None  # null when fallback_used != null
 
     # Provenance & explainability
     domain: Domain
@@ -661,28 +831,31 @@ class ClaimVerdict(BaseModel):
     refuting_evidence: list[Evidence]
     pcg_neighbors: list[ClaimEdge]
     nli_self_consistency_variance: float
+    bp_validated: bool                 # True if Gibbs check agreed with TRW-BP
 
     # Active learning
     information_gain: float
     queued_for_review: bool
 
     # Calibration metadata
-    calibration_set_id: str
+    calibration_set_id: str | None     # null when no real calibration set used
     calibration_n: int
-    fallback_used: bool
+    fallback_used: str | None          # null | "domain" | "general" | "non_converged"
 
     model_config = {"frozen": True}
 
 
 class DocumentVerdict(BaseModel):
-    document_score: float
+    document_score: float              # Φ_R(Φ⁻¹(b_1), ..., Φ⁻¹(b_N))
     document_interval: tuple[float, float]
-    internal_consistency: float
+    internal_consistency: float        # 1 - exp(-KL_avg/τ), τ=ln 2
     claims: list[ClaimVerdict]
     decomposition_coverage: float
     processing_time_ms: float
+    rigor: Literal["fast", "balanced", "maximum"]
+    refinement_passes_executed: int
     pipeline_version: str = "ohi-v2.0"
-    model_versions: dict[str, str]
+    model_versions: dict[str, str]     # includes nli, decomposer, router, calibration
     request_id: UUID
 
     model_config = {"frozen": True}
@@ -726,48 +899,101 @@ Request:
   "context": "string | null",
   "domain_hint": "general | biomedical | legal | code | social | null",
   "options": {
+    "rigor": "fast | balanced | maximum",
     "tier": "local | default | max",
-    "max_claims": 50,
+    "max_claims": 100,
     "include_pcg_neighbors": true,
     "include_full_provenance": true,
-    "self_consistency_k": 3,
+    "self_consistency_k": null,
     "coverage_target": 0.90
   },
   "request_id": "uuid | null"
 }
 ```
 
-`domain_hint` raises the per-domain prior by 0.2 before softmax; per-claim routing still wins on outliers.
+`rigor` selects the work envelope (see §2). `self_consistency_k` overrides the rigor-tier default (null = use the tier default). `domain_hint` raises the per-domain router prior by 0.2 before softmax; per-claim routing still wins on outliers.
 
-Response 200: `DocumentVerdict`.
+Response 200: `DocumentVerdict` (full schema in §9).
+
+**Concrete example response (truncated for length):**
+
+```json
+{
+  "request_id": "f4c1...e2",
+  "pipeline_version": "ohi-v2.0",
+  "model_versions": {
+    "decomposer": "openai/gpt-4o-mini-2025-XX-XX",
+    "domain_router": "ohi-router-v2-2026-04-16",
+    "nli_general": "MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli@head-v3",
+    "calibration_general:quantitative": "calib-2026-04-16-r1"
+  },
+  "document_score": 0.74,
+  "document_interval": [0.61, 0.84],
+  "internal_consistency": 0.83,
+  "decomposition_coverage": 0.92,
+  "processing_time_ms": 87341,
+  "claims": [
+    {
+      "claim": { "id": "...", "text": "Einstein was born in 1879.", "claim_type": "temporal", ... },
+      "p_true": 0.96,
+      "interval": [0.91, 0.99],
+      "coverage_target": 0.90,
+      "domain": "general",
+      "domain_assignment_weights": { "general": 0.94, "biomedical": 0.06 },
+      "supporting_evidence": [ { "id": "...", "source_uri": "https://en.wikipedia.org/...", ... } ],
+      "refuting_evidence": [],
+      "pcg_neighbors": [
+        { "neighbor_claim_id": "...", "edge_type": "entail", "edge_strength": 0.81 }
+      ],
+      "nli_self_consistency_variance": 0.012,
+      "information_gain": 0.04,
+      "queued_for_review": false,
+      "calibration_set_id": "calib-2026-04-16-r1",
+      "calibration_n": 1247,
+      "fallback_used": null
+    }
+  ]
+}
+```
 
 Response 4xx: `400` invalid input, `429` rate-limit (`Retry-After`).
 
 Response 5xx:
 - `503` degraded (body includes `degraded_layers: ["L3", "L1.retrieval"]`).
 - `503` budget exhausted (body includes `"OHI public budget exhausted, resets in Yh"`).
-- `504` exceeded 120s hard cap.
+- `504` only on infrastructure timeout (e.g., upstream LLM provider unreachable for > 5 min). The pipeline does **not** itself impose a wall-clock cap — long requests run to completion under the rigor tier they accepted.
 
 ### `POST /api/v2/verify/stream` (SSE)
 
-Same request shape; response is a sequence of named events:
+Same request shape. Events are emitted in pipeline order (one event per layer completion + one per claim verdict, with the claim verdicts emitted *after* PCG propagation, which is when they actually exist):
 
 ```
 event: decomposition_complete
-data: {"claim_count": 12, "estimated_total_ms": 38000}
+data: {"claim_count": 12, "estimated_total_ms": 90000}
 
 event: claim_routed
 data: {"claim_id": "...", "domain": "biomedical", "weights": {...}}
+# (one per claim, emitted as L2 completes)
 
-event: claim_verdict
-data: {"claim_id": "...", "p_true": 0.87, "interval": [0.78, 0.94], ...}
+event: nli_complete
+data: {"claim_evidence_pairs_scored": 360, "claim_pair_pairs_scored": 66}
 
 event: pcg_propagation_complete
-data: {"iterations": 6, "converged": true, "internal_consistency": 0.91}
+data: {"iterations": 6, "converged": true, "algorithm": "TRW-BP",
+       "internal_consistency": 0.91, "gibbs_validated": true}
+
+event: refinement_pass_complete
+data: {"pass": 1, "claims_re_retrieved": 2, "marginal_max_change": 0.07}
+# (zero or more, depending on rigor + flagged claims)
+
+event: claim_verdict
+data: <ClaimVerdict>   # one per claim, in claim ID order
 
 event: document_verdict
 data: <full DocumentVerdict>
 ```
+
+Each `claim_verdict` event payload is a strict subset of the `ClaimVerdict` schema in §9 (no new fields, no different shapes).
 
 **Tentative recommendation:** ship in Phase 1 alongside the synchronous `/verify`. Cheap on top of the async pipeline; high frontend value.
 
@@ -884,15 +1110,35 @@ The "downtimes are okay" stance is implemented as the L3 cost ceiling. Determini
 - **Tier 1 (Redis, ~50ms cold)**: `sha256(text + options)`, TTL 7d, full `DocumentVerdict`. Hit rate target ≥ 30% steady state.
 - **Tier 2 (in-process LRU on worker, ~1ms)**: same key, TTL 1h, capacity 1000.
 
-Cache hits don't count against the cost ceiling. (Configurable: do count against per-IP rate limit by default to deter cache-hammering DOS.)
+Cache hits don't count against the cost ceiling. **Default policy: cache hits *do* count against the per-IP rate limit** (1× weight, same as a cold request) — this deters cache-hammering DOS. Operators can flip this default via config if their threat model differs.
+
+### Data retention and privacy
+
+OHI accepts unauthenticated, public submissions of arbitrary text. We minimize what is stored and for how long, and surface that policy in `/api/v2/health/deep`:
+
+| Data | Retention | Storage shape |
+|---|---|---|
+| Raw input text on `/verify` | **Not persisted by default.** Only the `sha256(text + options)` cache key is stored. Operator can opt in to retention via config flag for debugging. | Hash only (Redis cache key + Postgres `verifications.text_hash`) |
+| `DocumentVerdict` and `ClaimVerdict[]` | 30 days in Postgres (for `/verdict/{request_id}` retrieval), then deleted | Postgres `verifications`, `claim_verdicts` |
+| Claim text (extracted by L1) | Retained as long as the verdict is retained (30d), then deleted with the verdict | `claim_verdicts.claim_jsonb` |
+| Feedback submissions on `/feedback` | 90 days in `feedback_pending`; promoted rows in `calibration_set` retained indefinitely (anonymized — labeler ID is hashed before write) | Postgres |
+| `ip_hash` on feedback | 30 days, salted hash; not the raw IP | Postgres `feedback_pending.ip_hash` |
+| Calibration set entries | Indefinite (these are the model's learned ground truth). Right-to-erasure requests can void specific (claim_id, labeler_id_hash) tuples. | Postgres `calibration_set` |
+| S3 model artifacts | Indefinite for currently-deployed model versions; older versions pruned after 1 year | S3 |
+
+**GDPR posture.** Because we accept EU traffic without auth and process potentially personal data submitted in `text` fields, we treat raw text as PII-suspect by default → not persisted. Hashes are not reversible. The frontend submission page surfaces a privacy notice clearly stating that submitted text is not retained. Calibration entries do not contain raw input text — they contain the *extracted claim* (a normalized fact statement), which is generally not PII; if a claim happens to contain PII (e.g., "John Smith of 42 Elm St lives in Berlin"), the right-to-erasure flow can void it.
+
+**`/feedback` PII surface.** The `rationale` field is stored verbatim for 90 days, then dropped. Submitters are warned in the UI that rationale text is human-readable by adjudicators.
 
 ### Trust tiers for `/feedback`
 
-| Tier | Trigger | What happens |
+`labeler.kind` in the request payload, validated against the labeler-token if one is presented:
+
+| `labeler.kind` | Trigger | What happens |
 |---|---|---|
-| **Untrusted** (default) | No labeler token | `feedback_pending` queue. Enters calibration set after 3 concordant labels in 30d. |
-| **Trusted** | `X-OHI-Labeler-Token` matches known token | Enters calibration set immediately. |
-| **Adjudicator** | Reserved bearer token | Resolves disputes, overrides consensus, submits gold labels. |
+| `user` (default) | No `X-OHI-Labeler-Token` header | `feedback_pending` queue. Promoted to `calibration_set` only after **3 concordant distinct labelers** within 30d (per the §12 SQL) and only when no other label has also reached 3 (otherwise the claim goes to `disputed_claims_queue` for adjudicator review). |
+| `expert` (a.k.a. "trusted") | `X-OHI-Labeler-Token` matches a known expert-tier token | Writes directly to `calibration_set` with `source_tier='trusted'`. Single label sufficient. |
+| `adjudicator` | Reserved bearer token (handful of accounts, manually issued) | Writes directly to `calibration_set` with `source_tier='adjudicator'`. Resolves disputed claims; overrides any prior consensus or trusted label. |
 
 ### `/feedback` anti-spam (algorithmic)
 
@@ -947,51 +1193,115 @@ ohi-artifacts/
 
 ### Consensus & promotion
 
-Postgres trigger or scheduled job (every 15 min):
+Scheduled job (every 15 min) with explicit handling of disagreement and per-labeler distinctness:
 
 ```sql
-INSERT INTO calibration_set (claim_id, true_label, source_tier, n_concordant, ...)
+-- Step 1: aggregate distinct labelers per (claim, label)
+WITH per_label AS (
+    SELECT
+        claim_id,
+        label,
+        COUNT(DISTINCT labeler_id_hash) AS n_distinct_labelers
+    FROM feedback_pending
+    WHERE created_at > now() - interval '30 days'
+      AND labeler_kind = 'user'                         -- untrusted only
+    GROUP BY claim_id, label
+),
+-- Step 2: detect disagreement (any claim with ≥3 labelers on more than one label)
+disputed AS (
+    SELECT claim_id
+    FROM per_label
+    WHERE n_distinct_labelers >= 3
+    GROUP BY claim_id
+    HAVING COUNT(DISTINCT label) >= 2
+),
+-- Step 3: clean consensus = exactly one label has ≥3 distinct labelers, no other label has ≥3
+clean_consensus AS (
+    SELECT pl.claim_id, pl.label, pl.n_distinct_labelers
+    FROM per_label pl
+    WHERE pl.n_distinct_labelers >= 3
+      AND pl.claim_id NOT IN (SELECT claim_id FROM disputed)
+)
+INSERT INTO calibration_set (
+    claim_id, true_label, source_tier, n_concordant,
+    calibration_set_partition, posterior_at_label_time,
+    model_versions_at_label_time, created_at
+)
 SELECT
-  claim_id, label, 'consensus', COUNT(*) AS n_concordant, ...
-FROM feedback_pending
-WHERE created_at > now() - interval '30 days'
-GROUP BY claim_id, label
-HAVING COUNT(*) >= 3
+    cc.claim_id, cc.label, 'consensus', cc.n_distinct_labelers,
+    cv.calibrated_verdict_jsonb->>'stratum',
+    (cv.calibrated_verdict_jsonb->>'p_true')::float,
+    cv.calibrated_verdict_jsonb->'model_versions',
+    now()
+FROM clean_consensus cc
+JOIN claim_verdicts cv ON cv.claim_id = cc.claim_id
+ON CONFLICT (claim_id) DO NOTHING;
+
+-- Step 4: log disputed claims for adjudicator queue
+INSERT INTO disputed_claims_queue (claim_id, first_disputed_at)
+SELECT claim_id, now() FROM disputed
 ON CONFLICT (claim_id) DO NOTHING;
 ```
 
-Trusted/adjudicator labels override consensus rows on arrival.
+`labeler_id_hash` is required to be present and unique-per-labeler for the feedback to count toward consensus. Submissions from the same `ip_hash` within a short window are still permitted (different humans can share an IP) but they all count as the same `labeler_id_hash` if no opaque labeler ID is provided.
+
+**Adjudication for disputed claims.** Disputed claims sit in `disputed_claims_queue`. An adjudicator reviewing the queue submits a `kind=adjudicator` label which overrides any prior consensus. Adjudicators are the small set of trusted labelers issued bearer tokens out-of-band.
+
+**Trusted/adjudicator labels** bypass the consensus filter entirely and write directly to `calibration_set` with appropriate `source_tier` ('trusted' or 'adjudicator').
 
 ### Nightly retraining DAG (02:00 UTC)
 
 ```
 1. Snapshot calibration set → S3
-2. Per-domain conformal refit (parallel across strata)
-3. NLI head fine-tune with EWC++ regularization
-4. Eval on held-out benchmarks
-5. Coverage validation gate (k-fold cross-coverage)
-6. Promote (atomic S3 manifest swap) or rollback (alarm)
-7. Source-credibility adjustment (separate, conservative)
+2. NLI head fine-tune with online EWC regularization
+3. Re-score the entire calibration set under the new NLI head + new
+   PCG potentials → fresh nonconformity scores
+4. Per-domain conformal refit using the re-scored nonconformity values
+   (parallel across strata)
+5. Evidence-correction propagation:
+     - For each evidence_correction in feedback last 7 days, add a synthetic
+       (claim, evidence, label) NLI training pair to the next training run,
+       and update source-credibility prior (Stage 7) accordingly.
+6. Eval on held-out benchmarks (frozen 1000-claim regression suite + each
+   domain's primary benchmark)
+7. Coverage validation gate (k-fold cross-coverage on re-scored set)
+8. Promote (atomic S3 manifest swap) or rollback (alarm + report)
+9. Source-credibility adjustment (separate, conservative; ±0.05 max delta/night)
 ```
 
-### EWC++ regularization (Stage 3 detail)
+The critical change vs. the original sketch: **Stage 3 (re-scoring) is what preserves split-conformal exchangeability.** Calibration nonconformity scores must come from the same model that will produce test-time scores; re-scoring after each retrain guarantees this. Re-scoring 5,000 calibration examples per domain takes ~3–8 min per domain on the inference cluster — well within the nightly window. The eval and coverage gate (Stages 6 + 7) operate on the fresh scores, so a model that improves benchmark F1 but degrades calibration coverage is correctly rejected.
 
-- Build training set: trusted + consensus-promoted labels last 90d, weighted by `1 / posterior_at_label_time` (up-weight previous-model errors).
-- Loss: `L = CrossEntropy + λ · Σ_θ F_θ · (θ - θ_prev)²`, where `F_θ` is the online Fisher information matrix from the previous run (Schwarz et al., 2018 — exponential moving average of Fishers).
-- Train 1–3 epochs; early stopping on 10% holdout.
+### Online EWC regularization (Stage 2 detail)
 
-### Coverage gate (Stage 5 detail)
+We use **online EWC** (Schwarz et al., 2018, "Progress & Compress"), not EWC++ (Chaudhry et al., 2018). The two are sometimes conflated; we follow the online-EWC formulation: a single quadratic anchor regularizing toward the previous model's parameters, weighted by an exponential moving average of the Fisher information matrix.
+
+- Build training set: trusted + adjudicator + consensus-promoted labels last 90d. Weight each example by `max(0.5, 1 / max(0.1, posterior_at_label_time))` — up-weight examples where the previous model was wrong (low posterior on the true label), with floor and cap to prevent extreme weights.
+- Loss:
+  ```
+  L = CrossEntropy(predictions, labels)
+    + λ · Σ_θ F_θ · (θ − θ_prev)²
+  ```
+  - `θ_prev` = parameters of the currently-deployed head.
+  - `F_θ` = exponentially-moving-average Fisher diagonal: `F_t = γ · F_{t-1} + diag(∇log p_θ_prev(D_new))`. EMA factor `γ = 0.95` (so old training data still anchors but recent data dominates).
+  - `λ = 100` initial; tuned per domain based on observed forgetting on the regression suite.
+- Train 1–3 epochs; early stopping on a 10% holdout.
+- Save head + Fisher diagonal to S3 (the Fisher diagonal becomes `F_{t-1}` for the next run).
+
+### Coverage gate (Stage 7 detail)
 
 For each domain × stratum:
-- k-fold cross-coverage on the calibration set.
-- If `coverage ∉ [0.88, 0.95]` → **fail the gate**, no auto-promote.
+- k-fold cross-coverage on the *re-scored* calibration set.
+- If `coverage ∉ [0.88, 0.92]` (symmetric ±0.02 around α=0.10 target) → **fail the gate**, no auto-promote.
 - Frozen 1000-claim regression suite: F1 drop > 1pt on any domain → **fail the gate**.
 
-### Source-credibility adjustment (Stage 7)
+Symmetric coverage bounds because over-coverage (intervals too wide → wasted information) and under-coverage (intervals too narrow → false confidence) are both operationally bad.
 
-- For each `(source, domain)` pair with sufficient feedback signal: empirical accuracy vs. ground truth.
-- Update via Beta-Bernoulli posterior (Jeffreys prior, conservative).
-- **Capped change per night: ±0.05** from previous value.
+### Source-credibility adjustment (Stage 9)
+
+- For each `(source, domain)` pair with sufficient feedback signal: empirical accuracy vs. ground truth, *plus* the count of `evidence_corrections` from Stage 5 that flipped the source's classification on a labeled claim.
+- Update via Beta-Bernoulli posterior (Jeffreys prior `Beta(0.5, 0.5)`, conservative).
+- **Capped change per night: ±0.05** from previous value (no source's credibility can swing wildly overnight).
+- The full `(source, domain) → credibility` matrix is committed to S3 with the run_id.
 
 ### Replay buffer for ablation
 
@@ -1026,10 +1336,11 @@ Every retraining run produces a fully reproducible artifact: input snapshot, mod
 
 - L1 refactor (chunked decomposition, source-credibility prior).
 - L7 output assembly with new `DocumentVerdict` / `ClaimVerdict` schema.
-- Naive L5 (single global conformal quantile from synthesized labels).
+- Naive L5 (single global conformal quantile from synthesized labels). **In Phase 1, the `coverage_target` field in `ClaimVerdict` is emitted as `null` and `fallback_used = "general"` for all claims** — we do not claim conformal coverage until Phase 3 stands up real per-domain calibration sets. This is the honest default; we'd rather emit `null` than a fake `0.90`.
 - Delete `oracle.py`, `scorer.py`, all v1 routes/schemas.
 - Rate limiting middleware (Section 11).
 - `/verify/stream` SSE (tentative recommendation: ship now).
+- Data retention policy enforced (Section 11): no raw text persisted by default.
 - Deliverable: parity-or-better with v1 on FActScore + TruthfulQA, new contract live, no auth.
 
 ### Phase 2 — Reasoning core (the publishable contribution)
@@ -1051,9 +1362,10 @@ Every retraining run produces a fully reproducible artifact: input snapshot, mod
 ### Phase 4 — Active learning closure (the moat)
 
 - L6 information-gain hook in request path.
-- `/feedback` endpoint with consensus filter + trust tiers.
-- Nightly retraining DAG (Stages 1–7).
-- EWC++ for NLI head fine-tuning.
+- `/feedback` endpoint with consensus filter + trust tiers + adjudicator queue for disputed claims.
+- Nightly retraining DAG (all 9 stages).
+- Online EWC for NLI head fine-tuning (with EMA Fisher diagonal — see §12).
+- Full re-scoring of calibration set after each retrain (preserves split-conformal exchangeability).
 - Coverage validation gate + auto-rollback.
 - Deliverable: end-to-end loop demonstrably improves F1 by ≥10% on prioritized-review subset within 2 weeks of feedback collection.
 
@@ -1068,32 +1380,38 @@ Every retraining run produces a fully reproducible artifact: input snapshot, mod
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| NLI compute cost balloons under scale (O(N²) cross-encoder if naive) | High | Bi-encoder pre-filter + top-K cap + relatedness threshold (§5). K capped at 3, not 10. Heavy paraphrase caching. |
-| PCG fails to converge on pathological cyclic claims | Medium | Max 8 iterations + damping 0.5 + log-space messages. Non-convergence becomes L6 high-information signal, not failure. Conformal interval auto-widens. |
-| Calibration cold start — no labels for new domains | High | Synthesize from existing benchmark dev splits (FEVER, ANLI, SciFact). Frontend "limited calibration" badge while `n < 200`. General fallback for sparse strata. |
-| Active learning poisoning — coordinated bad-faith feedback | Medium | 3-concordant consensus + per-IP rate limit + lexical dedupe + adjudicator override. Coverage gate fails immediately if poison shifts calibration. |
+| NLI compute cost (especially `maximum` tier with K=30 + ensemble) becomes prohibitive at scale | High | Per-IP rate limit + cost ceiling at the global level (§11). Cache (Redis + LRU) eats popular requests for free. `rigor=fast` is always available as the default for unauthenticated traffic; `maximum` is opt-in. |
+| TRW-BP converges to a wrong fixed point on adversarial graphs | Medium | Gibbs sampling sanity check in `balanced`+ tiers catches divergence > 0.10 between TRW-BP and MCMC marginals; Gibbs result is then used. LBP fallback if TRW-BP doesn't converge. Frustrated-graph stress tests in CI. |
+| Gibbs sampler mixes slowly on multimodal posteriors | Medium | `maximum` tier runs 4 chains with Gelman-Rubin R̂ < 1.05 gate. `balanced` accepts single-chain estimate with documented caveat in `model_versions`. |
+| Iterative refinement loop runs forever on pathological inputs | Low | Hard cap on refinement passes (1 in `balanced`, 3 in `maximum`) + no-progress detector (stop when marginals move < 0.02 between passes). |
+| Calibration cold start — no labels for new domains | High | Synthesize from benchmark dev splits (FEVER, ANLI, SciFact). Phase 1 emits `coverage_target=null` and `fallback_used="general"` honestly until per-domain sets exist. Adjudicator labeling sprint at Phase 3 launch. |
+| Active learning poisoning — coordinated bad-faith feedback | Medium | 3-concordant **distinct labelers** consensus (the SQL in §12 enforces `COUNT(DISTINCT labeler_id_hash)`), disagreement detection with adjudicator queue, per-IP rate limit, lexical dedupe, coverage gate auto-rejects models that shift suspiciously. |
+| Conformal exchangeability silently broken by retrained models | High | **Stage 3 of the nightly DAG re-scores the entire calibration set under the new model**, ensuring nonconformity scores and test-time scores share a model. Coverage gate fails the deployment if empirical coverage drifts outside [0.88, 0.92]. |
 | Domain mis-routing on edge cases | Low | Soft assignment + log-and-review for low-confidence routings. Misroutes degrade to general (wider intervals, not wrong answers). |
 | Cost ceiling fires during a launch / press moment | Medium | Cost ceiling is runtime config, not constant. Generous pre-launch provision. Pre-launch dashboard shows budget consumption rate. |
-| Single shared encoder hits GPU memory with all 5 heads loaded | Low | Heads loaded lazily; only active-document domains pinned. Encoder ~1.7GB FP16; heads ~5MB each. |
-| Catastrophic forgetting in nightly NLI retraining | Medium | EWC++ regularization + frozen 1000-claim regression suite as hard gate. F1 drop > 1pt → no auto-promote. |
+| Single shared encoder hits GPU memory with all 5 heads + ensemble loaded | Low | Heads loaded lazily; only active-document domains pinned. Encoder ~1.7GB FP16; heads ~5MB each. `maximum` tier ensemble (RoBERTa) adds ~1GB; both fit in A100 40GB. |
+| Catastrophic forgetting in nightly NLI retraining | Medium | Online EWC regularization + frozen 1000-claim regression suite as hard gate. F1 drop > 1pt → no auto-promote. |
+| Bi-encoder pre-filter prunes lexically-dissimilar contradictions in `fast` tier | Medium | `fast` mode documents this limitation; `balanced` (default) and `maximum` do full quadratic claim↔claim NLI for N ≤ 40 / always respectively. Per-domain thresholds (lower for social/legal). |
 | Provenance hash collisions on near-duplicate evidence | Low | SHA-256 + content normalization. Non-issue at expected volumes. |
-| PCG produces non-probabilistic edge cases (Yedidia counter-examples) | Low | Final beliefs renormalized; clamp to [ε, 1-ε]. Documented limitation. |
+| Copula PSD enforcement loses information when raw NLI correlation matrix is severely non-PSD | Low | Eigenvalue-clipping projection minimizes Frobenius distance; the distance is reported in `model_versions` for auditability. If the projection moves the matrix significantly, that itself is a signal of inconsistent NLI judgments and is logged. |
+| GDPR / right-to-erasure on calibration set entries containing extracted PII-bearing claims | Medium | §11 retention table + erasure endpoint (admin-only) that voids `(claim_id, labeler_id_hash)` rows and triggers a calibration refit. Documented in operations runbook. |
 
 ---
 
 ## 15. Open questions and tentative recommendations
 
-These are decisions baked into this spec as tentative recommendations, to be reconfirmed during the spec review and implementation planning.
+These are decisions baked into this spec as tentative recommendations, to be reconfirmed during implementation planning.
 
-1. **NLI base model.** *Tentative:* one base encoder (DeBERTa-v3-large) with domain-specialized heads; revisit in Phase 3 if domain F1 underperforms (likely candidates: SciFive / BiomedBERT-NLI for biomedical).
+1. **NLI base model.** *Tentative:* `MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli` as the shared encoder + per-domain heads; revisit in Phase 3 if domain F1 underperforms (likely candidates: SciFive / BiomedBERT-NLI for biomedical, possibly LegalBERT for legal). `maximum` rigor tier ensembles RoBERTa-MNLI alongside.
 2. **LLM for decomposition.** *Tentative:* keep the existing `LLMProvider` port; defer local-vs-API decision to the infra sub-project. Algorithm is provider-agnostic.
-3. **Initial benchmarks vs. innovation tax.** *Tentative:* Phase 2 deliverable measured against Phase 1 (tighter, more defensible target).
-4. **Calibration cold-start synthesis.** *Tentative:* synthesize from benchmark dev sets for Phase 1/2; supervised labeling sprint with adjudicators for Phase 3 launch.
+3. **Phase deliverable accounting.** *Tentative:* Phase 2 measured against Phase 1; Phase 3 against Phase 2; Phase 4 against Phase 3. Plus a final §1 success criterion measured against the v1 baseline captured in Phase 0.
+4. **Calibration cold-start synthesis.** *Tentative:* synthesize from benchmark dev sets for Phase 1/2; supervised labeling sprint with adjudicators for Phase 3 launch (≥200 labeled per domain).
 5. **Public calibration dashboard.** *Tentative:* yes — also commit static HTML snapshot to S3 nightly. Most marketable transparency artifact, near-zero cost.
 6. **Streaming endpoint priority.** *Tentative:* ship `/verify/stream` SSE in Phase 1 (cheap on top of async pipeline, big UX win for the frontend sub-project).
 7. **Benchmark snapshot cadence.** *Tentative:* nightly during Phase 0–4, weekly after stabilization.
-
-Override any of these during the spec review pass.
+8. **Adaptive Conformal Inference (ACI) as alternative to nightly re-scoring.** *Tentative:* not in scope for v2.0. Full nightly re-scoring is simpler, gives a clean coverage theorem, and is operationally tractable. Revisit ACI (Gibbs & Candès 2021) for a Phase 5+ research extension if calibration sets grow beyond 50k examples per domain.
+9. **Domain router validation set composition.** *Tentative:* 200 hand-labeled claims per domain (1,000 total) labeled by adjudicators during Phase 3 cold-start sprint. Sample from real production traffic captured in Phase 1/2 to control for selection bias against benchmark distributions.
+10. **Bi-encoder claim-pair threshold per domain.** *Tentative:* 0.45 default, 0.30 for `social` and `legal` (lexically-dissimilar contradictions are common). Revalidated nightly against the regression suite.
 
 ---
 
@@ -1112,11 +1430,12 @@ Override any of these during the spec review pass.
 ## 17. Documentation deliverables
 
 - `docs/algorithm/v2-overview.md` — public-facing layered pipeline overview.
-- `docs/algorithm/v2-pcg-paper.md` — drafted research paper on PCG + calibrated NLI contribution.
 - `docs/algorithm/v2-calibration.md` — methodology + reproducibility guide for the conformal layer.
 - `docs/api/v2-reference.md` — full OpenAPI spec, regenerated from FastAPI.
 - `docs/operations/active-learning-runbook.md` — inspect, override, rollback the loop.
 - README updates: replace v1 mental model with v2.
+
+(A research paper drafted from the PCG + calibrated NLI + active learning contribution is a *follow-on artifact* outside this spec's scope. It will live in a separate `research/` directory or external venue and is not on the implementation critical path.)
 
 ---
 
@@ -1128,7 +1447,7 @@ Override any of these during the spec review pass.
 - **Conformal prediction**: distribution-free uncertainty quantification giving finite-sample coverage guarantees under exchangeability.
 - **Coverage**: empirical fraction of test instances whose true label falls inside the prediction interval.
 - **Domain adapter**: per-domain configuration bundle (NLI head, source priors, calibration set).
-- **EWC++**: Elastic Weight Consolidation with online Fisher information (exponential moving average); regularizes against catastrophic forgetting.
+- **Online EWC**: Elastic Weight Consolidation in the online (sequential) setting using an exponential moving average of the Fisher information matrix as the regularization anchor (Schwarz et al., 2018, "Progress & Compress"). *Distinct from* "EWC++" (Chaudhry et al., 2018), which uses a different formulation; we use online EWC.
 - **Information gain (L6)**: composite score quantifying how much labeling a claim would reduce model uncertainty.
 - **Internal consistency score**: document-level signal derived from L4 BP message magnitude; high = reconciliation effort = potential incoherence.
 - **Loopy BP**: belief propagation run on a cyclic graph; converges to stationary point of Bethe free energy.
@@ -1140,15 +1459,36 @@ Override any of these during the spec review pass.
 
 ### References
 
-- Yedidia, J. S., Freeman, W. T., & Weiss, Y. (2003). *Understanding Belief Propagation and Its Generalizations*.
+**Belief propagation and graphical models**
+
+- Yedidia, J. S., Freeman, W. T., & Weiss, Y. (2003). *Understanding Belief Propagation and Its Generalizations*. Exploring Artificial Intelligence in the New Millennium.
+- Murphy, K. P., Weiss, Y., & Jordan, M. I. (1999). *Loopy belief propagation for approximate inference: An empirical study*. UAI. (Documents LBP non-convergence and convergence-to-wrong-fixed-point on cyclic graphs.)
+- Wainwright, M. J., Jaakkola, T. S., & Willsky, A. S. (2005). *A new class of upper bounds on the log partition function*. IEEE Transactions on Information Theory. (Tree-reweighted belief propagation.)
+- Geman, S., & Geman, D. (1984). *Stochastic Relaxation, Gibbs Distributions, and the Bayesian Restoration of Images*. IEEE PAMI. (Gibbs sampling.)
+
+**Conformal prediction**
+
 - Vovk, V., Gammerman, A., & Shafer, G. (2005). *Algorithmic Learning in a Random World*.
-- Tibshirani, R. J., Foygel Barber, R., Candès, E. J., & Ramdas, A. (2019). *Conformal Prediction Under Covariate Shift*. NeurIPS.
-- Kirkpatrick, J., et al. (2017). *Overcoming catastrophic forgetting in neural networks*. PNAS.
-- Schwarz, J., et al. (2018). *Progress & Compress: A scalable framework for continual learning* (introduces EWC++).
+- Papadopoulos, H. (2008). *Inductive Conformal Prediction: Theory and Application to Neural Networks*. (Original split / inductive conformal formulation.)
+- Tibshirani, R. J., Foygel Barber, R., Candès, E. J., & Ramdas, A. (2019). *Conformal Prediction Under Covariate Shift*. NeurIPS. (Weighted exchangeability — basis for our mixture conformal.)
+- Gibbs, I., & Candès, E. J. (2021). *Adaptive Conformal Inference Under Distribution Shift*. NeurIPS. (Cited as Phase 5+ research extension; we use full re-scoring instead.)
+
+**Continual learning**
+
+- Kirkpatrick, J., et al. (2017). *Overcoming catastrophic forgetting in neural networks*. PNAS. (Original EWC.)
+- Schwarz, J., et al. (2018). *Progress & Compress: A scalable framework for continual learning*. ICML. (Online EWC — the formulation we use.)
+- Chaudhry, A., et al. (2018). *Riemannian Walk for Incremental Learning: Understanding Forgetting and Intransigence*. ECCV. (EWC++ — distinct from online EWC; cited for completeness.)
+
+**Hallucination detection and fact verification**
+
 - Min, S., et al. (2023). *FActScore: Fine-grained Atomic Evaluation of Factual Precision*. EMNLP.
 - Manakul, P., et al. (2023). *SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection*. EMNLP.
 - Lin, S., et al. (2022). *TruthfulQA: Measuring How Models Mimic Human Falsehoods*. ACL.
 - Thorne, J., et al. (2018). *FEVER: a Large-scale Dataset for Fact Extraction and VERification*. NAACL.
+
+**NLI checkpoints**
+
+- Laurer, M., van Atteveldt, W., Casas, A., & Welbers, K. (2024). *Less Annotating, More Classifying: Addressing the Data Scarcity Issue of Supervised Machine Learning with Deep Transfer Learning and BERT-NLI*. (`MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli` checkpoint.)
 
 ---
 
