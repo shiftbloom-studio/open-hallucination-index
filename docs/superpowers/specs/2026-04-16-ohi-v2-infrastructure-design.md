@@ -46,7 +46,7 @@
 ┌──────────┐       HTTPS          ┌─────────────────────────────────────┐
 │  User    │ ───────────────────> │ Cloudflare (free tier)              │
 │  (any)   │                      │  - Proxied DNS + Universal TLS       │
-└──────────┘                      │  - WAF Managed Ruleset (free)       │
+└──────────┘                      │  - Free Managed Ruleset + Bot Fight  │
                                   │  - Rate limiting rules               │
                                   │  - Cache rules                       │
                                   │  - Bot Fight Mode                    │
@@ -89,7 +89,7 @@
 
 Key consequences of the pivot:
 - **No AWS CloudFront.** Cloudflare handles cache, TLS, WAF, DDoS, bot management.
-- **No AWS WAF.** Cloudflare free-tier WAF Managed Ruleset + rate-limit rules cover us.
+- **No AWS WAF.** Cloudflare free tier: Free Managed Ruleset (emergency signatures) + Bot Fight Mode + our own custom rules and rate limits via `cloudflare_ruleset`.
 - **No ACM cert anywhere.** Cloudflare Universal SSL is free and auto-renewed.
 - **No Route53.** DNS lives in Cloudflare for the delegated `ohi.shiftbloom.studio` zone.
 - **No AWS OAC / SigV4 signing.** Lambda Function URL is reachable publicly but enforces a shared-secret header that only Cloudflare knows.
@@ -167,8 +167,11 @@ infra/terraform/
 ├── compute/                     # Lambda container, Function URL, IAM, log group, alarms
 │   ├── main.tf
 │   ├── lambda.tf                # aws_lambda_function (Image package), Function URL
-│   │                            # with auth_type=AWS_IAM, invoke_mode=RESPONSE_STREAM
-│   │                            # (needed for /verify/stream SSE)
+│   │                            # with auth_type=NONE, invoke_mode=RESPONSE_STREAM.
+│   │                            # No AWS-side auth; Cloudflare-injected
+│   │                            # X-OHI-Edge-Secret header is validated by
+│   │                            # FastAPI middleware (see §7.5). URL is discoverable
+│   │                            # but unusable without the secret.
 │   ├── iam.tf                   # execution role, Secrets-read policy, CloudWatch policy
 │   ├── logs.tf                  # aws_cloudwatch_log_group, retention 14d
 │   ├── outputs.tf               # function ARN, Function URL, alias ARN
@@ -183,21 +186,31 @@ infra/terraform/
 │   ├── dns.tf                   # cloudflare_record: CNAME "@" → Lambda Function URL hostname
 │   │                            # (proxied=true), plus tunnel CNAMEs auto-created by the tunnel
 │   │                            # resource below
-│   ├── waf.tf                   # cloudflare_ruleset "prod-waf" with managed rulesets enabled
-│   │                            # (CF Managed, CF OWASP Core) + per-route rate limits
+│   ├── waf.tf                   # cloudflare_ruleset phase=http_request_firewall_custom
+│   │                            # for our own rules; cloudflare_ruleset phase=
+│   │                            # http_ratelimit for rate-limit rules. Free-tier
+│   │                            # "CF Free Managed Ruleset" + "Bot Fight Mode" are
+│   │                            # enabled via account-level settings (NOT custom
+│   │                            # managed rulesets — those require Pro plan).
 │   ├── cache.tf                 # cloudflare_ruleset "prod-cache" (bypass /api/*, cache /health/*
 │   │                            # 60s, cache static assets long)
 │   ├── tunnel.tf                # cloudflare_zero_trust_tunnel_cloudflared "ohi-pc" +
-│   │                            # cloudflare_tunnel_config with 4 ingress rules (neo4j, qdrant,
-│   │                            # pg, redis) + cloudflare_record proxied CNAMEs for each
+│   │                            # cloudflare_zero_trust_tunnel_cloudflared_config with
+│   │                            # 4 ingress rules (neo4j, qdrant, pg, redis) +
+│   │                            # cloudflare_record proxied CNAMEs for each
 │   ├── access.tf                # cloudflare_zero_trust_access_application (×4, one per tunnel
 │   │                            # hostname) + cloudflare_zero_trust_access_service_token for
 │   │                            # Lambda's tunnel auth; token value written to AWS Secrets
 │   │                            # Manager via `secrets/` remote state (see §4.1)
-│   ├── edge_secret.tf           # cloudflare_ruleset "transform-add-edge-secret" adds
-│   │                            # X-OHI-Edge-Secret header to all proxied requests using
-│   │                            # a secret looked up from Cloudflare's "Secrets Store"
-│   │                            # (or a static value committed outside TF via `cf api`)
+│   ├── edge_secret.tf           # cloudflare_ruleset phase=http_request_transform adds
+│   │                            # X-OHI-Edge-Secret header to all proxied requests.
+│   │                            # Value comes from a TF input variable marked
+│   │                            # `sensitive = true`, supplied by the release workflow
+│   │                            # as -var=edge_secret=$(aws secretsmanager get-secret-value).
+│   │                            # NOT stored in tfstate in plaintext — the sensitive
+│   │                            # flag masks it in plan/apply output. (CF Secrets Store
+│   │                            # is not supported by the cloudflare/cloudflare 4.x
+│   │                            # provider yet; revisit in Phase 2.)
 │   ├── outputs.tf               # tunnel UUID, public hostnames, service token id (NOT secret)
 │   ├── variables.tf             # zone_id, zone_name, lambda_function_url (from compute state)
 │   ├── versions.tf              # key = "prod/cloudflare/terraform.tfstate"
@@ -257,7 +270,7 @@ All resources get default tags via `provider "aws" { default_tags { ... } }`:
 |---|---|---|
 | `Project` | `ohi` | Cost Explorer filter |
 | `Environment` | `prod` | Future-proofing (not used today) |
-| `Layer` | `bootstrap` / `storage` / `secrets` / `compute` / `edge` / `observability` | Per-layer cost attribution |
+| `Layer` | `bootstrap` / `storage` / `secrets` / `compute` / `cloudflare` / `observability` | Per-layer cost attribution |
 | `ManagedBy` | `terraform` | Distinguish from hand-created |
 | `CostCenter` | `ohi` | Budget enforcement |
 
@@ -337,7 +350,7 @@ Five workflow files under `.github/workflows/`:
      - OIDC, `terraform init` in `infra/terraform/compute/`
      - `terraform apply -auto-approve -var=image_tag=${{ github.ref_name }}`
      - Verify Lambda invocation: `curl https://ohi.shiftbloom.studio/health/deep` with the CF edge secret header, assert 200
-     - On failure: roll back by applying with the prior `image_tag` (fetched from ECR's second-newest tag — see §3.5 for rollback runbook)
+     - On failure: roll back by applying with the prior `image_tag` (fetched from ECR's second-newest tag — see §3.5 "Rollback" for runbook)
   4. **`notify`**:
      - Post release notes + deploy status to a GitHub Release (auto-created from the tag)
      - SNS alert (not email spam — one message per release)
@@ -352,7 +365,7 @@ Five workflow files under `.github/workflows/`:
 - **Trigger:** `schedule` nightly + `workflow_dispatch`.
 - **Steps:** downloads the committed bootstrap state (read-only), `terraform plan` against it, alerts if non-empty. Does not apply. Uses a scoped read-only IAM user (not the apply role) for this plan only.
 
-### 3.3 Lambda container image
+### 3.4 Lambda container image
 
 **New file:** `docker/lambda/Dockerfile`. Multi-stage.
 
@@ -380,7 +393,7 @@ Notes:
 - `AWS_LAMBDA_EXEC_WRAPPER` path is `/opt/extensions/lambda-adapter` for the `0.8.4` release; the implementation plan must verify this against the adapter's published README at apply time since earlier releases used `/opt/bootstrap`.
 - Image size budget: < 500 MB compressed. Gemini SDK, httpx, structlog, numpy, scikit-learn (for conformal), Cypher/Qdrant/Redis clients. Within limits.
 
-### 3.4 Image-tag handoff (CI → Terraform)
+### 3.5 Image-tag handoff (CI → Terraform)
 
 Images are tagged with the semver release tag (e.g. `v0.2.0`) plus a moving `prod` tag. The release workflow passes `-var=image_tag=${{ github.ref_name }}` to the compute-layer apply. Digest pinning is still mandatory — Terraform only detects the image change because the data source reads the current digest for the supplied tag:
 
@@ -413,7 +426,7 @@ resource "aws_lambda_function" "api" {
 1. `aws ecr describe-images --repository-name ohi-api --query 'imageDetails[?imageTags!=null]|sort_by(@,&imagePushedAt)[-2].imageTags[0]'` → previous semver tag.
 2. Re-dispatch `infra-apply.yml` with `layer=compute` and override `image_tag` to that value.
 
-### 3.5 Bootstrap is local-only (unchanged)
+### 3.6 Bootstrap is local-only (unchanged)
 
 `bootstrap/` is applied from Fabian's laptop once (Phase I.0). Rationale: it creates the state bucket + OIDC provider + the CI role itself — bootstrapping CI with CI is circular. Destroy is rare and intentional. The lockfile `.terraform.lock.hcl` IS committed so provider versions are reproducible.
 
@@ -462,9 +475,10 @@ Rationale: keeping secret values out of Terraform state means state files don't 
 ### 4.3 Lambda reads at cold start
 
 Application reads secrets via `boto3.client("secretsmanager").get_secret_value(...)` in a singleton `SecretsLoader` class, with:
-- **Lazy fetch** on first call per secret (not all at cold start — some endpoints don't need Gemini key)
+- **Lazy fetch** on first call per secret (not all at cold start — some endpoints don't need Gemini key).
 - **In-memory TTL cache**, TTL 10 min. Manual rotation via CLI takes effect within 10 min without redeploy.
 - **Decryption errors** → raise `ConfigurationError` at import time; Lambda cold-start fails loudly rather than returning subtly-broken responses.
+- **Bootstrap-grace tolerance** for `ohi/cf-access-service-token` and `ohi/cloudflared-tunnel-token`: these two are created empty by the `secrets/` layer and populated by the later `cloudflare/` layer (§2.3). Between the two applies, the Lambda may cold-start with a missing or empty value. The `SecretsLoader` treats `ResourceNotFoundException` or an empty `SecretString` on these **two** specific secrets as non-fatal → the routes that need them return 503 `{"status":"bootstrapping"}`. All other secrets use strict fail-fast.
 
 IAM policy attached to Lambda execution role:
 ```hcl
@@ -653,7 +667,7 @@ Named volumes:
 
 Local dev uses only `localhost`/`127.0.0.1` and Docker service names (`neo4j`, `qdrant`, etc.). No public hostnames resolve to private IPs, so there's no DNS rebinding attack surface. Prod traffic goes through Cloudflare's edge and tunnel; the PC-side has no public hostname that resolves to its residential IP. **Do not add `*.localtest.me` or `*.nip.io` to the dev setup** — those ARE rebind-vulnerable public names.
 
-### 6.2 Why two HTTP proxies on PC
+### 6.4 Why two HTTP proxies on PC
 
 Cloudflare Tunnel exposes HTTP/HTTPS hostnames to Lambda, but Lambda cannot run `cloudflared access tcp` client. So raw-TCP services (Postgres, Redis) are exposed as HTTP:
 - **PostgREST** → Postgres. Lambda builds requests like `GET /feedback_pending?claim_id=eq.X` or `POST /rpc/<fn>`. PostgREST handles row-level security + auth.
@@ -661,7 +675,7 @@ Cloudflare Tunnel exposes HTTP/HTTPS hostnames to Lambda, but Lambda cannot run 
 
 Neo4j (HTTP Cypher at :7474) and Qdrant (HTTP at :6333) are natively HTTP — no proxy needed.
 
-### 6.3 `.env.pc-data` template (new file, gitignored)
+### 6.5 `.env.pc-data` template (new file, gitignored)
 
 User fills values from Secrets Manager seeds:
 
@@ -686,7 +700,7 @@ PGRST_JWT_SECRET=<long-random>
 WEBDIS_HTTP_AUTH=<user:password>
 ```
 
-### 6.4 Initial schema seed
+### 6.6 Initial schema seed
 
 A one-shot Phase I.3 step runs the Postgres schema DDL from the algorithm repo (`scripts/db/init.sql`) against the PC postgres container:
 ```bash
@@ -950,11 +964,11 @@ Marked (✅ unchanged) or (🔄 revised 2026-04-16 per user feedback) or (➕ ne
 12. ✅ **PC compose file:** new standalone `docker/compose/pc-data.yml`, does not modify the existing V1 `docker-compose.yml`.
 13. 🔄 **Calibration seeding:** **publicly auditable** — runs via a `workflow_dispatch` GitHub Action, outputs written to a public S3 bucket, artifacts attached to the GitHub Release. No secret values involved.
 14. ✅ **KMS:** one CMK `ohi-secrets` created in bootstrap, used for both state bucket and Secrets Manager.
-15. 🔄 **Public edge rate limits:** Cloudflare free-tier WAF Managed Ruleset + rate-limit rules (100/min/IP on `/verify`, 1000/hour/IP global). (Previously AWS WAF global 2000/5min + per-IP 300/5min — replaced by Cloudflare equivalents.)
+15. 🔄 **Public edge protection (free-tier reality):** Cloudflare Free Managed Ruleset (core emergency signatures, not the paid CF Managed / OWASP Core), Bot Fight Mode, plus our own `cloudflare_ruleset` custom rules and rate-limit rules (100/min/IP on `/verify`, 1000/hour/IP global). This is genuinely sufficient for <100 users/month; upgrade to Pro plan (~€20/mo) revisited only if abuse measurable.
 16. ➕ **Public edge choice:** **Cloudflare free tier** (was AWS CloudFront + AWS WAF). Saves ~€8–16/month AWS, consolidates on the CF account already used for Tunnel, removes the ACM-in-us-east-1 quirk entirely.
 17. ➕ **Lambda Function URL auth:** `auth_type = NONE` + shared-secret header (`X-OHI-Edge-Secret`) enforced in FastAPI middleware. CF Transform Rule injects the secret; direct-to-URL requests without the header get 403.
 18. ➕ **Dev environment:** **no AWS dev env** (cost-ruled-out); local-dev runs via `docker/compose/pc-data.yml --profile local-dev`, exposing host ports on 127.0.0.1 only, with separate Docker volumes from prod.
-19. ➕ **Terraform CF provider enables:** `cloudflare_zero_trust_tunnel_cloudflared`, `cloudflare_tunnel_config`, `cloudflare_zero_trust_access_application`, `cloudflare_zero_trust_access_service_token`, `cloudflare_ruleset`, `cloudflare_record`, `cloudflare_rate_limit` (or `cloudflare_ruleset` with `phase="http_ratelimit"` — provider version-dependent; plan pins the correct pattern).
+19. ➕ **Terraform CF provider resources (v4.x names, all verified against provider ~> 4.40):** `cloudflare_zone` (data source — zone created in UI), `cloudflare_record`, `cloudflare_zero_trust_tunnel_cloudflared`, `cloudflare_zero_trust_tunnel_cloudflared_config`, `cloudflare_zero_trust_access_application`, `cloudflare_zero_trust_access_policy`, `cloudflare_zero_trust_access_service_token`, `cloudflare_ruleset` (phases: `http_ratelimit` for rate limits, `http_request_firewall_custom` for WAF custom rules, `http_request_transform` for the edge-secret header injection, `http_request_cache_settings` for cache rules). The legacy `cloudflare_rate_limit` resource is NOT used.
 20. ➕ **Google Cloud quota cap:** user sets a per-project hard API quota on the Gemini project in Google Cloud console (documented in a runbook `google-cloud-quota-cap.md`). Acts as the ultimate spend gate outside AWS.
 
 ---
