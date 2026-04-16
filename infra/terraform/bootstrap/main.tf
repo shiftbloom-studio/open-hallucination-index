@@ -62,3 +62,50 @@ resource "aws_dynamodb_table" "tfstate_lock" {
     type = "S"
   }
 }
+
+# ---------------------------------------------------------------------------
+# ECR repository for the Lambda container image
+# ---------------------------------------------------------------------------
+resource "aws_ecr_repository" "ohi_api" {
+  name                 = "${local.prefix}-api"
+  image_tag_mutability = "MUTABLE" # `prod` tag moves across releases
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = aws_kms_key.ohi_secrets.arn
+  }
+}
+
+resource "aws_ecr_lifecycle_policy" "ohi_api" {
+  repository = aws_ecr_repository.ohi_api.name
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 5 tagged images"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["v*", "prod", "stub"]
+          countType      = "imageCountMoreThan"
+          countNumber    = 5
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Expire untagged images after 1 day"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 1
+        }
+        action = { type = "expire" }
+      },
+    ]
+  })
+}
