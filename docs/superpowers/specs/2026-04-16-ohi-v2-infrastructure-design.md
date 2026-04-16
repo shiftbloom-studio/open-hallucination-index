@@ -156,9 +156,11 @@ infra/terraform/
 │   ├── cloudfront.tf            # distribution, origin = Lambda Function URL via OAC,
 │   │                            # aliases = [hostname], WAF ACL attached
 │   ├── oac.tf                   # aws_cloudfront_origin_access_control (signing_behavior=always,
-│   │                            # origin_access_control_origin_type=lambda); Lambda resource-based
-│   │                            # policy granting cloudfront.amazonaws.com
-│   │                            # lambda:InvokeFunctionUrl with AWS:SourceArn = dist ARN
+│   │                            # origin_access_control_origin_type=lambda); plus
+│   │                            # aws_lambda_permission targeting the Lambda ARN from
+│   │                            # compute's remote state, granting
+│   │                            # cloudfront.amazonaws.com:InvokeFunctionUrl with
+│   │                            # source_arn = the distribution ARN (same layer, no cycle)
 │   ├── outputs.tf               # distribution domain, ACM validation records, WAF ACL ARN
 │   ├── variables.tf
 │   ├── versions.tf              # key = "prod/edge/terraform.tfstate"; declares aws.use1 alias
@@ -309,7 +311,8 @@ CMD ["uvicorn", "api.server.app:app", "--host", "0.0.0.0", "--port", "8080"]
 
 Notes:
 - `aws-lambda-adapter` converts Lambda events → HTTP 8080 → FastAPI with response streaming support (needed for `/verify/stream` SSE).
-- Lambda Function URL invocation type = `BUFFERED` for most endpoints, but the Function URL itself supports response streaming and Adapter honors `Transfer-Encoding: chunked`.
+- Lambda Function URL `invoke_mode = "RESPONSE_STREAM"` is required for SSE; buffered mode caps responses at 6MB and loses streaming semantics.
+- `AWS_LAMBDA_EXEC_WRAPPER` path is `/opt/extensions/lambda-adapter` for the `0.8.4` release; the implementation plan must verify this against the adapter's published README at apply time since earlier releases used `/opt/bootstrap`.
 - Image size budget: < 500 MB compressed. Gemini SDK, httpx, structlog, numpy, scikit-learn (for conformal), Cypher/Qdrant/Redis clients. Within limits.
 
 ### 3.4 Image-tag handoff (CI → Terraform)
@@ -324,18 +327,24 @@ variable "image_tag" {
 }
 
 # compute/lambda.tf
+data "aws_ecr_repository" "api" {
+  name = "ohi-api"
+}
+
 data "aws_ecr_image" "api" {
-  repository_name = "ohi-api"
+  repository_name = data.aws_ecr_repository.api.name
   image_tag       = var.image_tag
 }
 
 resource "aws_lambda_function" "api" {
   function_name = "ohi-api"
   package_type  = "Image"
-  image_uri     = "${data.aws_ecr_image.api.image_uri}@${data.aws_ecr_image.api.image_digest}"
+  image_uri     = "${data.aws_ecr_repository.api.repository_url}@${data.aws_ecr_image.api.image_digest}"
   # ...
 }
 ```
+
+`repository_url` is `<account>.dkr.ecr.<region>.amazonaws.com/ohi-api`, and `image_digest` is `sha256:…`. Concatenating with `@` produces the correct immutable digest URI that Lambda requires.
 
 `data.aws_ecr_image` is re-read on every plan, so pushing a new image under the `prod` tag changes the digest, which shows as a delta in `terraform plan` and triggers a redeploy on apply. For a pinned deploy, dispatch `infra-apply.yml` with `image_tag=<git-sha>` as an optional input.
 
@@ -370,6 +379,8 @@ Each secret is an `aws_secretsmanager_secret` with:
 - `kms_key_id` = bootstrap-created KMS key `ohi-secrets`
 - `recovery_window_in_days = 0` (force immediate delete on destroy — this is single-env)
 - Tag `SecretRole=<purpose>`
+
+**Runbook callout:** `recovery_window_in_days = 0` means an accidental `terraform destroy` on the `secrets/` layer permanently loses the rotated values with no AWS-side recovery. Acceptable given single-env and the fact that Gemini/tunnel keys can be re-issued from source — but the rotation runbook explicitly warns about this and instructs operators to back up Gemini keys to a password manager before rotation.
 
 NO `aws_secretsmanager_secret_version` in Terraform. The initial value is seeded via AWS CLI after apply:
 
@@ -543,12 +554,12 @@ services:
     volumes: ["redis-data:/data"]
 
   webdis:                         # HTTP proxy for Redis
-    image: nicolas/webdis:latest
+    image: nicolas/webdis:0.1.23   # pinned; exposes port 7379 internally
     env_file: .env.pc-data
     depends_on: [redis]
 
   cloudflared:                    # outbound tunnel to CF edge
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.3.0  # pinned to a known-good release
     command: tunnel --no-autoupdate run
     env_file: .env.pc-data        # TUNNEL_TOKEN=...
 
