@@ -138,4 +138,23 @@ class Evidence(BaseModel):
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     source_uri: str | None = Field(default=None, description="URI/IRI of source document or entity")
 
+    # v2 weight signals consumed by L4 PCG unary potentials (spec §3, §6).
+    # The retrieval collector stamps these as it emits Evidence objects.
+    source_credibility: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Prior credibility for this evidence's source, per spec §3.",
+    )
+    temporal_decay_factor: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Half-life decay factor based on evidence age (spec §3).",
+    )
+    fingerprint: str | None = Field(
+        default=None,
+        description="Stable sha256 over (source_uri, content) for cross-path dedup.",
+    )
+
     model_config = {"frozen": True}

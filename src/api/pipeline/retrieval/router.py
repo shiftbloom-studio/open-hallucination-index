@@ -371,8 +371,11 @@ Return valid JSON only:
 }}
 """
         messages = [
-            LLMMessage(role="system", content="You are an expert knowledge graph router. Analyze the claim to select the best knowledge sources."),
-            LLMMessage(role="user", content=prompt)
+            LLMMessage(
+                role="system",
+                content="You are an expert knowledge graph router. Analyze the claim to select the best knowledge sources.",
+            ),
+            LLMMessage(role="user", content=prompt),
         ]
 
         try:
@@ -383,36 +386,36 @@ Return valid JSON only:
                 content = content[7:-3]
             elif content.startswith("```"):
                 content = content[3:-3]
-            
+
             # Log the raw response for debugging
             logger.debug(f"LLM Routing Response: {content}")
-            
+
             data = json.loads(content)
-            
+
             # Handle domain field (might be string or list)
             domain_raw = data.get("domain", "general")
             if isinstance(domain_raw, list):
                 domain_str = domain_raw[0].lower() if domain_raw else "general"
             else:
                 domain_str = str(domain_raw).lower()
-            
+
             try:
                 domain = ClaimDomain(domain_str)
             except ValueError:
                 domain = ClaimDomain.GENERAL
-                
+
             confidence = float(data.get("confidence", 0.5))
-            
+
             # Handle entities and keywords (ensure they're lists of strings)
             entities_raw = data.get("entities", [])
             entities = [str(e) for e in entities_raw] if isinstance(entities_raw, list) else []
-            
+
             keywords_raw = data.get("keywords", [])
             keywords = [str(k) for k in keywords_raw] if isinstance(keywords_raw, list) else []
-            
+
             # Combine logic
             recommendations = self._build_recommendations(domain, entities, keywords)
-            
+
             return RoutingDecision(
                 claim_id=str(claim.id),
                 domain=domain,
@@ -421,7 +424,7 @@ Return valid JSON only:
                 keywords=keywords,
                 recommendations=recommendations,
             )
-            
+
         except Exception as e:
             logger.warning(f"LLM routing failed: {e}. Falling back to regex.")
             return self._route_with_regex(claim)

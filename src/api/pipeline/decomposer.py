@@ -192,7 +192,7 @@ class LLMClaimDecomposer(ClaimDecomposer):
                     object="Unknown",
                     claim_type=ClaimType.UNCLASSIFIED,
                     confidence=0.5,
-                    context=context
+                    context=context,
                 )
             ]
 
@@ -206,7 +206,7 @@ class LLMClaimDecomposer(ClaimDecomposer):
             candidate = json_match.group(1).strip()
             if candidate.startswith("{") or candidate.startswith("["):
                 json_str = candidate
-        
+
         if not json_str:
             json_str = response.strip()
 
