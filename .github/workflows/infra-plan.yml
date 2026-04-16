@@ -1,0 +1,82 @@
+name: Infra Plan
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths: ["infra/terraform/**"]
+
+concurrency:
+  group: infra-plan-${{ github.ref }}-${{ matrix.layer || '' }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    name: Plan ${{ matrix.layer }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        layer: [storage, secrets, compute, cloudflare, observability]
+    defaults:
+      run:
+        working-directory: infra/terraform/${{ matrix.layer }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-plan-${{ matrix.layer }}-${{ github.event.pull_request.number }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.3"
+
+      - name: Resolve account id
+        id: acct
+        run: echo "id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=ohi-tfstate-${{ steps.acct.outputs.id }}"
+
+      - run: terraform fmt -check -recursive
+      - run: terraform validate
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: "v0.53.0"
+      - run: tflint --init --config=$GITHUB_WORKSPACE/infra/terraform/.tflint.hcl
+      - run: tflint --minimum-failure-severity=warning --config=$GITHUB_WORKSPACE/infra/terraform/.tflint.hcl
+
+      - name: Checkov
+        run: |
+          pip install checkov==3.2.256
+          checkov -d . --framework terraform --quiet --config-file $GITHUB_WORKSPACE/infra/terraform/.checkov.yml || true
+
+      - name: Terraform plan
+        id: plan
+        env:
+          TF_VAR_edge_secret: ${{ secrets.CF_EDGE_SECRET_PLACEHOLDER }}
+          TF_VAR_cf_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: terraform plan -no-color -out=tfplan
+
+      - name: Render plan text to file
+        id: plan_text
+        run: |
+          terraform show -no-color tfplan | head -c 60000 > $RUNNER_TEMP/plan.txt
+          echo "path=$RUNNER_TEMP/plan.txt" >> $GITHUB_OUTPUT
+
+      - name: Comment plan on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: plan-${{ matrix.layer }}
+          path: ${{ steps.plan_text.outputs.path }}
