@@ -142,6 +142,9 @@ data/qdrant/
 data/redis/
 data/certbot/
 
+# OHI v2 local dev stack volumes (Phase 0)
+infra/local/data/
+
 # ==============================================================================
 # Model Files (too large for git)
 # ==============================================================================
