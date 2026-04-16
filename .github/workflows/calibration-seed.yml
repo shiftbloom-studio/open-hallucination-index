@@ -1,0 +1,77 @@
+name: Calibration Seed
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        type: choice
+        description: HuggingFace domain to seed
+        required: true
+        default: all
+        options: [all, fever, anli, scifact, pubmedqa-nli, multifc, liar, climatefever, covid-fact]
+
+concurrency:
+  group: calibration-seed
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-calibration-seed
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -e src/api[dev]
+
+      - name: Run synthesis
+        env:
+          OHI_API_BASE: https://ohi.shiftbloom.studio
+          OHI_INTERNAL_BEARER: ${{ secrets.OHI_INTERNAL_BEARER }}
+          OHI_CF_EDGE_SECRET: ${{ secrets.CF_EDGE_SECRET }}
+          SEED_DOMAIN: ${{ inputs.domain }}
+        run: |
+          # This script lives in the algorithm repo (Task 2.9).
+          # Expected interface:
+          #   python -m scripts.calibration.synthesize_phase2_calibration --domain $SEED_DOMAIN --out /tmp/calibration_${SEED_DOMAIN}.json
+          python -m scripts.calibration.synthesize_phase2_calibration \
+            --domain "${SEED_DOMAIN}" \
+            --out "/tmp/calibration_${SEED_DOMAIN}.json"
+
+      - name: Upload to public bucket
+        run: |
+          ACCT=$(aws sts get-caller-identity --query Account --output text)
+          BUCKET="ohi-artifacts-public-${ACCT}"
+          DATE=$(date -u +%Y-%m-%d)
+          aws s3 cp "/tmp/calibration_${SEED_DOMAIN}.json" \
+            "s3://${BUCKET}/calibration/${DATE}/calibration_${SEED_DOMAIN}.json" \
+            --content-type application/json \
+            --cache-control "max-age=86400, public"
+          echo "CALIBRATION_URL=https://${BUCKET}.s3.${{ vars.AWS_REGION }}.amazonaws.com/calibration/${DATE}/calibration_${SEED_DOMAIN}.json" >> $GITHUB_ENV
+
+      - name: Attach to latest release
+        if: success()
+        run: |
+          gh release upload "$(gh release view --json tagName --jq .tagName)" \
+            "/tmp/calibration_${SEED_DOMAIN}.json" --clobber || echo "::warning::No release to attach to"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "### Calibration seeded" >> $GITHUB_STEP_SUMMARY
+          echo "- Domain: \`${SEED_DOMAIN}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- URL: ${CALIBRATION_URL}" >> $GITHUB_STEP_SUMMARY
