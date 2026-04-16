@@ -1,0 +1,65 @@
+data "aws_ecr_image" "api" {
+  repository_name = data.aws_ecr_repository.api.name
+  image_tag       = var.image_tag
+}
+
+resource "aws_lambda_function" "api" {
+  function_name = "${local.prefix}-api"
+  role          = aws_iam_role.lambda_exec.arn
+
+  package_type = "Image"
+  image_uri    = "${data.aws_ecr_repository.api.repository_url}@${data.aws_ecr_image.api.image_digest}"
+
+  memory_size = var.memory_mb
+  timeout     = var.timeout_s
+
+  environment {
+    variables = {
+      OHI_ENV                        = "prod"
+      OHI_REGION                     = var.region
+      OHI_LOG_LEVEL                  = "INFO"
+      OHI_GEMINI_MODEL               = var.gemini_model
+      OHI_GEMINI_DAILY_CEILING_EUR   = tostring(var.gemini_daily_ceiling_eur)
+      OHI_CF_TUNNEL_HOSTNAME_NEO4J   = var.tunnel_hostname_neo4j
+      OHI_CF_TUNNEL_HOSTNAME_QDRANT  = var.tunnel_hostname_qdrant
+      OHI_CF_TUNNEL_HOSTNAME_PG_REST = var.tunnel_hostname_pg_rest
+      OHI_CF_TUNNEL_HOSTNAME_WEBDIS  = var.tunnel_hostname_webdis
+      OHI_S3_ARTIFACTS_BUCKET        = local.artifacts_bucket
+
+      # Secret ARNs (values fetched at runtime via SecretsLoader)
+      OHI_GEMINI_KEY_SECRET_ARN               = local.secret_arns["gemini_api_key"]
+      OHI_INTERNAL_BEARER_SECRET_ARN          = local.secret_arns["internal_bearer_token"]
+      OHI_CF_EDGE_SECRET_ARN                  = local.secret_arns["cf_edge_secret"]
+      OHI_CF_ACCESS_SERVICE_TOKEN_SECRET_ARN  = local.secret_arns["cf_access_service_token"]
+      OHI_CLOUDFLARED_TUNNEL_TOKEN_SECRET_ARN = local.secret_arns["cloudflared_tunnel_token"]
+      OHI_LABELER_TOKENS_SECRET_ARN           = local.secret_arns["labeler_tokens"]
+      OHI_PC_ORIGIN_CREDENTIALS_SECRET_ARN    = local.secret_arns["pc_origin_credentials"]
+      OHI_NEO4J_CREDENTIALS_SECRET_ARN        = local.secret_arns["neo4j_credentials"]
+    }
+  }
+
+  logging_config {
+    log_format = "JSON"
+    log_group  = aws_cloudwatch_log_group.api.name
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_basic,
+    aws_iam_role_policy.lambda_secrets,
+    aws_iam_role_policy.lambda_artifacts,
+    aws_cloudwatch_log_group.api,
+  ]
+}
+
+resource "aws_lambda_function_url" "api" {
+  function_name      = aws_lambda_function.api.function_name
+  authorization_type = "NONE"
+  invoke_mode        = "RESPONSE_STREAM"
+
+  cors {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "POST", "OPTIONS"]
+    allow_headers = ["*"]
+    max_age       = 86400
+  }
+}
