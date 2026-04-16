@@ -13,7 +13,7 @@ authors: Fabian Zimber, with Claude
 
 OHI v2 is a complete replacement of the current Open Hallucination Index verification engine. It introduces a seven-layer pipeline that transforms unstructured input text into a calibrated, joint-inferred trust assessment with provable coverage guarantees. The headline contributions are:
 
-1. **A Probabilistic Claim Graph (PCG) with loopy belief propagation.** Claims are not verified independently. Entailment and contradiction edges between claims (extracted by a calibrated NLI cross-encoder) propagate evidence between related claims. Internal contradictions in the input are detected as a first-class hallucination signal.
+1. **A Probabilistic Claim Graph (PCG) with tree-reweighted belief propagation, validated by Gibbs MCMC.** Claims are not verified independently. Entailment and contradiction edges between claims (extracted by a calibrated NLI cross-encoder) propagate evidence between related claims via TRW-BP on an Ising-style log-linear graph; in `balanced`+ rigor tiers a parallel Gibbs sampler validates the variational marginals. Internal contradictions in the input are detected as a first-class hallucination signal.
 2. **Per-domain split-conformal prediction with Mondrian stratification.** Every claim verdict is a calibrated probability `P(true)` plus a `[lower, upper]` 90% prediction interval, validated to maintain ≤10% miscoverage on held-out data per domain × claim-type stratum.
 3. **An open active learning loop with EWC++ regularized retraining.** Public users submit feedback through a `/feedback` endpoint with a 3-concordant consensus filter; nightly jobs refit per-domain conformal calibration and fine-tune NLI heads with elastic weight consolidation to prevent catastrophic forgetting.
 4. **Five-domain specialization.** General, biomedical, legal, code, and social each have their own NLI head, source-credibility prior, and calibration set, dispatched by a per-claim soft router.
@@ -50,7 +50,7 @@ The combination — calibrated NLI + joint inference via PCG + auditable conform
 ### Goals
 
 - **G1. Calibrated trust scoring.** Every claim verdict is a calibrated probability `P(claim is true) ∈ [0, 1]` with a 90% conformal prediction interval, validated to maintain ≤10% miscoverage on held-out data per domain.
-- **G2. Joint claim reasoning.** A Probabilistic Claim Graph propagates evidence between related claims via NLI-derived entailment and contradiction edges. Internal contradictions are detected and surfaced as a hallucination signal.
+- **G2. Joint claim reasoning.** A Probabilistic Claim Graph (Ising-style, TRW-BP primary inference, Gibbs MCMC sanity-check) propagates evidence between related claims via NLI-derived entailment and contradiction edges. Internal contradictions are detected and surfaced as a hallucination signal.
 - **G3. Domain-aware verification.** A learned per-claim router classifies into one of 5 domains; each domain owns its NLI head, source-credibility weights, and conformal calibration set.
 - **G4. Active learning loop.** Public `/feedback` captures labels; nightly jobs (a) refit per-domain conformal calibration, (b) fine-tune the NLI head with EWC++ regularization, and (c) surface high-information claims for prioritized human review.
 - **G5. Layered, ablation-friendly architecture.** Seven discrete layers with versioned interfaces; each is feature-flag-gated and individually replaceable.
@@ -204,10 +204,10 @@ OHI v2 trades latency for rigor explicitly through the API `options.rigor` field
 |---|---|---|---|
 | 3 claims | ~5s | ~15s | ~90s |
 | 10 claims | ~25s | ~90s | ~6 min |
-| 30 claims | ~75s | ~5 min | ~25 min |
-| 100 claims | ~5 min | ~25 min | ~2 h |
+| 30 claims | ~75s | ~5 min | TBD (≥20 min) |
+| 100 claims | ~5 min | ~25 min | TBD (≥1 h) |
 
-These are upper-bound targets; we expect the actual numbers to come in materially faster after Phase 0 profiling. The `maximum` tier exists precisely so that we can publish results without latency-driven shortcuts.
+The `fast` and `balanced` numbers are derived from the per-layer breakdown below. The `maximum` tier numbers for ≥30 claims are upper-bound estimates pending Phase 0 profiling — full quadratic claim↔claim NLI (435+ pairs at N=30, 4,950 at N=100), K=30 self-consistency with checkpoint ensembling, multi-chain Gibbs with R̂ gating, and up to 3 refinement passes are all individually expensive and the empirical totals depend heavily on the eventual hardware. The `maximum` tier exists precisely so that we can publish results without latency-driven shortcuts; we commit to *finishing* every accepted `maximum` request, not to a particular wall-clock target.
 
 **Per-layer breakdown (default `balanced` tier, 10-claim document):**
 
@@ -411,7 +411,7 @@ The K passes are drawn (with replacement when K > the cross product of perturbat
 1. **Lexical paraphrases of the claim** via a small T5-paraphrase model. We pre-generate up to 8 paraphrases per claim, cached. Paraphrase quality is filtered: only paraphrases with bidirectional NLI entailment ≥ 0.9 against the original are retained.
 2. **Evidence sentence-window slides** (±1, ±2 sentences around the central retrieved span; up to 5 windows).
 3. **Premise/hypothesis order swap** — DeBERTa-MNLI fine-tunes are asymmetric on the (premise, hypothesis) ordering, so claim-as-premise vs. claim-as-hypothesis are independent estimates.
-4. **(maximum tier only) NLI checkpoint ensembling** — alternate between DeBERTa-v3-large MNLI head and RoBERTa-large MNLI; combine with the head identity as another perturbation axis.
+4. **(maximum tier only) NLI checkpoint ensembling** — both DeBERTa-v3-large MNLI head and RoBERTa-large MNLI score every (claim, evidence) pair (and (claim, claim) pair). The two model outputs are combined by **softmax-probability average** (not logit average — calibration scaling is checkpoint-specific so logit average would mix incompatible scales). The averaged probability vector is then the input to the K-pass self-consistency mean. The K=30 budget in `maximum` is split evenly: 15 passes per checkpoint with the perturbation set above.
 
 Final distribution = mean of softmax over K passes; variance = sample variance. With K = 10 (default), the variance estimate has tight enough confidence bands to function both as (a) a relative weight for L4 PCG edges and (b) a documented epistemic-uncertainty signal in the API output (`nli_self_consistency_variance` field). We still do not present this variance as a calibrated probability — that role remains exclusively L5's conformal interval, which has a real coverage guarantee.
 
@@ -533,26 +533,54 @@ Belief: b_i(T_i) ∝ exp( α_i · T_i / ρ_i + ∑_{n ∈ N(i)} ρ_{ni} · m_{n�
 
 ### Gibbs sampling sanity check (rigor=`balanced` opt-in, `maximum` always)
 
-To validate TRW-BP's variational approximation against actual posterior samples, we run a Gibbs MCMC chain in parallel:
+To validate TRW-BP's variational approximation against actual posterior samples, we run a Gibbs MCMC chain in parallel.
 
-- 2,000 burn-in iterations + 8,000 sampled iterations (single chain; configurable up to 4 chains in `maximum` for Gelman-Rubin diagnostic).
-- For each node, compute the posterior marginal as the empirical fraction of samples with `T_c = +1`.
-- Compare TRW-BP marginal `b_TRW(c)` to Gibbs marginal `b_Gibbs(c)`. If `|b_TRW − b_Gibbs| > 0.10` for any node, mark that node `bp_validated=False` and use `b_Gibbs` as the authoritative belief; otherwise keep `b_TRW` (it is faster to compute and well-validated for that graph).
-- In `balanced` tier: only invoke Gibbs when the TRW-BP graph has any `J_ij` with `|J_ij| > 0.6` (strong edges) or any frustrated cycle. Otherwise skip — the variational approximation is reliable on benign graphs.
-- In `maximum` tier: always invoke Gibbs.
+**Trigger predicate (`balanced` tier):** invoke Gibbs only when the TRW-BP graph has any `|J_ij| > 0.6` (strong edges) or contains a frustrated cycle (any cycle with an odd number of contradiction edges, detected via DFS at graph construction). Otherwise skip — the variational approximation is reliable on benign graphs. **`maximum` tier:** always invoke Gibbs.
 
-This converts "approximate inference" from a hope into a measured property of each individual document.
+**Chain configuration:**
+- **Burn-in:** 2,000 iterations.
+- **Samples:** 8,000 iterations after burn-in.
+- **Thinning:** 1 (no thinning; correlated samples are fine for marginal estimation).
+- **Chain count:** 1 in `balanced`; 4 in `maximum` (for Gelman-Rubin diagnostic).
+- **Initial state:** sampled from the TRW-BP marginals (not random; warm-starting cuts effective burn-in).
+- **Scan order:** systematic sweep through nodes in claim ID order (deterministic, reproducible).
+- **RNG seed:** `sha256(request_id + "gibbs")[:8]` interpreted as uint64 — fully deterministic per request, with multi-chain seeds derived as `seed + chain_index`.
+
+**Validation rule:**
+- For each node, compute the Gibbs posterior marginal as the empirical fraction of samples with `T_c = +1`.
+- Compare TRW-BP marginal `b_TRW(c)` to Gibbs marginal `b_Gibbs(c)`. If `|b_TRW − b_Gibbs| > 0.10` for any node:
+  - Mark that node `bp_validated = False`.
+  - Use `b_Gibbs` as the authoritative belief downstream (L5, L7).
+- Otherwise, keep `b_TRW` and set `bp_validated = True`.
+- **When Gibbs is skipped** (benign graph in `balanced`): `bp_validated = None` — the field is `bool | None` to disambiguate "validated as agreeing" from "not validated because skipped".
+- **Multi-chain diagnostic** (`maximum` only): compute Gelman-Rubin R̂ across the 4 chains; require R̂ < 1.05. If R̂ ≥ 1.05, run an additional 4,000 samples and re-check; if still failing, flag in `model_versions` as `gibbs_rhat_warning` and accept the multi-chain mean estimate.
+
+This converts "approximate inference" from a hope into a measured, reproducible property of each individual document.
 
 ### Iterative refinement (rigor ≥ `balanced`)
 
-After TRW-BP / Gibbs converges, we identify claims with high *evidence-belief disagreement*: claims where the L4 posterior `b_c` strongly disagrees with the L1-retrieved evidence (e.g., `b_c < 0.3` despite predominantly supporting evidence). These are the claims where joint inference has overridden local evidence — exactly the cases where re-retrieval is most likely to surface a missing piece of disambiguating context.
+After TRW-BP / Gibbs converges, we identify claims with high *evidence-belief disagreement* using a deterministic predicate over the L4 posterior `b_c` and the local evidence support / refute scores `S_t`, `S_f` (defined in §6 unary potential):
+
+```
+def needs_refinement(b_c, S_t, S_f) -> bool:
+    # Joint inference moved the belief strongly against support-heavy evidence
+    if b_c < 0.30 and S_t >= 2.0 * max(S_f, 0.1):
+        return True
+    # Joint inference moved the belief strongly toward truth despite
+    # refute-heavy evidence
+    if b_c > 0.70 and S_f >= 2.0 * max(S_t, 0.1):
+        return True
+    return False
+```
+
+Both directions are flagged because both represent the same underlying signal: PCG joint inference has overridden the local evidence, which is exactly when re-retrieving disambiguating context most often resolves the conflict. (`max(·, 0.1)` floors prevent divide-by-near-zero on claims with near-zero support or refute mass.)
 
 For each flagged claim:
-1. Re-issue the retrieval at one tier deeper (e.g., `default` → `max`) plus a query expansion based on the contradicting neighbors in the PCG.
-2. Re-run L3 NLI for the new evidence and the affected edges.
+1. Re-issue the retrieval at one tier deeper (e.g., `default` → `max`) plus a query expansion using the surface forms of the contradicting neighbors in the PCG (the top-3 neighbors with strongest `|J_ij|` of opposite sign).
+2. Re-run L3 NLI for the new evidence and any affected claim↔claim edges.
 3. Re-run TRW-BP on the (potentially updated) graph.
 
-`balanced` allows up to 1 refinement pass per request; `maximum` allows up to 3. Each pass adds ~10–20s on a 10-claim document. Refinement passes are bounded by both per-request count and by a "no-progress" detector (if marginals don't move > 0.02 between passes, stop early).
+`balanced` allows up to 1 refinement pass per request; `maximum` allows up to 3. Each pass adds ~10–20s on a 10-claim document. Refinement passes are bounded by both per-request count and by a "no-progress" detector (if `max_c |b_c^{pass+1} - b_c^{pass}| < 0.02`, stop early). The `DocumentVerdict.refinement_passes_executed` field exposes the realized count.
 
 ### Acknowledged limitations
 
@@ -582,29 +610,6 @@ Existing hallucination-detection systems (FActScore, SelfCheckGPT, RefChecker, C
 - Convergence test: TRW-BP convergence rate on 30-claim documents from the held-out benchmark set.
 - Ablation: edges removed → posteriors equal `softmax(α_c)`, modulo clamping.
 - Stress test: adversarial frustrated graphs (every triangle contains an odd number of contradiction edges) — TRW-BP should converge or gracefully fall back to LBP-with-flag.
-
-### Output
-
-Per claim: `PosteriorBelief(p_true, p_false, converged: bool, iterations: int, edge_count: int)`.
-
-Document-level: **internal consistency score** = average `KL(b_i || φ_i)` over all nodes. High KL = BP forced large updates from local evidence = something is internally inconsistent.
-
-### Why this is the publishable contribution
-
-Existing hallucination-detection systems (FActScore, SelfCheckGPT, RefChecker, ChainPoll) treat claims as i.i.d. Treating them as a structured graphical model with calibrated NLI edges and conformal-wrapped output is, to our knowledge, novel. The architecture admits natural extensions (temporal/causal edges from L1, soft constraints from external knowledge graphs) for follow-up work.
-
-### Edge cases
-
-- **Single-claim document**: PCG degenerates to local potential = posterior; trivial.
-- **Disconnected components**: each runs BP independently.
-- **Non-convergence**: after 8 iterations, return current beliefs and flag `converged=False`. Becomes a high-information signal for L6.
-- **Numerical underflow**: log-space messages; final beliefs clamped.
-
-### Tests
-
-- Unit tests on small synthetic graphs (chain, V-structure, triangle) where exact posteriors are computable.
-- Convergence test on 30-claim documents.
-- Ablation tests (no edges → posteriors should equal local potentials, modulo normalization).
 
 ---
 
@@ -699,13 +704,15 @@ class CalibratedVerdict:
     p_true: float
     interval_lower: float
     interval_upper: float
-    coverage_target: float = 0.90
-    calibration_set_id: str
+    coverage_target: float | None         # null when fallback_used != null
+    calibration_set_id: str | None        # null when no real calibration set used
     calibration_n: int
     domain: Domain
-    stratum: str               # "biomedical:quantitative"
-    fallback_used: bool
+    stratum: str                          # "biomedical:quantitative"
+    fallback_used: str | None             # null | "domain" | "general" | "non_converged"
 ```
+
+(This is the L5 internal type; L7 maps it into the public `ClaimVerdict` in §9 with the same field semantics.)
 
 ### Edge cases
 
@@ -932,6 +939,8 @@ Response 200: `DocumentVerdict` (full schema in §9).
   "internal_consistency": 0.83,
   "decomposition_coverage": 0.92,
   "processing_time_ms": 87341,
+  "rigor": "balanced",
+  "refinement_passes_executed": 1,
   "claims": [
     {
       "claim": { "id": "...", "text": "Einstein was born in 1879.", "claim_type": "temporal", ... },
@@ -946,6 +955,7 @@ Response 200: `DocumentVerdict` (full schema in §9).
         { "neighbor_claim_id": "...", "edge_type": "entail", "edge_strength": 0.81 }
       ],
       "nli_self_consistency_variance": 0.012,
+      "bp_validated": null,
       "information_gain": 0.04,
       "queued_for_review": false,
       "calibration_set_id": "calib-2026-04-16-r1",
@@ -1261,7 +1271,7 @@ ON CONFLICT (claim_id) DO NOTHING;
 5. Evidence-correction propagation:
      - For each evidence_correction in feedback last 7 days, add a synthetic
        (claim, evidence, label) NLI training pair to the next training run,
-       and update source-credibility prior (Stage 7) accordingly.
+       and update source-credibility prior (Stage 9) accordingly.
 6. Eval on held-out benchmarks (frozen 1000-claim regression suite + each
    domain's primary benchmark)
 7. Coverage validation gate (k-fold cross-coverage on re-scored set)
@@ -1345,8 +1355,9 @@ Every retraining run produces a fully reproducible artifact: input snapshot, mod
 
 ### Phase 2 — Reasoning core (the publishable contribution)
 
-- L3 NLI cross-encoder with K=3 self-consistency (single shared head, no per-domain yet).
-- L4 PCG with loopy belief propagation.
+- L3 NLI cross-encoder with K=10 self-consistency by default (rigor=`balanced`); K=3 in `fast`, K=30 in `maximum` (single shared head, no per-domain yet).
+- L4 PCG with TRW-BP primary inference + Gibbs MCMC sanity check on flagged graphs in `balanced`+, always in `maximum`.
+- Iterative PCG refinement loop (1 pass in `balanced`, 3 in `maximum`).
 - Internal consistency surfaced as top-level signal.
 - Refit conformal quantiles against L4 posteriors.
 - Deliverable: ≥3pt F1 over Phase 1 on FActScore + TruthfulQA + HaluEval; coverage validated.
@@ -1450,7 +1461,9 @@ These are decisions baked into this spec as tentative recommendations, to be rec
 - **Online EWC**: Elastic Weight Consolidation in the online (sequential) setting using an exponential moving average of the Fisher information matrix as the regularization anchor (Schwarz et al., 2018, "Progress & Compress"). *Distinct from* "EWC++" (Chaudhry et al., 2018), which uses a different formulation; we use online EWC.
 - **Information gain (L6)**: composite score quantifying how much labeling a claim would reduce model uncertainty.
 - **Internal consistency score**: document-level signal derived from L4 BP message magnitude; high = reconciliation effort = potential incoherence.
-- **Loopy BP**: belief propagation run on a cyclic graph; converges to stationary point of Bethe free energy.
+- **Loopy BP (LBP)**: belief propagation run on a cyclic graph; converges to a stationary point of Bethe free energy when it converges, but on dense or strongly-connected graphs may oscillate or converge to non-Bethe-stationary points (Murphy/Weiss/Jordan 1999). Used as the L4 fallback inference algorithm.
+- **TRW-BP**: tree-reweighted belief propagation (Wainwright/Jaakkola/Willsky 2005). Convex relaxation of LBP using uniformly-distributed spanning-tree edge weights `ρ_e`; convergent under broad conditions; provides an upper bound on the log-partition function. The L4 primary inference algorithm.
+- **Gibbs sampling**: MCMC algorithm that samples from a joint distribution by repeatedly resampling each variable conditional on the others. Used in L4 as a sanity check on TRW-BP marginals — the variational approximation is validated against actual posterior samples per request.
 - **Mondrian conformal**: split conformal stratified by a categorical attribute (here, claim_type × domain).
 - **NLI**: Natural Language Inference; classification of (premise, hypothesis) into entail/contradict/neutral.
 - **PCG**: Probabilistic Claim Graph; the L4 graphical model.
