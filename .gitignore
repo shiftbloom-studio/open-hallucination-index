@@ -202,4 +202,13 @@ temp/
 !/benchmark_results/v1_baseline_*.summary.json
 !/benchmark_results/v2_*.summary.json
 
+# ==============================================================================
+# Internal design + planning docs (local only, not pushed)
+# ==============================================================================
+# Brainstorming specs, implementation plans, and checkpoint handoffs for the
+# ongoing redesign are kept out of the remote while the work is in progress.
+# If and when the design stabilizes, selected sections can be re-introduced
+# (e.g., copied into README.md or docs/) under a separate explicit commit.
+/docs/superpowers/
+
 /gui_ingestion_app/.wiki_dumps/
