@@ -193,6 +193,12 @@ temp/
 
 *.tex
 
-/benchmark_results/
+# Benchmark output: keep the dir and the .gitkeep; keep committed baseline
+# summary files (v1_baseline_*.summary.json) as Phase 0 acceptance
+# artifacts; ignore raw JSONL + smoke-test outputs.
+/benchmark_results/*
+!/benchmark_results/.gitkeep
+!/benchmark_results/v1_baseline_*.summary.json
+!/benchmark_results/v2_*.summary.json
 
 /gui_ingestion_app/.wiki_dumps/
