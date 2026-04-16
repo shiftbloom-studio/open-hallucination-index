@@ -983,7 +983,7 @@ Marked (✅ unchanged) or (🔄 revised 2026-04-16 per user feedback) or (➕ ne
 
 ## Appendix A — What the implementation plan must produce
 
-(Written here to constrain plan scope; the plan itself goes in `docs/superpowers/plans/2026-04-17-ohi-v2-infrastructure-implementation.md`.)
+(Written here to constrain plan scope; the plan itself is at `docs/superpowers/plans/2026-04-16-ohi-v2-infrastructure-implementation.md`.)
 
 The implementation plan must yield, in order:
 
