@@ -1,0 +1,34 @@
+# Minimal 503 responder for Phase I.1 bring-up.
+# Returns {"status":"bootstrapping"} to every path so we can verify Cloudflare +
+# WAF + Function URL wiring before the real app is ready.
+FROM public.ecr.aws/lambda/python:3.12
+
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
+
+ENV AWS_LAMBDA_EXEC_WRAPPER=/opt/extensions/lambda-adapter
+ENV PORT=8080
+ENV READINESS_CHECK_PATH=/health/live
+
+RUN pip install --no-cache-dir fastapi==0.115.0 uvicorn==0.32.0
+
+RUN mkdir -p ${LAMBDA_TASK_ROOT}/stub
+COPY <<'EOF' ${LAMBDA_TASK_ROOT}/stub/app.py
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+app = FastAPI()
+
+
+@app.get("/health/live")
+def live():
+    return {"status": "bootstrapping"}
+
+
+@app.middleware("http")
+async def bootstrapping_all(request, call_next):
+    if request.url.path == "/health/live":
+        return await call_next(request)
+    return JSONResponse({"status": "bootstrapping"}, status_code=503)
+EOF
+
+CMD ["uvicorn", "stub.app:app", "--host", "0.0.0.0", "--port", "8080"]
