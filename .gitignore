@@ -87,6 +87,10 @@ docker/compose/.env
 
 secrets/
 .secrets/
+# Infrastructure Terraform layer `infra/terraform/secrets/` holds empty
+# Secrets Manager entries managed by Terraform — only ARNs, no actual values.
+!infra/terraform/secrets/
+!infra/terraform/secrets/**
 
 # ==============================================================================
 # Logs
