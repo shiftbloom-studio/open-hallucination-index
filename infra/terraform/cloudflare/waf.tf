@@ -44,8 +44,7 @@ resource "cloudflare_ruleset" "custom_waf" {
     expression  = <<-EOT
       (http.host eq "${local.api_hostname}") and (
         (http.request.uri.path contains "/169.254.169.254") or
-        (http.request.uri.path contains "/latest/meta-data") or
-        (http.request.body.raw contains "169.254.169.254")
+        (http.request.uri.path contains "/latest/meta-data")
       )
     EOT
     enabled     = true
@@ -71,28 +70,19 @@ resource "cloudflare_ruleset" "rate_limits" {
   kind        = "zone"
   phase       = "http_ratelimit"
 
+  # CF free tier allows only 1 rule in the http_ratelimit phase per zone.
+  # We keep the per-endpoint /verify rule because that's the Gemini-cost path.
+  # Global per-IP ceiling dropped; Lambda is inherently bounded by account
+  # concurrency (1000 default) so abuse is capped by AWS cost, not CF.
   rules {
     action      = "block"
-    description = "POST /api/v2/verify on api host — ${var.rate_limit_verify_per_min} req/min/IP"
+    description = "POST /api/v2/verify on api host — ~${var.rate_limit_verify_per_min} req/min/IP (CF free tier forces 10s windows)"
     expression  = "(http.host eq \"${local.api_hostname}\") and (http.request.uri.path eq \"/api/v2/verify\") and (http.request.method eq \"POST\")"
     ratelimit {
-      characteristics     = ["ip.src"]
-      period              = 60
-      requests_per_period = var.rate_limit_verify_per_min
-      mitigation_timeout  = 60
-    }
-    enabled = true
-  }
-
-  rules {
-    action      = "block"
-    description = "Global per-IP ceiling on api host — ${var.rate_limit_global_per_hour} req/hour/IP"
-    expression  = "(http.host eq \"${local.api_hostname}\")"
-    ratelimit {
-      characteristics     = ["ip.src"]
-      period              = 3600
-      requests_per_period = var.rate_limit_global_per_hour
-      mitigation_timeout  = 300
+      characteristics     = ["ip.src", "cf.colo.id"]
+      period              = 10
+      requests_per_period = ceil(var.rate_limit_verify_per_min / 6)
+      mitigation_timeout  = 10
     }
     enabled = true
   }

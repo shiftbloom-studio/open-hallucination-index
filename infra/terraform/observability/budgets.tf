@@ -1,8 +1,8 @@
 resource "aws_budgets_budget" "forecast" {
   name         = "${local.prefix}-budget-forecast"
   budget_type  = "COST"
-  limit_amount = tostring(var.budget_forecast_eur)
-  limit_unit   = "EUR"
+  limit_amount = tostring(var.budget_forecast_usd)
+  limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
   cost_filter {
@@ -23,8 +23,8 @@ resource "aws_budgets_budget" "forecast" {
 resource "aws_budgets_budget" "actual" {
   name         = "${local.prefix}-budget-actual"
   budget_type  = "COST"
-  limit_amount = tostring(var.budget_actual_eur)
-  limit_unit   = "EUR"
+  limit_amount = tostring(var.budget_actual_usd)
+  limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
   cost_filter {

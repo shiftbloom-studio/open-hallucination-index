@@ -8,12 +8,12 @@ variable "alert_email" {
   default = "fabian@shiftbloom.studio"
 }
 
-variable "budget_forecast_eur" {
+variable "budget_forecast_usd" {
   type    = number
-  default = 100
+  default = 110
 }
 
-variable "budget_actual_eur" {
+variable "budget_actual_usd" {
   type    = number
-  default = 140
+  default = 150
 }

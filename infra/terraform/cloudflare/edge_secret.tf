@@ -7,7 +7,7 @@ resource "cloudflare_ruleset" "transform_edge_secret" {
   name        = "ohi-prod-transform-edge-secret"
   description = "Add X-OHI-Edge-Secret header to all requests going to origin"
   kind        = "zone"
-  phase       = "http_request_transform"
+  phase       = "http_request_late_transform"
 
   rules {
     action      = "rewrite"
