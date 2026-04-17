@@ -152,16 +152,23 @@ class OpenAILLMAdapter(LLMProvider):
             # We merge system messages into the first user message.
             formatted_messages = self._format_messages_for_mistral(messages)
 
-            response_format = {"type": "json_object"} if json_mode else None
+            # Gemini's OpenAI-compat endpoint rejects `stop: null` and similar
+            # nulled optional fields with "Value is not a string: null". The
+            # OpenAI Python SDK forwards None as JSON null, so build kwargs
+            # dynamically and only include what's set.
+            kwargs: dict[str, object] = {
+                "model": self._model,
+                "messages": formatted_messages,
+                "temperature": temperature,
+            }
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
+            if stop:
+                kwargs["stop"] = stop
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
 
-            response = await self._client.chat.completions.create(
-                model=self._model,
-                messages=formatted_messages,  # type: ignore[arg-type]
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stop=stop,
-                response_format=response_format,
-            )
+            response = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
 
             choice = response.choices[0]
             usage = None
@@ -213,13 +220,18 @@ class OpenAILLMAdapter(LLMProvider):
         try:
             formatted_messages = self._format_messages_for_mistral(messages)
 
-            stream = await self._client.chat.completions.create(
-                model=self._model,
-                messages=formatted_messages,  # type: ignore[arg-type]
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True,
-            )
+            # See complete(): Gemini's OpenAI-compat rejects null-valued
+            # optional fields, so build kwargs without None entries.
+            kwargs: dict[str, object] = {
+                "model": self._model,
+                "messages": formatted_messages,
+                "temperature": temperature,
+                "stream": True,
+            }
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
+
+            stream = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
 
             async for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
