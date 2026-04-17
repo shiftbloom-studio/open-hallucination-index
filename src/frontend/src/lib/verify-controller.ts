@@ -152,6 +152,13 @@ export function verifyReducer(state: VerifyState, action: VerifyAction): VerifyS
 export interface UseVerifyControllerApi {
   state: VerifyState;
   submit: (req: VerifyRequest) => Promise<void>;
+  /**
+   * Skip SSE entirely and go straight to the synchronous /verify endpoint.
+   * Used by the "Retry with sync fallback" button in the error panel when
+   * the stream endpoint is unavailable (e.g. 404 during Phase 1 when
+   * /verify/stream isn't implemented yet).
+   */
+  submitSync: (req: VerifyRequest) => Promise<void>;
   cancel: () => void;
   reset: () => void;
 }
@@ -227,5 +234,28 @@ export function useVerifyController(options?: {
     [cancel, options?.firstByteTimeoutMs],
   );
 
-  return { state, submit, cancel, reset };
+  const submitSync = useCallback(
+    async (req: VerifyRequest) => {
+      cancel();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      dispatch({ type: "START", at: Date.now() });
+      dispatch({ type: "SWITCH_SYNC_FALLBACK" });
+
+      try {
+        const verdict = await ohi.verify(req, { signal: controller.signal });
+        dispatch({ type: "COMPLETE_SYNC", verdict });
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        dispatch({
+          type: "ERROR",
+          error: err instanceof Error ? err : new Error(String(err)),
+        });
+      }
+    },
+    [cancel],
+  );
+
+  return { state, submit, submitSync, cancel, reset };
 }

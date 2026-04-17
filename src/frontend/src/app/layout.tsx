@@ -178,7 +178,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased flex min-h-screen flex-col">
         <Script
           id="structured-data"
           type="application/ld+json"
@@ -187,7 +187,7 @@ export default function RootLayout({
         <Providers>
           <ParticlesBackground />
           <Navbar />
-          {children}
+          <main className="flex-1">{children}</main>
           <Footer />
           <CookieConsent />
           <ConsentAwareAnalytics />
