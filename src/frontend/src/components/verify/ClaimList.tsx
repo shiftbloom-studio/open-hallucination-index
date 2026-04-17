@@ -43,7 +43,10 @@ export function ClaimList({
   if (claims.length === 0) {
     return (
       <div
-        className={cn("rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500", className)}
+        className={cn(
+          "rounded-xl border border-dashed border-[color:var(--border-default)] bg-surface-elevated p-6 text-center text-sm text-brand-subtle",
+          className,
+        )}
       >
         {emptyMessage}
       </div>
@@ -52,12 +55,12 @@ export function ClaimList({
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
-        <span>Claims ({claims.length})</span>
-        <label className="flex items-center gap-2">
+      <div className="flex items-center justify-between text-brand-subtle">
+        <span className="label-mono">Claims ({claims.length})</span>
+        <label className="flex items-center gap-2 text-[10px] uppercase tracking-wider">
           <span>Sort</span>
           <select
-            className="rounded border border-white/10 bg-slate-900/60 px-2 py-0.5 font-mono text-[10px] text-slate-200 focus:border-indigo-400 focus:outline-none"
+            className="num-mono rounded border border-[color:var(--border-subtle)] bg-surface-elevated px-2 py-0.5 text-[10px] text-brand-ink focus:border-[color:var(--brand-indigo)] focus:outline-none"
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as ClaimSortKey)}
             aria-label="Sort claims"

@@ -3,7 +3,6 @@
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import { Spotlight } from "@/components/ui/spotlight";
-import { ParticlesBackground } from "@/components/ui/particles-background";
 import { 
   Shield, 
   Brain, 
@@ -71,8 +70,7 @@ const values = [
 export default function AboutPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-neutral-100 relative overflow-hidden">
-      <ParticlesBackground />
-      
+
       {/* Hero Section */}
       <section className="relative w-full overflow-hidden">
         <div className="relative min-h-[50vh] w-full bg-slate-950/80 antialiased bg-grid-white/[0.02]">

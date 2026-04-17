@@ -49,15 +49,15 @@ export function RetryCountdown({
         className={cn(
           "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
           canRetry
-            ? "bg-indigo-500/20 text-indigo-100 ring-1 ring-inset ring-indigo-400/30 hover:bg-indigo-500/30"
-            : "cursor-not-allowed bg-slate-800/60 text-slate-500 ring-1 ring-inset ring-white/5",
+            ? "bg-[color:var(--brand-indigo)] text-white shadow-sm hover:bg-[color:var(--brand-indigo-strong)]"
+            : "cursor-not-allowed bg-[color:var(--border-subtle)] text-brand-subtle",
         )}
       >
         {canRetry ? primaryLabel : `Retry in ${fmt(remaining)}`}
       </button>
       {!canRetry && retryAfterSec && retryAfterSec > 0 && (
         <span
-          className="font-mono text-[11px] text-amber-300"
+          className="num-mono text-[11px] text-[color:var(--brand-warning)]"
           aria-live="polite"
           data-testid="countdown"
         >

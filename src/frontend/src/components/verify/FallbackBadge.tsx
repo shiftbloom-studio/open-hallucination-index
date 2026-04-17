@@ -1,6 +1,9 @@
 import type { FallbackKind } from "@/lib/ohi-types";
 import { cn } from "@/lib/utils";
 
+// Labels are display strings — DO NOT rename or reorder.
+// "general fallback" is load-bearing (Fabian's hard-rule: signals calibration
+// state to operators reading the UI).
 const label: Record<FallbackKind, string> = {
   domain: "domain fallback",
   general: "general fallback",
@@ -17,13 +20,19 @@ export function FallbackBadge({ kind, className }: FallbackBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-300 ring-1 ring-inset ring-amber-400/25",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ring-inset",
         className,
       )}
+      style={{
+        backgroundColor: "var(--brand-warning-soft)",
+        color: "#92400e",
+        boxShadow: "inset 0 0 0 1px rgba(217,119,6,0.35)",
+      }}
       data-fallback={kind}
       title={`calibration used ${label[kind]} — interval widened`}
     >
-      ⚠ {label[kind]}
+      <span aria-hidden>⚠</span>
+      {label[kind]}
     </span>
   );
 }

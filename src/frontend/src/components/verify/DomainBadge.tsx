@@ -1,12 +1,35 @@
 import type { Domain } from "@/lib/ohi-types";
 import { cn } from "@/lib/utils";
 
-const palette: Record<Domain, string> = {
-  general: "bg-indigo-500/15 text-indigo-200 ring-indigo-400/25",
-  biomedical: "bg-teal-500/15 text-teal-200 ring-teal-400/25",
-  legal: "bg-amber-500/15 text-amber-200 ring-amber-400/25",
-  code: "bg-violet-500/15 text-violet-200 ring-violet-400/25",
-  social: "bg-pink-500/15 text-pink-200 ring-pink-400/25",
+const palette: Record<
+  Domain,
+  { bg: string; fg: string; ring: string }
+> = {
+  general: {
+    bg: "rgba(99,102,241,0.1)",
+    fg: "var(--brand-indigo-strong)",
+    ring: "rgba(99,102,241,0.3)",
+  },
+  biomedical: {
+    bg: "rgba(13,148,136,0.1)",
+    fg: "#0f766e",
+    ring: "rgba(13,148,136,0.3)",
+  },
+  legal: {
+    bg: "rgba(217,119,6,0.1)",
+    fg: "var(--brand-warning)",
+    ring: "rgba(217,119,6,0.3)",
+  },
+  code: {
+    bg: "rgba(139,92,246,0.1)",
+    fg: "#6d28d9",
+    ring: "rgba(139,92,246,0.3)",
+  },
+  social: {
+    bg: "rgba(219,39,119,0.1)",
+    fg: "#be185d",
+    ring: "rgba(219,39,119,0.3)",
+  },
 };
 
 export interface DomainBadgeProps {
@@ -17,17 +40,20 @@ export interface DomainBadgeProps {
 
 export function DomainBadge({ domain, weight, className }: DomainBadgeProps) {
   const showWeight = typeof weight === "number" && weight < 1 && weight > 0;
+  const p = palette[domain];
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ring-inset",
-        palette[domain],
         className,
       )}
+      style={{ backgroundColor: p.bg, color: p.fg, boxShadow: `inset 0 0 0 1px ${p.ring}` }}
       data-domain={domain}
     >
       {domain}
-      {showWeight && <span className="font-mono text-[9px] opacity-70">·{weight!.toFixed(2)}</span>}
+      {showWeight && (
+        <span className="num-mono text-[9px] opacity-75">·{weight!.toFixed(2)}</span>
+      )}
     </span>
   );
 }
