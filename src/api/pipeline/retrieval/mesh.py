@@ -44,7 +44,7 @@ class KnowledgeMeshBuilder:
 
     def __init__(
         self,
-        trace_store: KnowledgeTracker,
+        trace_store: KnowledgeTracker | None = None,
         graph_store: GraphKnowledgeStore | None = None,
         vector_store: VectorKnowledgeStore | None = None,
     ) -> None:
@@ -52,7 +52,8 @@ class KnowledgeMeshBuilder:
         Initialize the mesh builder.
 
         Args:
-            trace_store: Redis trace storage for cached trace data.
+            trace_store: Redis trace storage for cached trace data. Optional —
+                when None, build_mesh() falls back to live queries only.
             graph_store: Neo4j for entity relationships.
             vector_store: Qdrant for semantic neighbors.
         """

@@ -36,10 +36,10 @@ resource "cloudflare_record" "api" {
   zone_id = local.zone_id
   name    = "${local.record_prefix}${var.api_subdomain}"
   type    = "CNAME"
-  content = local.lambda_fn_hostname
+  content = local.api_origin_hostname
   proxied = true # orange cloud — all CF edge features apply to API traffic
   ttl     = 1
-  comment = "OHI v2 API — AWS Lambda via CF (WAF + rate limits)"
+  comment = "OHI v2 API - AWS API Gateway fronting Lambda, via CF (WAF + rate limits + edge secret)"
 }
 
 # Tunnel hostnames (neo4j/qdrant/pg/redis/embed) are declared in tunnel.tf with matching label logic.

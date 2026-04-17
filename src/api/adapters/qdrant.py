@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -52,6 +53,21 @@ import httpx
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.models import Distance, Filter, PointStruct, VectorParams
+
+
+def _cf_access_headers() -> dict[str, str]:
+    """Return CF Access service-token headers when both env vars are set.
+
+    Lambda reaches Qdrant through the Cloudflare tunnel, which is gated by a
+    CF Access app. Without these headers CF returns the Access login page
+    (HTTP 403 text/html "Cloudflare Access"), which qdrant-client surfaces
+    as `httpx.ConnectError: All connection attempts failed`.
+    """
+    cid = os.environ.get("OHI_CF_ACCESS_CLIENT_ID")
+    sec = os.environ.get("OHI_CF_ACCESS_CLIENT_SECRET")
+    if cid and sec:
+        return {"CF-Access-Client-Id": cid, "CF-Access-Client-Secret": sec}
+    return {}
 
 from interfaces.stores import VectorKnowledgeStore, VectorQuery
 from models.entities import Evidence, EvidenceSource
@@ -140,13 +156,39 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 client_kwargs["grpc_options"] = grpc_options
             if http_verify is not None:
                 client_kwargs["verify"] = http_verify
+            access_headers = _cf_access_headers()
+            if access_headers:
+                # qdrant-client forwards `metadata=` to gRPC only; for HTTP
+                # we inject via the underlying httpx client after construction.
+                logger.info("Qdrant CF Access headers: sending service token")
             self._client = AsyncQdrantClient(
                 **client_kwargs,  # type: ignore[arg-type]
             )
 
-            # Override the internal httpx client to use IPv4
-            if hasattr(self._client, "_client") and self._client._client is not None:
-                self._client._client._transport = ipv4_transport
+            # qdrant-client's structure (v1.16): AsyncQdrantClient → _client
+            # (AsyncQdrantRemote) → http (AsyncApis) → <name>_api → api_client
+            # → _async_client (the real httpx.AsyncClient). All *_api share
+            # the same api_client + _async_client, so patching any one
+            # reference patches every outbound request.
+            remote = getattr(self._client, "_client", None)
+            http = getattr(remote, "http", None) if remote is not None else None
+            any_api = next(
+                (getattr(http, a) for a in dir(http) if a.endswith("_api")),
+                None,
+            ) if http is not None else None
+            api_client = getattr(any_api, "api_client", None) if any_api is not None else None
+            inner_httpx = getattr(api_client, "_async_client", None)
+
+            if isinstance(inner_httpx, httpx.AsyncClient):
+                inner_httpx._transport = ipv4_transport
+                if access_headers:
+                    inner_httpx.headers.update(access_headers)
+            else:
+                logger.warning(
+                    "Qdrant adapter could not locate internal httpx.AsyncClient "
+                    "(type=%s); CF Access headers and IPv4 transport NOT applied.",
+                    type(inner_httpx).__name__,
+                )
 
             await self._ensure_collection()
             logger.info(f"Connected to Qdrant at {self._settings.host}:{self._settings.port}")
