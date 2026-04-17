@@ -45,6 +45,13 @@ ENV PORT=8080
 ENV READINESS_CHECK_PATH=/health/ready
 ENV PYTHONUNBUFFERED=1
 
+# Lambda's filesystem is read-only outside /tmp. Point HuggingFace caches at
+# a baked-in location so sentence-transformers / transformers never try to
+# download to $HOME (which would 30 EROFS on /home/sbx_user*).
+ENV HF_HOME=/var/task/hf-cache
+ENV TRANSFORMERS_OFFLINE=1
+ENV HF_HUB_OFFLINE=1
+
 # App code lives at /var/task (Lambda runtime convention).
 WORKDIR /var/task
 
@@ -60,6 +67,14 @@ RUN rm -f /var/task/pyproject.toml /var/task/README.md && rm -rf /var/task/tests
 
 # Make app code importable.
 ENV PYTHONPATH=/var/task
+
+# Pre-download the embedding model into the image. The offline flags above
+# then keep sentence-transformers / transformers from ever doing a network
+# roundtrip at invocation time.
+# NOTE: unset TRANSFORMERS_OFFLINE / HF_HUB_OFFLINE just for this RUN so the
+# download is allowed during build; they stay set for runtime via the ENVs above.
+RUN TRANSFORMERS_OFFLINE=0 HF_HUB_OFFLINE=0 \
+    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L12-v2')"
 
 # Use `python -m uvicorn` so we don't depend on pip's bin/ being on PATH
 # (with --target installs, the bin/ directory isn't searched by default).
