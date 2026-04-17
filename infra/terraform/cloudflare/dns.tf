@@ -21,7 +21,7 @@ resource "cloudflare_record" "vercel_verify" {
   count = var.vercel_verification_token != "" ? 1 : 0
 
   zone_id = local.zone_id
-  name    = var.apex_subdomain == "" ? "_vercel" : "_vercel${local.record_suffix}"
+  name    = var.apex_subdomain == "" ? "_vercel" : "_vercel.${var.apex_subdomain}"
   type    = "TXT"
   content = var.vercel_verification_token
   proxied = false
@@ -34,7 +34,7 @@ resource "cloudflare_record" "vercel_verify" {
 # ---------------------------------------------------------------------------
 resource "cloudflare_record" "api" {
   zone_id = local.zone_id
-  name    = "${var.api_subdomain}${local.record_suffix}"
+  name    = "${local.record_prefix}${var.api_subdomain}"
   type    = "CNAME"
   content = local.lambda_fn_hostname
   proxied = true # orange cloud — all CF edge features apply to API traffic
@@ -42,4 +42,4 @@ resource "cloudflare_record" "api" {
   comment = "OHI v2 API — AWS Lambda via CF (WAF + rate limits)"
 }
 
-# Tunnel hostnames (neo4j/qdrant/pg/redis) are declared in tunnel.tf with matching label logic.
+# Tunnel hostnames (neo4j/qdrant/pg/redis/embed) are declared in tunnel.tf with matching label logic.

@@ -2,20 +2,18 @@
 # Uses AWS Lambda Web Adapter pattern with a plain Python base image —
 # NOT the public.ecr.aws/lambda/python base, whose entrypoint expects a
 # function-handler contract that conflicts with running a web server.
+#
+# Lambda gets ORCHESTRATION dependencies only (FastAPI + HTTP clients).
+# Heavy ML (torch + sentence-transformers) lives in the PC-side pc-embed
+# container, reached via CF tunnel. See docker/pc-embed/ and
+# src/api/adapters/embeddings.py.
 
 # --- Stage 1: dependency install -------------------------------------------
 FROM public.ecr.aws/docker/library/python:3.12-slim AS builder
 
 WORKDIR /build
 
-# IMPORTANT: base pyproject.toml pulls sentence-transformers + torch (~800MB).
-# Those belong on the PC/ingestion side, NOT in Lambda. We install a TRIMMED
-# runtime set directly instead of `pip install /build`. If you need a new dep
-# in the Lambda image, add it here explicitly — the full pyproject is for
-# local dev + ingestion, not for Lambda.
-# CPU-only torch to avoid the ~800MB CUDA stubs in the default wheel.
 RUN pip install --no-cache-dir --target /deps \
-    --extra-index-url https://download.pytorch.org/whl/cpu \
     "fastapi>=0.128,<1.0" \
     "uvicorn[standard]>=0.40" \
     "pydantic>=2.12" \
@@ -29,8 +27,6 @@ RUN pip install --no-cache-dir --target /deps \
     "orjson>=3.11" \
     "structlog>=24.1" \
     "boto3>=1.34" \
-    "torch>=2.0,<3.0" \
-    "sentence-transformers>=2.2" \
     "wikitextparser>=0.56" \
     "mcp>=1.25"
 
@@ -44,13 +40,6 @@ COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt
 ENV PORT=8080
 ENV READINESS_CHECK_PATH=/health/ready
 ENV PYTHONUNBUFFERED=1
-
-# Lambda's filesystem is read-only outside /tmp. Point HuggingFace caches at
-# a baked-in location so sentence-transformers / transformers never try to
-# download to $HOME (which would 30 EROFS on /home/sbx_user*).
-ENV HF_HOME=/var/task/hf-cache
-ENV TRANSFORMERS_OFFLINE=1
-ENV HF_HUB_OFFLINE=1
 
 # App code lives at /var/task (Lambda runtime convention).
 WORKDIR /var/task
@@ -67,14 +56,6 @@ RUN rm -f /var/task/pyproject.toml /var/task/README.md && rm -rf /var/task/tests
 
 # Make app code importable.
 ENV PYTHONPATH=/var/task
-
-# Pre-download the embedding model into the image. The offline flags above
-# then keep sentence-transformers / transformers from ever doing a network
-# roundtrip at invocation time.
-# NOTE: unset TRANSFORMERS_OFFLINE / HF_HUB_OFFLINE just for this RUN so the
-# download is allowed during build; they stay set for runtime via the ENVs above.
-RUN TRANSFORMERS_OFFLINE=0 HF_HUB_OFFLINE=0 \
-    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L12-v2')"
 
 # Use `python -m uvicorn` so we don't depend on pip's bin/ being on PATH
 # (with --target installs, the bin/ directory isn't searched by default).

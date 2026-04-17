@@ -26,22 +26,34 @@ variable "log_retention_days" {
 
 variable "tunnel_hostname_neo4j" {
   type    = string
-  default = "neo4j.ohi.shiftbloom.studio"
+  default = "ohi-neo4j.shiftbloom.studio"
 }
 
 variable "tunnel_hostname_qdrant" {
   type    = string
-  default = "qdrant.ohi.shiftbloom.studio"
+  default = "ohi-qdrant.shiftbloom.studio"
 }
 
 variable "tunnel_hostname_pg_rest" {
   type    = string
-  default = "pg.ohi.shiftbloom.studio"
+  default = "ohi-pg.shiftbloom.studio"
 }
 
 variable "tunnel_hostname_webdis" {
   type    = string
-  default = "redis.ohi.shiftbloom.studio"
+  default = "ohi-redis.shiftbloom.studio"
+}
+
+variable "tunnel_hostname_embed" {
+  description = "Hostname of the PC-side embedding service via the CF tunnel."
+  type        = string
+  default     = "ohi-embed.shiftbloom.studio"
+}
+
+variable "embedding_backend" {
+  description = "'local' (in-process sentence-transformers) or 'remote' (HTTP to pc-embed)."
+  type        = string
+  default     = "remote"
 }
 
 variable "gemini_model" {

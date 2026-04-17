@@ -26,5 +26,5 @@ output "service_token_client_id" {
 }
 
 output "tunnel_hostnames" {
-  value = { for k, v in local.tunnel_hostnames : k => "${v}.${local.apex_hostname}" }
+  value = { for k, v in local.tunnel_hostnames : k => "${local.record_prefix}${v}.${var.zone_name}" }
 }

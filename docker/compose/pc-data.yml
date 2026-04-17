@@ -74,6 +74,18 @@ services:
       WEBDIS_HTTP_AUTH: ${WEBDIS_HTTP_AUTH}
     depends_on: [redis]
 
+  embed:
+    build:
+      context: ../..
+      dockerfile: docker/pc-embed/Dockerfile
+    image: ohi-pc-embed:latest
+    profiles: [pc-prod, local-dev]
+    restart: unless-stopped
+    environment:
+      OHI_EMBED_MODEL: all-MiniLM-L12-v2
+      OHI_EMBED_NORMALIZE: "true"
+      OHI_EMBED_BATCH_SIZE: "32"
+
   cloudflared:
     image: cloudflare/cloudflared:2026.3.0
     profiles: [pc-prod]
@@ -81,7 +93,7 @@ services:
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN}
-    depends_on: [neo4j, qdrant, postgrest, webdis]
+    depends_on: [neo4j, qdrant, postgrest, webdis, embed]
 
 volumes:
   neo4j-data:

@@ -18,20 +18,24 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pc" {
 
   config {
     ingress_rule {
-      hostname = "neo4j.${local.apex_hostname}"
+      hostname = "${local.record_prefix}neo4j.${var.zone_name}"
       service  = "http://neo4j:7474"
     }
     ingress_rule {
-      hostname = "qdrant.${local.apex_hostname}"
+      hostname = "${local.record_prefix}qdrant.${var.zone_name}"
       service  = "http://qdrant:6333"
     }
     ingress_rule {
-      hostname = "pg.${local.apex_hostname}"
+      hostname = "${local.record_prefix}pg.${var.zone_name}"
       service  = "http://postgrest:3000"
     }
     ingress_rule {
-      hostname = "redis.${local.apex_hostname}"
+      hostname = "${local.record_prefix}redis.${var.zone_name}"
       service  = "http://webdis:7379"
+    }
+    ingress_rule {
+      hostname = "${local.record_prefix}embed.${var.zone_name}"
+      service  = "http://embed:8080"
     }
     # Catch-all (required as the last rule)
     ingress_rule {
@@ -47,6 +51,7 @@ locals {
     qdrant = "qdrant"
     pg     = "pg"
     redis  = "redis"
+    embed  = "embed"
   }
 }
 
@@ -54,12 +59,12 @@ resource "cloudflare_record" "tunnel" {
   for_each = local.tunnel_hostnames
 
   zone_id = local.zone_id
-  name    = "${each.value}${local.record_suffix}"
+  name    = "${local.record_prefix}${each.value}"
   type    = "CNAME"
   content = "${cloudflare_zero_trust_tunnel_cloudflared.pc.id}.cfargotunnel.com"
   proxied = true
   ttl     = 1
-  comment = "OHI tunnel hostname ${each.value}.${local.apex_hostname} — protected by CF Access"
+  comment = "OHI tunnel hostname ${local.record_prefix}${each.value}.${var.zone_name} — protected by CF Access"
 }
 
 # Seed the cloudflared-tunnel-token secret from the CF-generated value.
