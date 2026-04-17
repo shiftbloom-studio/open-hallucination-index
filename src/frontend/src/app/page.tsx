@@ -6,7 +6,7 @@ import { CtaSection } from "@/components/landing/CtaSection";
 
 export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 antialiased relative overflow-hidden">
+    <div className="flex flex-col antialiased relative overflow-hidden">
       <main className="flex-1 relative w-full">
         <HeroSection />
         <ProblemSection />
