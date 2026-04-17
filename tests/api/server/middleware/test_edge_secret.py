@@ -56,6 +56,17 @@ def test_health_live_is_exempt(app_with_middleware):
     assert r.status_code == 200
 
 
+def test_options_preflight_bypasses_edge_secret(app_with_middleware):
+    """CORS preflight (OPTIONS) doesn't carry the edge-secret header — CF Transform
+    Rule fires on the actual request only — so the middleware must skip OPTIONS."""
+    client = TestClient(app_with_middleware)
+    # OPTIONS without edge-secret header should NOT 403. It may 405 (if no OPTIONS
+    # handler is registered) or 200 (if CORS middleware handles it) — either is fine;
+    # the critical check is that it's not rejected by EdgeSecretMiddleware.
+    r = client.options("/hello")
+    assert r.status_code != 403, f"OPTIONS must bypass edge-secret, got {r.status_code}"
+
+
 def test_timing_safe_comparison_used(app_with_middleware, monkeypatch):
     """Ensure hmac.compare_digest is used (non-timing-attack-vulnerable)."""
     import hmac

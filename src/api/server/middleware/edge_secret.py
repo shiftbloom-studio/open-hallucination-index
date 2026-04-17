@@ -41,6 +41,13 @@ class EdgeSecretMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
+        # CORS preflight (OPTIONS) is sent by the browser BEFORE any Cloudflare
+        # Transform Rule fires on the actual request, so the edge-secret header
+        # is not present on preflight. CORSMiddleware (registered separately)
+        # owns the OPTIONS response; this middleware gets out of the way.
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         if request.url.path in EXEMPT_PATHS:
             return await call_next(request)
 
