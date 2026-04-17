@@ -3,6 +3,15 @@ data "aws_ecr_image" "api" {
   image_tag       = var.image_tag
 }
 
+# Neo4j credentials read from AWS Secrets Manager and surfaced to Lambda as
+# NEO4J_PASSWORD env var. The in-code SecretsLoader is not wired up for the
+# Neo4j adapter today (infra_env.neo4j_credentials_secret_arn() is defined
+# but never called), so the adapter relies on pydantic-settings reading
+# NEO4J_USERNAME / NEO4J_PASSWORD from the environment.
+data "aws_secretsmanager_secret_version" "neo4j" {
+  secret_id = local.secret_arns["neo4j_credentials"]
+}
+
 resource "aws_lambda_function" "api" {
   function_name = "${local.prefix}-api"
   role          = aws_iam_role.lambda_exec.arn
@@ -29,6 +38,11 @@ resource "aws_lambda_function" "api" {
       OHI_EMBEDDING_BACKEND          = var.embedding_backend
       OHI_EMBEDDING_REMOTE_URL       = "https://${var.tunnel_hostname_embed}"
       OHI_S3_ARTIFACTS_BUCKET        = local.artifacts_bucket
+
+      # Neo4j connection — Aura-hosted (neo4j+s://...)
+      NEO4J_URI      = var.neo4j_uri
+      NEO4J_USERNAME = jsondecode(data.aws_secretsmanager_secret_version.neo4j.secret_string)["username"]
+      NEO4J_PASSWORD = jsondecode(data.aws_secretsmanager_secret_version.neo4j.secret_string)["password"]
 
       # Secret ARNs (values fetched at runtime via SecretsLoader)
       OHI_GEMINI_KEY_SECRET_ARN               = local.secret_arns["gemini_api_key"]
