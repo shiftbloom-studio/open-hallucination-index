@@ -10,7 +10,7 @@ bad() { echo "  [FAIL] $1" >&2; fail=$((fail+1)); }
 echo "Phase I.1 validation"
 echo "===================="
 
-layers=(storage secrets compute cloudflare observability)
+layers=(storage secrets vercel compute cloudflare observability)
 
 for layer in "${layers[@]}"; do
   dir="infra/terraform/${layer}"
