@@ -1,0 +1,27 @@
+event: decomposition_complete
+data: {"claim_count":2,"estimated_total_ms":60000}
+
+event: claim_routed
+data: {"claim_id":"c1-00000000-0000-4000-8000-000000000001","domain":"general","weights":{"general":0.94,"biomedical":0.06}}
+
+event: claim_routed
+data: {"claim_id":"c2-00000000-0000-4000-8000-000000000002","domain":"general","weights":{"general":0.88,"biomedical":0.12}}
+
+event: nli_complete
+data: {"claim_evidence_pairs_scored":24,"claim_pair_pairs_scored":2}
+
+event: pcg_propagation_complete
+data: {"iterations":4,"converged":true,"algorithm":"TRW-BP","internal_consistency":0.83,"gibbs_validated":null}
+
+event: refinement_pass_complete
+data: {"pass":1,"claims_re_retrieved":1,"marginal_max_change":0.07}
+
+event: claim_verdict
+data: {"claim":{"id":"c1-00000000-0000-4000-8000-000000000001","text":"Einstein was born in 1879.","claim_type":"temporal","span":[0,26]},"p_true":0.96,"interval":[0.91,0.99],"coverage_target":0.9,"domain":"general","domain_assignment_weights":{"general":0.94,"biomedical":0.06},"supporting_evidence":[{"id":"e1-00000000-0000-4000-8000-000000000001","source_uri":"https://en.wikipedia.org/wiki/Albert_Einstein","content":"Albert Einstein (14 March 1879 – 18 April 1955) was a German-born theoretical physicist.","snippet":"Albert Einstein (14 March 1879 …)","source_credibility":0.82,"retrieved_at":"2026-04-16T10:12:00Z"}],"refuting_evidence":[],"pcg_neighbors":[{"neighbor_claim_id":"c2-00000000-0000-4000-8000-000000000002","edge_type":"entail","edge_strength":0.81}],"nli_self_consistency_variance":0.012,"bp_validated":null,"information_gain":0.04,"queued_for_review":false,"calibration_set_id":"calib-2026-04-16-r1","calibration_n":1247,"fallback_used":null}
+
+event: claim_verdict
+data: {"claim":{"id":"c2-00000000-0000-4000-8000-000000000002","text":"He was awarded the Nobel Prize in 1921 for his work on the photoelectric effect.","claim_type":"temporal","span":[27,108]},"p_true":0.62,"interval":[0.38,0.81],"coverage_target":null,"domain":"general","domain_assignment_weights":{"general":0.88,"biomedical":0.12},"supporting_evidence":[{"id":"e2-00000000-0000-4000-8000-000000000002","source_uri":"https://www.nobelprize.org/prizes/physics/1921/einstein/facts/","content":"The Nobel Prize in Physics 1921 was awarded to Albert Einstein.","snippet":"Nobel Prize in Physics 1921","source_credibility":0.95,"retrieved_at":"2026-04-16T10:12:03Z"}],"refuting_evidence":[{"id":"e3-00000000-0000-4000-8000-000000000003","source_uri":"https://example.org/einstein-nobel-1922","content":"The 1921 prize was actually announced in 1922.","snippet":"awarded in 1922 …","source_credibility":0.51,"retrieved_at":"2026-04-16T10:12:05Z"}],"pcg_neighbors":[{"neighbor_claim_id":"c1-00000000-0000-4000-8000-000000000001","edge_type":"entail","edge_strength":0.81}],"nli_self_consistency_variance":0.087,"bp_validated":true,"information_gain":0.19,"queued_for_review":true,"calibration_set_id":null,"calibration_n":0,"fallback_used":"general"}
+
+event: document_verdict
+data: {"request_id":"f4c1e2a0-1234-4abc-9def-000000000001","pipeline_version":"ohi-v2.0","model_versions":{"decomposer":"openai/gpt-4o-mini-2025-XX-XX","domain_router":"ohi-router-v2-2026-04-16","nli_general":"MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli@head-v3","calibration_general:quantitative":"calib-2026-04-16-r1"},"document_score":0.74,"document_interval":[0.61,0.84],"internal_consistency":0.83,"decomposition_coverage":0.92,"processing_time_ms":87341,"rigor":"balanced","refinement_passes_executed":1,"claims":[]}
+
