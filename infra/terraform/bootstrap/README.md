@@ -22,6 +22,7 @@ so provider versions stay reproducible.
    c. At the DNS provider that hosts `shiftbloom.studio`, add those NS records under the `ohi` subdomain, delegating `ohi.shiftbloom.studio` → Cloudflare.
    d. Wait for propagation: `dig NS ohi.shiftbloom.studio @1.1.1.1` must show CF nameservers.
 5. Cloudflare API token with scopes listed in `docs/runbooks/cloudflare-api-token-rotate.md`; store as GitHub repo secret `CLOUDFLARE_API_TOKEN` after bootstrap applies.
+6. **Vercel account + API token** (for the frontend layer). See `docs/runbooks/vercel-setup.md`. Store as GitHub repo secret `VERCEL_API_TOKEN`. Frontend static assets are hosted on Vercel; the AWS + Cloudflare + PC stack hosts everything else.
 
 ## Apply
 
@@ -51,11 +52,15 @@ Terraform prints the values. Add these **repo variables** (NOT secrets — they'
 | `ECR_REPOSITORY_URL` | `output.ecr_repository_url` | bootstrap output |
 
 Create the Cloudflare API token (token scopes in `docs/runbooks/cloudflare-api-token-rotate.md`)
-and add as **repo secret**:
+and the Vercel API token (`docs/runbooks/vercel-setup.md`), and add as **repo secrets**:
 
-| Name | Value |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | (from CF dashboard → My Profile → API Tokens) |
+| Name | Value | Source |
+|---|---|---|
+| `CLOUDFLARE_API_TOKEN` | (from CF dashboard → My Profile → API Tokens) | `cloudflare-api-token-rotate.md` |
+| `CLOUDFLARE_ACCOUNT_ID` | (from CF dashboard right sidebar) | CF dashboard |
+| `VERCEL_API_TOKEN` | (from Vercel dashboard → Settings → Tokens) | `vercel-setup.md` |
+| `VERCEL_TEAM_ID` | (empty if personal, else from Vercel team settings) | `vercel-setup.md` |
+| `CF_EDGE_SECRET` | `openssl rand -hex 32` (one-time) | `rotate-edge-secret.md` |
 
 ## Post-apply — revoke admin profile
 
