@@ -6,14 +6,17 @@ const config: Config = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  darkMode: "class",
   theme: {
     extend: {
       fontFamily: {
         sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
         heading: ["var(--font-space-grotesk)", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-fraunces)", "ui-serif", "Georgia", "Times New Roman", "serif"],
         mono: ["var(--font-jetbrains)", "ui-monospace", "monospace"],
       },
       colors: {
+        /* shadcn HSL contract — backed by shiftbloom palette in globals.css */
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {
@@ -53,6 +56,40 @@ const config: Config = {
           "3": "hsl(var(--chart-3))",
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
+        },
+
+        /* Semantic brand tokens — direct hex, for component-level use */
+        surface: {
+          base: "var(--surface-base)",
+          elevated: "var(--surface-elevated)",
+          soft: "var(--surface-soft)",
+          inverse: "var(--surface-inverse)",
+        },
+        brand: {
+          ink: "var(--brand-ink)",
+          muted: "var(--brand-muted)",
+          subtle: "var(--brand-subtle)",
+          indigo: {
+            DEFAULT: "var(--brand-indigo)",
+            soft: "var(--brand-indigo-soft)",
+            strong: "var(--brand-indigo-strong)",
+          },
+          danger: {
+            DEFAULT: "var(--brand-danger)",
+            soft: "var(--brand-danger-soft)",
+          },
+          success: {
+            DEFAULT: "var(--brand-success)",
+            soft: "var(--brand-success-soft)",
+          },
+          warning: {
+            DEFAULT: "var(--brand-warning)",
+            soft: "var(--brand-warning-soft)",
+          },
+          info: {
+            DEFAULT: "var(--brand-info)",
+            soft: "var(--brand-info-soft)",
+          },
         },
       },
       borderRadius: {
