@@ -37,7 +37,6 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
 
   useEffect(() => {
     if (!open) return;
-    // reset on open
     setLabel("false");
     setRationale("");
     mutation.reset();
@@ -65,11 +64,7 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
       request_id: requestId,
       claim_id: claim.claim.id,
       label,
-      labeler: {
-        kind: "user",
-        id: getOrCreateLabelerId(),
-        credential_level: 0,
-      },
+      labeler: { kind: "user", id: getOrCreateLabelerId(), credential_level: 0 },
       rationale: rationale || undefined,
     };
     try {
@@ -89,27 +84,27 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
       data-testid="feedback-sheet"
     >
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-[color:var(--surface-inverse)]/40 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
       <form
         onSubmit={handleSubmit}
-        className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl"
+        className="relative w-full max-w-lg rounded-2xl border border-[color:var(--border-subtle)] bg-surface-elevated p-5 shadow-xl"
       >
         <header className="mb-3 flex items-start justify-between gap-4">
           <div>
-            <h2 id="feedback-title" className="text-sm font-semibold text-slate-100">
+            <h2 id="feedback-title" className="font-heading text-sm font-semibold text-brand-ink">
               Flag this claim
             </h2>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-brand-muted">
               Your label enters the untrusted-consensus queue. 3 concordant distinct labelers
               promote it into the calibration set.
             </p>
           </div>
           <button
             type="button"
-            className="text-slate-500 hover:text-slate-200"
+            className="text-brand-subtle hover:text-brand-ink"
             onClick={onClose}
             aria-label="Close"
           >
@@ -117,20 +112,19 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
           </button>
         </header>
 
-        <blockquote className="mb-3 rounded-md border border-white/5 bg-slate-950/40 p-3 text-xs italic text-slate-300">
+        <blockquote className="mb-3 rounded-md border border-[color:var(--border-subtle)] bg-surface-base p-3 text-xs italic text-brand-ink">
           &ldquo;{claim.claim.text}&rdquo;
         </blockquote>
 
         <fieldset className="mb-3 space-y-1">
-          <legend className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Your label
-          </legend>
+          <legend className="label-mono mb-1">Your label</legend>
           {LABEL_OPTIONS.map((opt) => (
             <label
               key={opt.value}
               className={cn(
-                "flex cursor-pointer items-start gap-2 rounded-md border border-transparent p-2 hover:bg-white/[0.03]",
-                label === opt.value && "border-indigo-400/40 bg-indigo-500/10",
+                "flex cursor-pointer items-start gap-2 rounded-md border border-transparent p-2 hover:bg-[color:var(--surface-soft)]/60",
+                label === opt.value &&
+                  "border-[color:var(--brand-indigo)]/40 bg-[color:var(--brand-indigo-soft)]",
               )}
             >
               <input
@@ -139,32 +133,30 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
                 value={opt.value}
                 checked={label === opt.value}
                 onChange={() => setLabel(opt.value)}
-                className="mt-1"
+                className="mt-1 accent-[color:var(--brand-indigo)]"
               />
               <span>
-                <span className="block text-sm text-slate-100">{opt.title}</span>
-                <span className="block text-[11px] text-slate-500">{opt.hint}</span>
+                <span className="block text-sm text-brand-ink">{opt.title}</span>
+                <span className="block text-[11px] text-brand-muted">{opt.hint}</span>
               </span>
             </label>
           ))}
         </fieldset>
 
         <label className="mb-3 block text-xs">
-          <span className="mb-1 block font-semibold uppercase tracking-wider text-[10px] text-slate-400">
-            Rationale (optional)
-          </span>
+          <span className="label-mono mb-1 block">Rationale (optional)</span>
           <textarea
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
             rows={4}
             maxLength={2500}
-            className="w-full rounded-md border border-white/10 bg-slate-950/60 p-2 text-sm text-slate-100 focus:border-indigo-400 focus:outline-none"
+            className="w-full rounded-md border border-[color:var(--border-default)] bg-surface-base p-2 text-sm text-brand-ink focus:border-[color:var(--brand-indigo)] focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-indigo)]/25"
             placeholder="Cite the source that contradicts / corroborates this claim…"
           />
           <span
             className={cn(
               "mt-1 block text-right text-[10px]",
-              rationaleTooLong ? "text-rose-400" : "text-slate-500",
+              rationaleTooLong ? "text-[color:var(--brand-danger)]" : "text-brand-subtle",
             )}
           >
             {rationaleChars} / 2000
@@ -172,26 +164,26 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
         </label>
 
         {mutation.isError && (
-          <p className="mb-2 text-xs text-rose-400">
+          <p className="mb-2 text-xs text-[color:var(--brand-danger)]">
             Submit failed. Please retry.
           </p>
         )}
         {mutation.isSuccess && (
-          <p className="mb-2 text-xs text-emerald-400">Thanks — queued.</p>
+          <p className="mb-2 text-xs text-[color:var(--brand-success)]">Thanks — queued.</p>
         )}
 
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200"
+            className="rounded-md px-3 py-1.5 text-xs text-brand-muted hover:text-brand-ink"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={rationaleTooLong || mutation.isPending || mutation.isSuccess}
-            className="rounded-md bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+            className="rounded-md bg-[color:var(--brand-indigo)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[color:var(--brand-indigo-strong)] disabled:cursor-not-allowed disabled:bg-[color:var(--border-default)] disabled:text-brand-subtle"
           >
             {mutation.isPending ? "Submitting…" : "Submit"}
           </button>

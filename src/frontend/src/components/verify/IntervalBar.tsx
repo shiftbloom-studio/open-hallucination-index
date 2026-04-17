@@ -10,22 +10,26 @@ export interface IntervalBarProps {
   ariaLabel?: string;
 }
 
-function band(pTrue: number): "high" | "mid" | "low" {
+type Band = "high" | "mid" | "low";
+
+function band(pTrue: number): Band {
   if (pTrue >= 0.8) return "high";
   if (pTrue >= 0.5) return "mid";
   return "low";
 }
 
-const fillClass: Record<ReturnType<typeof band>, string> = {
-  high: "bg-emerald-400/45",
-  mid: "bg-amber-400/45",
-  low: "bg-rose-500/45",
+// Semantic brand tokens; each band keeps a soft fill + a saturated tick so the
+// point estimate stays readable on the fill.
+const fillStyle: Record<Band, { background: string }> = {
+  high: { background: "rgba(5,150,105,0.22)" }, // brand-success @ 22%
+  mid: { background: "rgba(217,119,6,0.22)" }, // brand-warning @ 22%
+  low: { background: "rgba(230,57,70,0.22)" }, // brand-danger @ 22%
 };
 
-const tickClass: Record<ReturnType<typeof band>, string> = {
-  high: "bg-emerald-200",
-  mid: "bg-amber-200",
-  low: "bg-rose-200",
+const tickStyle: Record<Band, { background: string }> = {
+  high: { background: "var(--brand-success)" },
+  mid: { background: "var(--brand-warning)" },
+  low: { background: "var(--brand-danger)" },
 };
 
 const sizeClass: Record<IntervalBarSize, string> = {
@@ -59,7 +63,11 @@ export function IntervalBar({
 
   return (
     <div
-      className={cn("relative w-full rounded-full bg-white/10", sizeClass[size], className)}
+      className={cn(
+        "relative w-full rounded-full bg-[color:var(--border-subtle)]",
+        sizeClass[size],
+        className,
+      )}
       role="progressbar"
       aria-label={ariaLabel ?? "probability interval"}
       aria-valuenow={Math.round(p * 100)}
@@ -68,18 +76,17 @@ export function IntervalBar({
       data-band={b}
     >
       <div
-        className={cn("absolute inset-y-0 rounded-full", fillClass[b])}
+        className="absolute inset-y-0 rounded-full"
+        style={{ ...fillStyle[b], left: `${left}%`, width: `${width}%` }}
         data-testid="interval-fill"
-        style={{ left: `${left}%`, width: `${width}%` }}
       />
       <div
         className={cn(
           "absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-full",
-          tickClass[b],
           size === "sm" && "h-2",
         )}
+        style={{ ...tickStyle[b], left: `calc(${tickLeft}% - 1px)` }}
         data-testid="interval-tick"
-        style={{ left: `calc(${tickLeft}% - 1px)` }}
       />
     </div>
   );

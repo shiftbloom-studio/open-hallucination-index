@@ -8,9 +8,9 @@ export interface DocumentVerdictCardProps {
 }
 
 function scoreColor(score: number): string {
-  if (score >= 0.8) return "text-emerald-400";
-  if (score >= 0.5) return "text-amber-400";
-  return "text-rose-400";
+  if (score >= 0.8) return "var(--brand-success)";
+  if (score >= 0.5) return "var(--brand-warning)";
+  return "var(--brand-danger)";
 }
 
 function fmtSeconds(ms: number): string {
@@ -23,14 +23,14 @@ export function DocumentVerdictCard({ verdict, className }: DocumentVerdictCardP
     return (
       <div
         className={cn(
-          "rounded-xl border border-white/10 bg-white/[0.04] p-5 animate-pulse",
+          "rounded-xl border border-[color:var(--border-subtle)] bg-surface-elevated p-5 shadow-sm animate-pulse",
           className,
         )}
         data-testid="document-verdict-skeleton"
       >
-        <div className="mb-3 h-2 w-20 rounded bg-white/10" />
-        <div className="mb-2 h-8 w-24 rounded bg-white/10" />
-        <div className="h-1.5 w-full rounded bg-white/10" />
+        <div className="mb-3 h-2 w-20 rounded bg-[color:var(--border-subtle)]" />
+        <div className="mb-2 h-8 w-24 rounded bg-[color:var(--border-subtle)]" />
+        <div className="h-1.5 w-full rounded bg-[color:var(--border-subtle)]" />
       </div>
     );
   }
@@ -48,39 +48,42 @@ export function DocumentVerdictCard({ verdict, className }: DocumentVerdictCardP
   return (
     <section
       className={cn(
-        "rounded-xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm",
+        "rounded-xl border border-[color:var(--border-subtle)] bg-surface-elevated p-5 shadow-sm",
         className,
       )}
       aria-label="Document verdict"
       data-testid="document-verdict"
     >
-      <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-400">
-        <span>Document verdict</span>
-        <span className="font-mono">{verdict.pipeline_version}</span>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="label-mono">Document verdict</span>
+        <span className="num-mono text-[10px] text-brand-subtle">{verdict.pipeline_version}</span>
       </div>
 
       <div className="flex items-end justify-between gap-6">
         <div>
-          <div className={cn("font-mono text-4xl font-bold", scoreColor(document_score))}>
+          <div
+            className="num-mono font-display text-4xl font-semibold"
+            style={{ color: scoreColor(document_score) }}
+          >
             {document_score.toFixed(2)}
           </div>
-          <div className="mt-1 text-xs text-slate-400">
+          <div className="mt-1 text-xs text-brand-muted">
             interval [{document_interval[0].toFixed(2)}, {document_interval[1].toFixed(2)}]
           </div>
         </div>
 
-        <dl className="grid grid-cols-2 gap-x-5 gap-y-1 text-right text-[11px] text-slate-300">
-          <dt className="text-slate-500">internal consistency</dt>
-          <dd className="font-mono text-slate-100">{internal_consistency.toFixed(2)}</dd>
-          <dt className="text-slate-500">claims</dt>
-          <dd className="font-mono text-slate-100">{claims.length}</dd>
-          <dt className="text-slate-500">rigor</dt>
-          <dd className="font-mono text-slate-100">{rigor}</dd>
-          <dt className="text-slate-500">pipeline</dt>
-          <dd className="font-mono text-slate-100">
+        <dl className="grid grid-cols-2 gap-x-5 gap-y-1 text-right text-[11px]">
+          <dt className="text-brand-subtle">internal consistency</dt>
+          <dd className="num-mono text-brand-ink">{internal_consistency.toFixed(2)}</dd>
+          <dt className="text-brand-subtle">claims</dt>
+          <dd className="num-mono text-brand-ink">{claims.length}</dd>
+          <dt className="text-brand-subtle">rigor</dt>
+          <dd className="num-mono text-brand-ink">{rigor}</dd>
+          <dt className="text-brand-subtle">pipeline</dt>
+          <dd className="num-mono text-brand-ink">
             {fmtSeconds(processing_time_ms)}
             {refinement_passes_executed > 0 && (
-              <span className="ml-1 text-slate-500">· {refinement_passes_executed} pass</span>
+              <span className="ml-1 text-brand-subtle">· {refinement_passes_executed} pass</span>
             )}
           </dd>
         </dl>
@@ -93,7 +96,7 @@ export function DocumentVerdictCard({ verdict, className }: DocumentVerdictCardP
           size="lg"
           ariaLabel="document probability interval"
         />
-        <div className="mt-1 flex justify-between text-[9px] text-slate-500">
+        <div className="mt-1 flex justify-between text-[9px] text-brand-subtle">
           <span>0</span>
           <span>0.5</span>
           <span>1</span>
