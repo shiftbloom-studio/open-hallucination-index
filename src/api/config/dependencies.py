@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
 
 from adapters.embeddings import LocalEmbeddingAdapter
+from adapters.gemini import GeminiLLMAdapter
 from adapters.mcp_ohi import OHIMCPAdapter, TargetedOHISource
 from adapters.neo4j import Neo4jGraphAdapter
 from adapters.openai import OpenAILLMAdapter
@@ -142,9 +143,17 @@ async def _initialize_adapters() -> None:
     _embedding_adapter = LocalEmbeddingAdapter(settings.embedding)
     logger.info(f"Embedding adapter: {settings.embedding.model_name}")
 
-    # LLM (OpenAI-compatible; points at vLLM / OpenAI / AWS endpoint per env)
-    _llm_provider = OpenAILLMAdapter(settings.llm)
-    logger.info(f"LLM provider: {settings.llm.model}")
+    # LLM — native Gemini adapter. OpenAILLMAdapter is kept in-tree as a
+    # fallback for non-Gemini deployments; select via env var LLM_BACKEND
+    # ("gemini" | "openai"; default gemini since prod targets Gemini).
+    llm_backend = os.environ.get("LLM_BACKEND", "gemini").lower()
+    if llm_backend == "openai":
+        _llm_provider = OpenAILLMAdapter(settings.llm)
+    else:
+        _llm_provider = GeminiLLMAdapter(settings.llm)
+    logger.info(
+        f"LLM provider: {settings.llm.model} (backend={llm_backend})"
+    )
 
     # Neo4j
     _graph_store = Neo4jGraphAdapter(settings.neo4j)
