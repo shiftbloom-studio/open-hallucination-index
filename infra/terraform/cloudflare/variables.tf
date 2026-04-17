@@ -30,3 +30,15 @@ variable "rate_limit_global_per_hour" {
   type    = number
   default = 1000
 }
+
+variable "vercel_verification_token" {
+  description = "Optional Vercel _vercel TXT value. Empty = skip record (CNAME-based verification usually sufficient)."
+  type        = string
+  default     = ""
+}
+
+variable "api_subdomain" {
+  description = "Subdomain serving the API (full hostname = <this>.<zone_name>)."
+  type        = string
+  default     = "api"
+}
