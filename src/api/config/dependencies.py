@@ -227,10 +227,22 @@ async def _initialize_adapters() -> None:
             )
     _mcp_selector = SmartMCPSelector(_mcp_sources) if _mcp_sources else None
 
-    # Adaptive collector (reused by v2 L1 retrieval layer)
+    # Adaptive collector (reused by v2 L1 retrieval layer).
+    # Stream F fix: plumb _mcp_selector so Tier 2 (external MCP sources)
+    # actually runs — without it `_collect_mcp` hits the "No sources and
+    # no selector" branch and returns []. Also plumb the verification
+    # timeouts; the collector's hard-coded defaults (local=50ms,
+    # mcp=500ms, total=2000ms) are tighter than MediaWiki's ~600-800ms
+    # round-trip, so requests were cancelled even if the selector were
+    # wired. settings.verification.*_timeout_ms is the single source of
+    # truth for these.
     _evidence_collector = AdaptiveEvidenceCollector(
         graph_store=_graph_store,
         vector_store=_vector_store,
+        mcp_selector=_mcp_selector,
+        local_timeout_ms=settings.verification.local_timeout_ms,
+        mcp_timeout_ms=settings.verification.mcp_timeout_ms,
+        total_timeout_ms=settings.verification.total_timeout_ms,
     )
 
     # Knowledge mesh builder (used by L1 retrieval). trace_store is optional
