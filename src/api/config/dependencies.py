@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 from adapters.embeddings import LocalEmbeddingAdapter
 from adapters.gemini import GeminiLLMAdapter
 from adapters.mcp_ohi import OHIMCPAdapter, TargetedOHISource
+from adapters.mcp_sources.mediawiki import MediaWikiAdapter
 from adapters.neo4j import Neo4jGraphAdapter
 from adapters.openai import OpenAILLMAdapter
 from adapters.qdrant import QdrantVectorAdapter
@@ -183,6 +184,21 @@ async def _initialize_adapters() -> None:
 
     # MCP sources (dynamic; settings drives which ones)
     _mcp_sources = _build_mcp_sources(settings)
+    # Per-source try/except: one bad endpoint must not abort lifespan. The
+    # collector's `if source.is_available` gate skips any source whose
+    # connect() raised, so failures here are tolerable and logged.
+    for _src in _mcp_sources:
+        try:
+            await _src.connect()
+            logger.info(
+                f"MCP source connected: {_src.source_name} "
+                f"(available={_src.is_available})"
+            )
+        except Exception as e:
+            logger.warning(
+                f"MCP source {getattr(_src, 'source_name', type(_src).__name__)} "
+                f"connect failed — skipping: {e}"
+            )
     _mcp_selector = SmartMCPSelector(_mcp_sources) if _mcp_sources else None
 
     # Adaptive collector (reused by v2 L1 retrieval layer)
@@ -225,13 +241,28 @@ def _build_mcp_sources(settings: Any) -> list[MCPKnowledgeSource]:
     except AttributeError:
         return sources
 
-    # Exact wiring preserved from v1 — the sources themselves are reusable.
-    if getattr(mcp_cfg, "ohi_enabled", False):
-        ohi_adapter = OHIMCPAdapter(mcp_cfg)
-        # Note: TargetedOHISource requires (settings, search_type, source_name);
-        # here we're wiring the unified OHI adapter which internally uses
-        # search_type="all". Use the base adapter directly.
-        sources.append(ohi_adapter)
+    # Skip MCP wiring in tests so unit tests never hit live external APIs
+    # even if MCP_*_ENABLED defaults are left at their pydantic values.
+    in_test_env = getattr(settings, "environment", "development") == "test"
+
+    # MediaWiki (live Wikipedia Action API) — Phase 2 Wave 1 cheap-evidence
+    # source. Default ON via MCPSettings.wikipedia_enabled.
+    if getattr(mcp_cfg, "wikipedia_enabled", True) and not in_test_env:
+        sources.append(MediaWikiAdapter())
+
+    # OHI unified MCP server. Default URL http://ohi-mcp-server:8080 is
+    # unresolvable in prod; require explicit MCP_OHI_ENABLED=true at the
+    # process env so pydantic's default-True cannot accidentally enable
+    # the dead adapter at Lambda cold-start. Import retained for local-
+    # compose/dev use.
+    _ohi_env = os.environ.get("MCP_OHI_ENABLED")
+    if (
+        _ohi_env is not None
+        and _ohi_env.lower() == "true"
+        and getattr(mcp_cfg, "ohi_enabled", False)
+    ):
+        sources.append(OHIMCPAdapter(mcp_cfg))
+
     return sources
 
 
@@ -252,6 +283,14 @@ async def _cleanup_adapters() -> None:
             await _trace_store.close()
         except Exception as e:
             logger.warning(f"Trace store close failed: {e}")
+    for _src in _mcp_sources:
+        try:
+            await _src.disconnect()
+        except Exception as e:
+            logger.warning(
+                f"MCP source {getattr(_src, 'source_name', type(_src).__name__)} "
+                f"disconnect failed: {e}"
+            )
     logger.info("DI container cleanup complete")
 
 
