@@ -21,6 +21,13 @@ data "aws_secretsmanager_secret_version" "cf_access" {
   secret_id = local.secret_arns["cf_access_service_token"]
 }
 
+# Gemini API key (raw value) for the LLM adapter, which uses Gemini's
+# OpenAI-compatible endpoint. Surfaced as LLM_API_KEY so pydantic-settings
+# (env_prefix="LLM_") picks it up without any code change.
+data "aws_secretsmanager_secret_version" "gemini" {
+  secret_id = local.secret_arns["gemini_api_key"]
+}
+
 resource "aws_lambda_function" "api" {
   function_name = "${local.prefix}-api"
   role          = aws_iam_role.lambda_exec.arn
@@ -68,6 +75,12 @@ resource "aws_lambda_function" "api" {
       # Redis disabled for MVP — webdis over CF tunnel doesn't speak native
       # Redis protocol; proper solution is managed Redis (ElastiCache/Upstash).
       REDIS_ENABLED = "false"
+
+      # LLM adapter points at Gemini's OpenAI-compatible endpoint. The adapter
+      # (src/api/adapters/openai.py via pydantic-settings LLM_*) reads these.
+      LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+      LLM_API_KEY  = data.aws_secretsmanager_secret_version.gemini.secret_string
+      LLM_MODEL    = var.gemini_model
 
       # Secret ARNs (values fetched at runtime via SecretsLoader)
       OHI_GEMINI_KEY_SECRET_ARN               = local.secret_arns["gemini_api_key"]
