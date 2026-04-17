@@ -12,6 +12,15 @@ data "aws_secretsmanager_secret_version" "neo4j" {
   secret_id = local.secret_arns["neo4j_credentials"]
 }
 
+# CF Access service-token creds read from AWS Secrets Manager (written by
+# cloudflare/ layer when the service token resource is created). Surfaced
+# to Lambda as OHI_CF_ACCESS_CLIENT_ID / OHI_CF_ACCESS_CLIENT_SECRET so
+# tunnel-proxied adapters (embed, qdrant, ...) can authenticate against
+# the CF Access apps gating the tunnel.
+data "aws_secretsmanager_secret_version" "cf_access" {
+  secret_id = local.secret_arns["cf_access_service_token"]
+}
+
 resource "aws_lambda_function" "api" {
   function_name = "${local.prefix}-api"
   role          = aws_iam_role.lambda_exec.arn
@@ -43,6 +52,22 @@ resource "aws_lambda_function" "api" {
       NEO4J_URI      = var.neo4j_uri
       NEO4J_USERNAME = jsondecode(data.aws_secretsmanager_secret_version.neo4j.secret_string)["username"]
       NEO4J_PASSWORD = jsondecode(data.aws_secretsmanager_secret_version.neo4j.secret_string)["password"]
+
+      # Qdrant — reached via CF tunnel on HTTPS (port 443 at CF edge, routed
+      # to http://qdrant:6333 on the PC). CF Access gates the hostname with
+      # a service-token app; Lambda sends the headers below.
+      QDRANT_HOST  = var.tunnel_hostname_qdrant
+      QDRANT_PORT  = "443"
+      QDRANT_HTTPS = "true"
+
+      # CF Access service token — forwarded by tunnel-proxied adapters
+      # (adapters/qdrant.py, adapters/embeddings.py remote mode, ...).
+      OHI_CF_ACCESS_CLIENT_ID     = jsondecode(data.aws_secretsmanager_secret_version.cf_access.secret_string)["client_id"]
+      OHI_CF_ACCESS_CLIENT_SECRET = jsondecode(data.aws_secretsmanager_secret_version.cf_access.secret_string)["client_secret"]
+
+      # Redis disabled for MVP — webdis over CF tunnel doesn't speak native
+      # Redis protocol; proper solution is managed Redis (ElastiCache/Upstash).
+      REDIS_ENABLED = "false"
 
       # Secret ARNs (values fetched at runtime via SecretsLoader)
       OHI_GEMINI_KEY_SECRET_ARN               = local.secret_arns["gemini_api_key"]

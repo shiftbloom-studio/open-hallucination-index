@@ -39,7 +39,10 @@ from interfaces.stores import (
     GraphKnowledgeStore,
     VectorKnowledgeStore,
 )
+from pipeline.conformal.calibration_store import InMemoryCalibrationStore
+from pipeline.conformal.split_conformal import SplitConformalCalibrator
 from pipeline.decomposer import LLMClaimDecomposer
+from pipeline.pipeline import Pipeline
 from pipeline.retrieval import (
     AdaptiveEvidenceCollector,
     KnowledgeMeshBuilder,
@@ -179,8 +182,10 @@ async def _initialize_adapters() -> None:
         vector_store=_vector_store,
     )
 
-    # Knowledge mesh builder (used by L1 retrieval)
+    # Knowledge mesh builder (used by L1 retrieval). trace_store is optional
+    # — None when Redis is disabled; build_mesh() falls back to live queries.
     _mesh_builder = KnowledgeMeshBuilder(
+        trace_store=_trace_store,
         graph_store=_graph_store,
         vector_store=_vector_store,
     )
@@ -214,7 +219,10 @@ def _build_mcp_sources(settings: Any) -> list[MCPKnowledgeSource]:
     # Exact wiring preserved from v1 — the sources themselves are reusable.
     if getattr(mcp_cfg, "ohi_enabled", False):
         ohi_adapter = OHIMCPAdapter(mcp_cfg)
-        sources.append(TargetedOHISource(ohi_adapter))
+        # Note: TargetedOHISource requires (settings, search_type, source_name);
+        # here we're wiring the unified OHI adapter which internally uses
+        # search_type="all". Use the base adapter directly.
+        sources.append(ohi_adapter)
     return sources
 
 
