@@ -45,7 +45,7 @@ function ErrorPanel({
 }
 
 export function VerifyPage() {
-  const { state, submit, cancel, reset } = useVerifyController();
+  const { state, submit, submitSync, cancel, reset } = useVerifyController();
   const [lastRequest, setLastRequest] = useState<VerifyRequest | null>(null);
   const [flagged, setFlagged] = useState<ClaimVerdict | null>(null);
   const graphRef = useRef<PcgGraphHandle>(null);
@@ -65,20 +65,7 @@ export function VerifyPage() {
 
   async function onRetrySync() {
     if (!lastRequest) return;
-    // Force sync by using the client directly — bypass SSE on manual fallback
-    reset();
-    try {
-      const { ohi } = await import("@/lib/ohi-client");
-      const verdict = await ohi.verify(lastRequest);
-      // Manually dispatch the completion via another submit cycle? Simplest:
-      // just treat verdict as the final state. We reuse the controller by
-      // triggering a fresh submit that will rerun SSE. For real sync-only,
-      // we'd need an explicit dispatch; skipping deeper plumbing for Phase 1.
-      // As a pragmatic fallback, open /verdict/{id} in place.
-      window.location.hash = `#verdict=${verdict.request_id}`;
-    } catch {
-      // swallow; UI already shows NetworkErrorState
-    }
+    await submitSync(lastRequest);
   }
 
   const degradedLayers =
