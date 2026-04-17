@@ -56,6 +56,12 @@ variable "embedding_backend" {
   default     = "remote"
 }
 
+variable "neo4j_uri" {
+  description = "Neo4j connection URI. Aura Pro Frankfurt instance — neo4j+s://<id>.databases.neo4j.io"
+  type        = string
+  default     = "neo4j+s://0193408e.databases.neo4j.io"
+}
+
 variable "gemini_model" {
   type    = string
   default = "gemini-3-flash-preview"
