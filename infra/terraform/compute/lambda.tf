@@ -82,6 +82,14 @@ resource "aws_lambda_function" "api" {
       LLM_API_KEY  = data.aws_secretsmanager_secret_version.gemini.secret_string
       LLM_MODEL    = var.gemini_model
 
+      # Phase 2 LLM-based NLI (D1 wire). A dedicated NliGeminiAdapter runs on
+      # a second GeminiLLMAdapter instance with this model, reusing LLM_API_KEY
+      # via pydantic-settings in dependencies.py (model_copy with model override).
+      # Self-consistency is off by default (K=1) — G6 gate before flipping to 3.
+      NLI_LLM_MODEL          = var.nli_llm_model
+      NLI_THINKING_LEVEL     = var.nli_thinking_level
+      NLI_SELF_CONSISTENCY_K = tostring(var.nli_self_consistency_k)
+
       # Secret ARNs (values fetched at runtime via SecretsLoader)
       OHI_GEMINI_KEY_SECRET_ARN               = local.secret_arns["gemini_api_key"]
       OHI_INTERNAL_BEARER_SECRET_ARN          = local.secret_arns["internal_bearer_token"]
