@@ -1,15 +1,23 @@
 """
-Local Embedding Adapter
-=======================
+Embedding adapter — dual-mode (local sentence-transformers OR remote HTTP).
 
-Local embedding generation using sentence-transformers.
-Runs on CPU or GPU without external API calls.
+The public name `LocalEmbeddingAdapter` is kept unchanged so the DI
+container in `config/dependencies.py` doesn't need to know which mode is
+active. Mode is selected by env var at construction time:
+
+    OHI_EMBEDDING_BACKEND=local  (default) → in-process sentence-transformers
+    OHI_EMBEDDING_BACKEND=remote           → HTTP POST to OHI_EMBEDDING_REMOTE_URL
+
+Remote mode exists so Lambda doesn't have to carry torch + a sentence
+transformer model — those live on the PC embed container, reached via the
+CF tunnel (embed.ohi.shiftbloom.studio).
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from threading import Lock
@@ -20,9 +28,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Thread pool for running sync model inference
 _executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="embedding")
 _model_load_lock = Lock()
+
+
+# --- In-process (legacy, used when OHI_EMBEDDING_BACKEND=local) -------------
 
 
 @lru_cache(maxsize=1)
@@ -31,13 +41,8 @@ def _get_model(model_name: str):
     import torch
     from sentence_transformers import SentenceTransformer
 
-    logger.info(f"Loading embedding model: {model_name}")
-
-    # Explicitly determine device - CPU for API containers (GPU is for vLLM)
+    logger.info(f"Loading embedding model in-process: {model_name}")
     device = "cpu"
-
-    # Load model without problematic kwargs that can cause meta tensor issues
-    # Force CPU to avoid GPU memory conflicts with vLLM
     with _model_load_lock:
         model = SentenceTransformer(
             model_name,
@@ -49,105 +54,170 @@ def _get_model(model_name: str):
                 "dtype": torch.float32,
             },
         )
-
-    # Verify model is ready
     model.eval()
-
     dim = model.get_sentence_embedding_dimension()
-    logger.info(f"Loaded embedding model on {device}, dim={dim}")
+    logger.info(f"In-process embedding model ready on {device}, dim={dim}")
     return model
 
 
-class LocalEmbeddingAdapter:
-    """
-    Adapter for local embedding generation using sentence-transformers.
-
-    Uses all-MiniLM-L12-v2 by default (384 dimensions, fast, good quality).
-    For higher quality, use all-mpnet-base-v2 (768 dimensions).
-    """
-
+class _InProcessEmbeddingAdapter:
     def __init__(self, settings: EmbeddingSettings) -> None:
-        """
-        Initialize the local embedding adapter.
-
-        Args:
-            settings: Embedding configuration.
-        """
         self._model_name = settings.model_name
         self._batch_size = settings.batch_size
         self._normalize = settings.normalize
-        self._model = None
-        
-        # Eager load the model at startup (not lazy) to avoid 9+ second delay on first request
-        self._load_model()
-        logger.info(f"Embedding model '{self._model_name}' pre-loaded at startup")
-
-    def _load_model(self):
-        """Lazy load the model."""
-        if self._model is None:
-            self._model = _get_model(self._model_name)
-        return self._model
+        self._model = _get_model(self._model_name)
 
     @property
     def embedding_dimension(self) -> int:
-        """Return the embedding dimension for the loaded model."""
-        model = self._load_model()
-        return model.get_sentence_embedding_dimension()
+        return self._model.get_sentence_embedding_dimension()
 
     def _embed_sync(self, text: str) -> list[float]:
-        """Synchronous embedding generation."""
-        model = self._load_model()
-        embedding = model.encode(
-            text,
-            normalize_embeddings=self._normalize,
-            show_progress_bar=False,
+        vec = self._model.encode(
+            text, normalize_embeddings=self._normalize, show_progress_bar=False
         )
-        return embedding.tolist()
+        return vec.tolist()
 
     def _embed_batch_sync(self, texts: list[str]) -> list[list[float]]:
-        """Synchronous batch embedding generation."""
-        model = self._load_model()
-        embeddings = model.encode(
+        vecs = self._model.encode(
             texts,
             batch_size=self._batch_size,
             normalize_embeddings=self._normalize,
             show_progress_bar=False,
         )
-        return embeddings.tolist()
+        return vecs.tolist()
 
     async def generate_embedding(self, text: str) -> list[float]:
-        """
-        Generate embedding vector for text.
-
-        Args:
-            text: Text to embed.
-
-        Returns:
-            Embedding vector as list of floats.
-        """
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_executor, self._embed_sync, text)
 
     async def generate_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
-        """
-        Generate embedding vectors for multiple texts efficiently.
-
-        Args:
-            texts: List of texts to embed.
-
-        Returns:
-            List of embedding vectors.
-        """
         if not texts:
             return []
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_executor, self._embed_batch_sync, texts)
 
     async def health_check(self) -> bool:
-        """Check if the embedding model is loaded and working."""
         try:
-            embedding = await self.generate_embedding("test")
-            return len(embedding) > 0
+            v = await self.generate_embedding("test")
+            return len(v) > 0
         except Exception as e:
-            logger.warning(f"Embedding health check failed: {e}")
+            logger.warning(f"In-process embedding health check failed: {e}")
             return False
+
+
+# --- Remote (used when OHI_EMBEDDING_BACKEND=remote) ------------------------
+
+
+class _RemoteEmbeddingAdapter:
+    """
+    HTTP client for the PC-side pc-embed service.
+
+    Sends CF Access service-token headers if OHI_CF_ACCESS_CLIENT_ID and
+    OHI_CF_ACCESS_CLIENT_SECRET are set (same pattern the other tunnel
+    adapters will adopt); omits them otherwise.
+    """
+
+    def __init__(self, settings: EmbeddingSettings) -> None:
+        import httpx  # local import — keeps the module importable on bare images
+
+        base_url = os.environ.get("OHI_EMBEDDING_REMOTE_URL")
+        if not base_url:
+            raise RuntimeError(
+                "OHI_EMBEDDING_BACKEND=remote requires OHI_EMBEDDING_REMOTE_URL "
+                "(e.g. https://embed.ohi.shiftbloom.studio)"
+            )
+        self._base_url = base_url.rstrip("/")
+        self._model_name = settings.model_name
+
+        timeout = float(os.environ.get("OHI_EMBEDDING_REMOTE_TIMEOUT_S", "10"))
+        headers: dict[str, str] = {}
+        access_id = os.environ.get("OHI_CF_ACCESS_CLIENT_ID")
+        access_secret = os.environ.get("OHI_CF_ACCESS_CLIENT_SECRET")
+        if access_id and access_secret:
+            headers["CF-Access-Client-Id"] = access_id
+            headers["CF-Access-Client-Secret"] = access_secret
+
+        self._client = httpx.AsyncClient(
+            base_url=self._base_url,
+            timeout=httpx.Timeout(timeout, connect=5.0),
+            headers=headers,
+        )
+        self._dim_cache: int | None = None
+        logger.info(
+            f"Remote embedding adapter configured: {self._base_url} "
+            f"(access_headers={'yes' if access_id and access_secret else 'no'})"
+        )
+
+    @property
+    def embedding_dimension(self) -> int:
+        if self._dim_cache is None:
+            raise RuntimeError(
+                "Embedding dimension unknown until first call — call "
+                "generate_embedding() once or await warmup()."
+            )
+        return self._dim_cache
+
+    async def warmup(self) -> None:
+        await self.generate_embedding("warmup")
+
+    async def generate_embedding(self, text: str) -> list[float]:
+        resp = await self._client.post("/encode", json={"text": text})
+        resp.raise_for_status()
+        payload = resp.json()
+        vec = payload["vector"]
+        self._dim_cache = payload.get("dim", len(vec))
+        return vec
+
+    async def generate_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        resp = await self._client.post("/encode/batch", json={"texts": texts})
+        resp.raise_for_status()
+        payload = resp.json()
+        vecs = payload["vectors"]
+        if vecs:
+            self._dim_cache = payload.get("dim", len(vecs[0]))
+        return vecs
+
+    async def health_check(self) -> bool:
+        try:
+            resp = await self._client.get("/health/live")
+            return resp.status_code == 200
+        except Exception as e:
+            logger.warning(f"Remote embedding health check failed: {e}")
+            return False
+
+
+# --- Public facade ----------------------------------------------------------
+
+
+class LocalEmbeddingAdapter:
+    """
+    Public name preserved for backward-compat with `config/dependencies.py`.
+    At construction time, delegates to either the in-process or remote
+    implementation based on the `OHI_EMBEDDING_BACKEND` env var.
+    """
+
+    def __init__(self, settings: EmbeddingSettings) -> None:
+        backend = os.environ.get("OHI_EMBEDDING_BACKEND", "local").lower()
+        if backend == "remote":
+            self._impl: _InProcessEmbeddingAdapter | _RemoteEmbeddingAdapter = (
+                _RemoteEmbeddingAdapter(settings)
+            )
+            logger.info("LocalEmbeddingAdapter facade → remote backend")
+        else:
+            self._impl = _InProcessEmbeddingAdapter(settings)
+            logger.info("LocalEmbeddingAdapter facade → in-process backend")
+
+    @property
+    def embedding_dimension(self) -> int:
+        return self._impl.embedding_dimension
+
+    async def generate_embedding(self, text: str) -> list[float]:
+        return await self._impl.generate_embedding(text)
+
+    async def generate_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
+        return await self._impl.generate_embeddings_batch(texts)
+
+    async def health_check(self) -> bool:
+        return await self._impl.health_check()

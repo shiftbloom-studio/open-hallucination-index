@@ -51,13 +51,18 @@ locals {
   lambda_fn_hostname = data.terraform_remote_state.compute.outputs.function_url_hostname
   secret_arns        = data.terraform_remote_state.secrets.outputs.secret_arns
 
-  # Record-name prefixing helper:
-  # When apex_subdomain = "" (zone-apex delegation) records use the bare label.
-  # When apex_subdomain = "ohi" (full-zone delegation), every OHI record
-  # gets suffixed with ".ohi" before landing in the zone.
-  record_suffix = var.apex_subdomain == "" ? "" : ".${var.apex_subdomain}"
+  # Record-naming helper: service records live at the zone root with a
+  # `<apex_subdomain>-` prefix so free-tier Universal SSL (which covers
+  # only *.zone, not *.apex.zone) covers them. CF doesn't allow subzones
+  # on free tier, so zone-root flattening is the only cert path.
+  # Examples with apex_subdomain="ohi":
+  #   api       → ohi-api.shiftbloom.studio   (service record)
+  #   neo4j     → ohi-neo4j.shiftbloom.studio (service record)
+  #   <apex>    → ohi.shiftbloom.studio       (frontend, kept as nested CNAME
+  #                                            at `name=ohi` in the zone)
+  record_prefix = var.apex_subdomain == "" ? "" : "${var.apex_subdomain}-"
 
   # Full public hostnames (for use in outputs, env vars, cross-references)
   apex_hostname = var.apex_subdomain == "" ? var.zone_name : "${var.apex_subdomain}.${var.zone_name}"
-  api_hostname  = "${var.api_subdomain}.${local.apex_hostname}"
+  api_hostname  = "${local.record_prefix}${var.api_subdomain}.${var.zone_name}"
 }

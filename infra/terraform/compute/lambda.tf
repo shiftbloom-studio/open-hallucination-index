@@ -25,6 +25,9 @@ resource "aws_lambda_function" "api" {
       OHI_CF_TUNNEL_HOSTNAME_QDRANT  = var.tunnel_hostname_qdrant
       OHI_CF_TUNNEL_HOSTNAME_PG_REST = var.tunnel_hostname_pg_rest
       OHI_CF_TUNNEL_HOSTNAME_WEBDIS  = var.tunnel_hostname_webdis
+      OHI_CF_TUNNEL_HOSTNAME_EMBED   = var.tunnel_hostname_embed
+      OHI_EMBEDDING_BACKEND          = var.embedding_backend
+      OHI_EMBEDDING_REMOTE_URL       = "https://${var.tunnel_hostname_embed}"
       OHI_S3_ARTIFACTS_BUCKET        = local.artifacts_bucket
 
       # Secret ARNs (values fetched at runtime via SecretsLoader)

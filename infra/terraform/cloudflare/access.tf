@@ -8,10 +8,11 @@ resource "cloudflare_zero_trust_access_service_token" "lambda" {
 # Access application + policy per tunnel hostname
 locals {
   tunnel_access_apps = {
-    neo4j  = "neo4j.${local.apex_hostname}"
-    qdrant = "qdrant.${local.apex_hostname}"
-    pg     = "pg.${local.apex_hostname}"
-    redis  = "redis.${local.apex_hostname}"
+    neo4j  = "${local.record_prefix}neo4j.${var.zone_name}"
+    qdrant = "${local.record_prefix}qdrant.${var.zone_name}"
+    pg     = "${local.record_prefix}pg.${var.zone_name}"
+    redis  = "${local.record_prefix}redis.${var.zone_name}"
+    embed  = "${local.record_prefix}embed.${var.zone_name}"
   }
 }
 

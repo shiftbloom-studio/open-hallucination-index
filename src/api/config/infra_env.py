@@ -73,6 +73,35 @@ def tunnel_webdis_host() -> str:
     return _require("OHI_CF_TUNNEL_HOSTNAME_WEBDIS")
 
 
+def tunnel_embed_host() -> str:
+    """Hostname of the PC-side embedding service reached via the CF tunnel.
+
+    Set by Terraform's compute/ layer. Consumed indirectly via the
+    OHI_EMBEDDING_REMOTE_URL env var (which is built from this hostname
+    at Terraform-apply time).
+    """
+    return _require("OHI_CF_TUNNEL_HOSTNAME_EMBED")
+
+
+# --- Embedding backend selection ---
+def embedding_backend() -> str:
+    """Which embedding implementation to wire up. 'local' (in-process
+    sentence-transformers) or 'remote' (HTTP to the pc-embed service).
+
+    Default 'local' preserves pre-Lambda dev behavior; Lambda is set to
+    'remote' via Terraform so torch doesn't have to live in the image.
+    """
+    return os.environ.get("OHI_EMBEDDING_BACKEND", "local").lower()
+
+
+def embedding_remote_url() -> str | None:
+    """Base URL of the pc-embed service, e.g. https://embed.ohi.shiftbloom.studio.
+    Only required when embedding_backend() == 'remote'.
+    """
+    v = os.environ.get("OHI_EMBEDDING_REMOTE_URL", "").strip()
+    return v or None
+
+
 # --- Runtime config ---
 def gemini_model() -> str:
     return os.environ.get("OHI_GEMINI_MODEL", "gemini-3-flash-preview")
