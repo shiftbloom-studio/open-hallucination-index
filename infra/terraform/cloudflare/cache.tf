@@ -10,7 +10,7 @@ resource "cloudflare_ruleset" "cache" {
   rules {
     action      = "set_cache_settings"
     description = "Bypass cache for all API calls on the api subdomain"
-    expression  = "(http.host eq \"${var.api_subdomain}.${var.zone_name}\") and (starts_with(http.request.uri.path, \"/api/\"))"
+    expression  = "(http.host eq \"${local.api_hostname}\") and (starts_with(http.request.uri.path, \"/api/\"))"
     action_parameters {
       cache = false
     }
@@ -20,7 +20,7 @@ resource "cloudflare_ruleset" "cache" {
   rules {
     action      = "set_cache_settings"
     description = "Cache /health/live for 60s on api subdomain to absorb liveness-probe floods"
-    expression  = "(http.host eq \"${var.api_subdomain}.${var.zone_name}\") and (http.request.uri.path eq \"/health/live\")"
+    expression  = "(http.host eq \"${local.api_hostname}\") and (http.request.uri.path eq \"/health/live\")"
     action_parameters {
       cache = true
       edge_ttl {

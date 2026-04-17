@@ -15,7 +15,7 @@ resource "cloudflare_ruleset" "transform_edge_secret" {
     # Frontend traffic goes to the apex (DNS-only to Vercel) and never hits CF's
     # proxy, so scoping by host is equivalent to "API-only" and also defends
     # against future zones being added.
-    expression = "(http.host eq \"${var.api_subdomain}.${var.zone_name}\")"
+    expression = "(http.host eq \"${local.api_hostname}\")"
     action_parameters {
       headers {
         name      = "X-OHI-Edge-Secret"

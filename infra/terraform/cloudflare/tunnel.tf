@@ -5,10 +5,10 @@ resource "random_password" "tunnel_secret" {
 }
 
 resource "cloudflare_zero_trust_tunnel_cloudflared" "pc" {
-  account_id    = local.account_id
-  name          = "ohi-pc"
-  tunnel_secret = base64encode(random_password.tunnel_secret.result)
-  config_src    = "cloudflare" # we manage config via cloudflare_zero_trust_tunnel_cloudflared_config
+  account_id = local.account_id
+  name       = "ohi-pc"
+  secret     = base64encode(random_password.tunnel_secret.result)
+  config_src = "cloudflare" # we manage config via cloudflare_zero_trust_tunnel_cloudflared_config
 }
 
 # Ingress rules routing tunnel requests to PC-side docker services.
@@ -18,19 +18,19 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "pc" {
 
   config {
     ingress_rule {
-      hostname = "neo4j.${var.zone_name}"
+      hostname = "neo4j.${local.apex_hostname}"
       service  = "http://neo4j:7474"
     }
     ingress_rule {
-      hostname = "qdrant.${var.zone_name}"
+      hostname = "qdrant.${local.apex_hostname}"
       service  = "http://qdrant:6333"
     }
     ingress_rule {
-      hostname = "pg.${var.zone_name}"
+      hostname = "pg.${local.apex_hostname}"
       service  = "http://postgrest:3000"
     }
     ingress_rule {
-      hostname = "redis.${var.zone_name}"
+      hostname = "redis.${local.apex_hostname}"
       service  = "http://webdis:7379"
     }
     # Catch-all (required as the last rule)
@@ -54,12 +54,12 @@ resource "cloudflare_record" "tunnel" {
   for_each = local.tunnel_hostnames
 
   zone_id = local.zone_id
-  name    = each.value
+  name    = "${each.value}${local.record_suffix}"
   type    = "CNAME"
   content = "${cloudflare_zero_trust_tunnel_cloudflared.pc.id}.cfargotunnel.com"
   proxied = true
   ttl     = 1
-  comment = "OHI tunnel public hostname — protected by CF Access (see access.tf)"
+  comment = "OHI tunnel hostname ${each.value}.${local.apex_hostname} — protected by CF Access"
 }
 
 # Seed the cloudflared-tunnel-token secret from the CF-generated value.

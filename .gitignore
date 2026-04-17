@@ -216,3 +216,15 @@ temp/
 /docs/superpowers/
 
 /gui_ingestion_app/.wiki_dumps/
+# Terraform working dirs + state (provider binaries etc.)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+bootstrap.plan
+storage.plan
+secrets.plan
+compute.plan
+cloudflare.plan
+vercel.plan
+observability.plan

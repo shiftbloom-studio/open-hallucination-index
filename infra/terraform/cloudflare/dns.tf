@@ -1,32 +1,32 @@
 # ---------------------------------------------------------------------------
 # Apex record — Vercel-hosted static frontend (DNS-only, Vercel owns the edge).
-# CF CNAME flattening lets us put a CNAME at zone apex; Vercel issues + serves
-# the TLS cert at its edge.
+# When apex_subdomain="" we use "@" (zone apex). When set, we prefix the label.
+# CF CNAME flattening lets us put a CNAME at any name including the zone apex;
+# Vercel issues + serves the TLS cert at its edge.
 # ---------------------------------------------------------------------------
 resource "cloudflare_record" "apex" {
   zone_id = local.zone_id
-  name    = "@"
+  name    = var.apex_subdomain == "" ? "@" : var.apex_subdomain
   type    = "CNAME"
   content = "cname.vercel-dns.com"
   proxied = false # DNS-only (gray cloud) — Vercel's edge, not CF's
   ttl     = 300
-  comment = "OHI v2 public frontend served by Vercel."
+  comment = "OHI v2 public frontend served by Vercel (${local.apex_hostname})."
 }
 
-# Optional Vercel domain-ownership TXT. Usually NOT needed when CF CNAME
-# flattening at apex resolves cleanly — Vercel accepts CNAME-based verification.
-# If Vercel's dashboard shows a TXT challenge after the apex CNAME is live,
-# supply the token via -var=vercel_verification_token and this record is created.
+# Optional Vercel domain-ownership TXT. Usually NOT needed when CNAME-based
+# verification works. If Vercel dashboard shows a TXT challenge, supply the
+# token via -var=vercel_verification_token and this record appears.
 resource "cloudflare_record" "vercel_verify" {
   count = var.vercel_verification_token != "" ? 1 : 0
 
   zone_id = local.zone_id
-  name    = "_vercel"
+  name    = var.apex_subdomain == "" ? "_vercel" : "_vercel${local.record_suffix}"
   type    = "TXT"
   content = var.vercel_verification_token
   proxied = false
   ttl     = 300
-  comment = "Vercel domain-ownership challenge (only present if Vercel requested one)"
+  comment = "Vercel domain-ownership challenge"
 }
 
 # ---------------------------------------------------------------------------
@@ -34,12 +34,12 @@ resource "cloudflare_record" "vercel_verify" {
 # ---------------------------------------------------------------------------
 resource "cloudflare_record" "api" {
   zone_id = local.zone_id
-  name    = "api"
+  name    = "${var.api_subdomain}${local.record_suffix}"
   type    = "CNAME"
   content = local.lambda_fn_hostname
   proxied = true # orange cloud — all CF edge features apply to API traffic
   ttl     = 1
-  comment = "OHI v2 API served by AWS Lambda, fronted by Cloudflare (WAF + rate limits + X-OHI-Edge-Secret injection)."
+  comment = "OHI v2 API (${local.api_hostname}) — AWS Lambda, fronted by CF (WAF + rate limits + X-OHI-Edge-Secret injection)."
 }
 
-# Tunnel hostnames (neo4j/qdrant/pg/redis) are declared in tunnel.tf; unchanged.
+# Tunnel hostnames (neo4j/qdrant/pg/redis) are declared in tunnel.tf with matching label logic.
