@@ -6,27 +6,27 @@ import { cn } from "@/lib/utils";
 
 const steps = [
   {
-    title: "Input",
-    description: "Prompt enters pipeline",
-    icon: "📝",
+    title: "L1 · Decompose",
+    description: "Atomic claims + multi-source evidence",
+    icon: "🔬",
     color: "from-violet-500 to-purple-600",
   },
   {
-    title: "Decompose",
-    description: "Atomize into claims",
-    icon: "🔬",
+    title: "L2/L3 · Route + NLI",
+    description: "5 domains · DeBERTa cross-encoder",
+    icon: "🧭",
     color: "from-blue-500 to-cyan-500",
   },
   {
-    title: "Verify",
-    description: "Check against sources",
-    icon: "✓",
+    title: "L4 · PCG",
+    description: "TRW-BP belief propagation",
+    icon: "🕸️",
     color: "from-emerald-500 to-teal-500",
   },
   {
-    title: "Score",
-    description: "Output trust metric",
-    icon: "📊",
+    title: "L5 · Conformal",
+    description: "Calibrated intervals @ 90% coverage",
+    icon: "🎯",
     color: "from-amber-500 to-orange-500",
   },
 ] as const;
@@ -243,10 +243,10 @@ export function ArchitectureFlow() {
             Architecture
           </span>
           <h2 className="mt-2 text-2xl md:text-4xl font-bold bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">
-            Verification Pipeline
+            The v2 verification pipeline
           </h2>
           <p className="mt-2 text-sm text-neutral-400 max-w-md mx-auto">
-            Every generation flows through four stages of verification
+            Each layer is independently scored and cached. Degradation is surfaced per-claim via <span className="font-mono text-neutral-300">fallback_used</span>.
           </p>
         </motion.div>
 
