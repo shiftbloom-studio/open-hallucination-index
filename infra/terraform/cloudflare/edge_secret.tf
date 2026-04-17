@@ -11,8 +11,11 @@ resource "cloudflare_ruleset" "transform_edge_secret" {
 
   rules {
     action      = "rewrite"
-    description = "Inject edge secret header"
-    expression  = "(true)"
+    description = "Inject edge secret header on API traffic only"
+    # Frontend traffic goes to the apex (DNS-only to Vercel) and never hits CF's
+    # proxy, so scoping by host is equivalent to "API-only" and also defends
+    # against future zones being added.
+    expression = "(http.host eq \"${var.api_subdomain}.${var.zone_name}\")"
     action_parameters {
       headers {
         name      = "X-OHI-Edge-Secret"
