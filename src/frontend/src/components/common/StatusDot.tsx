@@ -21,8 +21,9 @@ function evaluate(
     return { status: "red", label: "offline" };
   }
   if (!data) return { status: "unknown", label: "checking…" };
-  if (data.overall === "healthy") return { status: "green", label: "healthy" };
-  if (data.overall === "degraded") return { status: "amber", label: "degraded" };
+  const overall = data.status ?? data.overall;
+  if (overall === "healthy") return { status: "green", label: "healthy" };
+  if (overall === "degraded") return { status: "amber", label: "degraded" };
   return { status: "red", label: "unhealthy" };
 }
 

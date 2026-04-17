@@ -149,25 +149,34 @@ export interface CalibrationReport {
   domains: Record<string, CalibrationDomain>;
 }
 
+// Matches the shape emitted by the backend /health/deep endpoint as of
+// 2026-04-17. The earlier spec used "up/degraded/down" + pXX latencies +
+// last_check, but the live endpoint settled on "ok/down/skipped" with a
+// single latency_ms and a free-form detail string. All auxiliary fields
+// are optional so older/newer backends don't break rendering.
 export interface HealthLayer {
-  status: "up" | "degraded" | "down";
+  status: "ok" | "up" | "degraded" | "down" | "skipped";
+  latency_ms?: number | null;
   latency_p50_ms?: number;
   latency_p95_ms?: number;
-  last_check: string;
+  last_check?: string;
+  detail?: string | null;
   note?: string;
 }
 
 export interface HealthDeep {
-  overall: "healthy" | "degraded" | "unhealthy";
+  // Backend emits `status`; `overall` kept as an accepted alias.
+  status?: "healthy" | "degraded" | "unhealthy";
+  overall?: "healthy" | "degraded" | "unhealthy";
   timestamp: string;
-  pipeline_version: string;
+  pipeline_version?: string;
   layers: Record<string, HealthLayer>;
-  calibration: {
+  calibration?: {
     last_updated: string;
     domains_fresh: number;
     domains_stale: number;
   };
-  model_versions: Record<string, string>;
+  model_versions?: Record<string, string>;
 }
 
 // ── Error payloads ────────────────────────────────────────────────
