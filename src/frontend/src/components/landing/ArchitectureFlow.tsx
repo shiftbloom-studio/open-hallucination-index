@@ -4,48 +4,42 @@ import { motion, useInView, useAnimationFrame } from "framer-motion";
 import { useRef, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
-const steps = [
-  {
-    title: "L1 · Decompose",
-    description: "Atomic claims + multi-source evidence",
-    icon: "🔬",
-    color: "from-violet-500 to-purple-600",
-  },
-  {
-    title: "L2/L3 · Route + NLI",
-    description: "5 domains · DeBERTa cross-encoder",
-    icon: "🧭",
-    color: "from-blue-500 to-cyan-500",
-  },
-  {
-    title: "L4 · PCG",
-    description: "TRW-BP belief propagation",
-    icon: "🕸️",
-    color: "from-emerald-500 to-teal-500",
-  },
-  {
-    title: "L5 · Conformal",
-    description: "Calibrated intervals @ 90% coverage",
-    icon: "🎯",
-    color: "from-amber-500 to-orange-500",
-  },
-] as const;
+type StepColor = "indigo" | "info" | "danger" | "warning" | "success";
+
+const steps: {
+  title: string;
+  description: string;
+  icon: string;
+  color: StepColor;
+}[] = [
+  { title: "L1 · Decompose", description: "Atomic claims + multi-source evidence", icon: "🔬", color: "indigo" },
+  { title: "L2 · Route", description: "5 domains · weighted assignment", icon: "🧭", color: "info" },
+  // L3 NLI highlighted in red per reference image and brand canon.
+  { title: "L3 · NLI", description: "Gemini 3 Pro cross-encoder", icon: "⚖️", color: "danger" },
+  { title: "L4 · PCG", description: "TRW-BP belief propagation", icon: "🕸️", color: "warning" },
+  { title: "L5 · Conformal", description: "Calibrated intervals @ 90% coverage", icon: "🎯", color: "success" },
+];
+
+const colorMap: Record<StepColor, { bg: string; fg: string; softBg: string }> = {
+  indigo: { bg: "var(--brand-indigo)", fg: "var(--brand-indigo-strong)", softBg: "rgba(99,102,241,0.12)" },
+  info: { bg: "var(--brand-info)", fg: "var(--brand-info)", softBg: "rgba(2,132,199,0.12)" },
+  danger: { bg: "var(--brand-danger)", fg: "var(--brand-danger)", softBg: "rgba(230,57,70,0.12)" },
+  warning: { bg: "var(--brand-warning)", fg: "var(--brand-warning)", softBg: "rgba(217,119,6,0.12)" },
+  success: { bg: "var(--brand-success)", fg: "var(--brand-success)", softBg: "rgba(5,150,105,0.12)" },
+};
 
 function DataPulse({ delay, duration }: { delay: number; duration: number }) {
   return (
     <motion.div
-      className="absolute top-1/2 -translate-y-1/2 h-1.5 w-6 rounded-full bg-gradient-to-r from-violet-500 via-cyan-400 to-emerald-400 shadow-[0_0_12px_rgba(139,92,246,0.8)]"
+      className="absolute top-1/2 -translate-y-1/2 h-1.5 w-5 rounded-full"
+      style={{
+        background:
+          "linear-gradient(90deg, var(--brand-indigo), var(--brand-danger))",
+        boxShadow: "0 0 10px rgba(99,102,241,0.55)",
+      }}
       initial={{ left: "0%", opacity: 0 }}
-      animate={{
-        left: ["0%", "100%"],
-        opacity: [0, 1, 1, 0],
-      }}
-      transition={{
-        duration,
-        delay,
-        repeat: Infinity,
-        ease: "linear",
-      }}
+      animate={{ left: ["0%", "100%"], opacity: [0, 1, 1, 0] }}
+      transition={{ duration, delay, repeat: Infinity, ease: "linear" }}
     />
   );
 }
@@ -53,18 +47,17 @@ function DataPulse({ delay, duration }: { delay: number; duration: number }) {
 function ConnectionLine({ isActive }: { isActive: boolean }) {
   return (
     <div className="relative flex-1 h-0.5 mx-1 overflow-hidden">
-      {/* Base line */}
-      <div className="absolute inset-0 bg-white/10 rounded-full" />
-      
-      {/* Glowing active line */}
+      <div className="absolute inset-0 bg-[color:var(--border-subtle)] rounded-full" />
       <motion.div
-        className="absolute inset-0 bg-gradient-to-r from-violet-500/50 via-cyan-400/50 to-emerald-400/50 rounded-full"
+        className="absolute inset-0 rounded-full"
+        style={{
+          background:
+            "linear-gradient(90deg, rgba(99,102,241,0.7), rgba(230,57,70,0.7))",
+        }}
         initial={{ scaleX: 0, originX: 0 }}
         animate={{ scaleX: isActive ? 1 : 0 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
       />
-
-      {/* Data pulses */}
       {isActive && (
         <>
           <DataPulse delay={0} duration={2} />
@@ -92,6 +85,7 @@ function StepCard({
   const pathRef = useRef<SVGRectElement>(null);
   const progress = useRef(0);
   const [borderPosition, setBorderPosition] = useState({ x: 0, y: 0 });
+  const c = colorMap[step.color];
 
   useAnimationFrame(() => {
     if (!isActive || !pathRef.current) return;
@@ -126,17 +120,21 @@ function StepCard({
       onClick={onClick}
       className={cn(
         "relative group flex flex-col items-center p-3 rounded-xl transition-all duration-300 cursor-pointer",
-        "bg-white/[0.03] border border-white/10 backdrop-blur-sm",
-        isActive && "border-white/20 bg-white/[0.06]",
-        isCompleted && "border-emerald-500/30 bg-emerald-500/[0.05]"
+        "border border-[color:var(--border-subtle)] bg-surface-elevated",
       )}
+      style={
+        isActive
+          ? { borderColor: c.fg, boxShadow: `0 0 0 3px ${c.softBg}` }
+          : isCompleted
+            ? { borderColor: "var(--brand-success)", background: "rgba(5,150,105,0.04)" }
+            : undefined
+      }
       initial={{ opacity: 0, y: 20, scale: 0.9 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.5, delay: index * 0.1 }}
       whileHover={{ scale: 1.02, y: -2 }}
       whileTap={{ scale: 0.98 }}
     >
-      {/* Moving border glow for active state */}
       {isActive && (
         <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
           <rect
@@ -152,61 +150,57 @@ function StepCard({
           <circle
             cx={borderPosition.x}
             cy={borderPosition.y}
-            r="20"
+            r="18"
             fill="url(#glowGradient)"
             className="blur-sm"
           />
           <defs>
             <radialGradient id="glowGradient">
-              <stop offset="0%" stopColor="rgba(139,92,246,0.8)" />
-              <stop offset="100%" stopColor="transparent" />
+              <stop offset="0%" stopColor={c.bg} stopOpacity="0.55" />
+              <stop offset="100%" stopColor={c.bg} stopOpacity="0" />
             </radialGradient>
           </defs>
         </svg>
       )}
 
-      {/* Step number badge */}
       <div
-        className={cn(
-          "absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center",
-          "bg-neutral-800 border border-white/20 text-white/70",
-          isActive && "bg-violet-600 border-violet-400 text-white",
-          isCompleted && "bg-emerald-600 border-emerald-400 text-white"
-        )}
+        className="absolute -top-2 -right-2 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center border"
+        style={
+          isActive
+            ? { background: c.bg, borderColor: c.bg, color: "#ffffff" }
+            : isCompleted
+              ? { background: "var(--brand-success)", borderColor: "var(--brand-success)", color: "#ffffff" }
+              : { background: "var(--surface-elevated)", borderColor: "var(--border-default)", color: "var(--brand-muted)" }
+        }
       >
         {isCompleted ? "✓" : index + 1}
       </div>
 
-      {/* Icon */}
       <motion.div
-        className={cn(
-          "w-10 h-10 rounded-lg flex items-center justify-center text-lg mb-2",
-          "bg-gradient-to-br",
-          step.color,
-          "shadow-lg",
-          isActive && "shadow-violet-500/30"
-        )}
-        animate={isActive ? { scale: [1, 1.1, 1] } : {}}
+        className="w-10 h-10 rounded-lg flex items-center justify-center text-lg mb-2 shadow-sm"
+        style={{
+          background: c.softBg,
+          color: c.fg,
+        }}
+        animate={isActive ? { scale: [1, 1.08, 1] } : {}}
         transition={{ duration: 1.5, repeat: isActive ? Infinity : 0 }}
       >
         {step.icon}
       </motion.div>
 
-      {/* Title */}
-      <span className="text-xs font-semibold text-white/90 mb-0.5">
+      <span className="text-xs font-semibold text-brand-ink mb-0.5">
         {step.title}
       </span>
 
-      {/* Description */}
-      <span className="text-[10px] text-white/50 text-center leading-tight">
+      <span className="text-[10px] text-brand-muted text-center leading-tight">
         {step.description}
       </span>
 
-      {/* Active indicator pulse */}
       {isActive && (
         <motion.div
-          className="absolute inset-0 rounded-xl border-2 border-violet-500/50"
-          animate={{ opacity: [0.5, 0, 0.5] }}
+          className="absolute inset-0 rounded-xl border-2 pointer-events-none"
+          style={{ borderColor: c.fg, opacity: 0.35 }}
+          animate={{ opacity: [0.35, 0, 0.35] }}
           transition={{ duration: 2, repeat: Infinity }}
         />
       )}
@@ -220,7 +214,6 @@ export function ArchitectureFlow() {
   const [activeStep, setActiveStep] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
 
-  // Auto-advance through steps
   useEffect(() => {
     if (!isInView || isHovered) return;
     const interval = setInterval(() => {
@@ -232,35 +225,42 @@ export function ArchitectureFlow() {
   return (
     <section ref={ref} className="relative w-full py-12 md:py-16">
       <div className="mx-auto max-w-5xl px-4">
-        {/* Header */}
         <motion.div
           className="text-center mb-8"
           initial={{ opacity: 0, y: 20 }}
           animate={isInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
         >
-          <span className="text-xs font-medium tracking-widest text-violet-400 uppercase">
+          <span className="label-mono" style={{ color: "var(--brand-indigo-strong)" }}>
             Architecture
           </span>
-          <h2 className="mt-2 text-2xl md:text-4xl font-bold bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">
+          <h2
+            className="mt-2 font-display font-semibold tracking-tight text-brand-ink"
+            style={{ fontSize: "clamp(1.5rem, 3.25vw, 2.5rem)", lineHeight: 1.1 }}
+          >
             The v2 verification pipeline
           </h2>
-          <p className="mt-2 text-sm text-neutral-400 max-w-md mx-auto">
-            Each layer is independently scored and cached. Degradation is surfaced per-claim via <span className="font-mono text-neutral-300">fallback_used</span>.
+          <p className="mt-2 text-sm text-brand-muted max-w-md mx-auto md:text-base">
+            Each layer is independently scored and cached. Degradation is surfaced per-claim via{" "}
+            <span className="font-mono text-brand-ink">fallback_used</span>.
           </p>
         </motion.div>
 
-        {/* Pipeline visualization */}
         <motion.div
-          className="relative flex items-center justify-between gap-1 p-4 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-xl"
-          initial={{ opacity: 0, scale: 0.95 }}
+          className="relative flex items-center justify-between gap-1 rounded-2xl border border-[color:var(--border-subtle)] bg-surface-elevated p-4 shadow-sm"
+          initial={{ opacity: 0, scale: 0.97 }}
           animate={isInView ? { opacity: 1, scale: 1 } : {}}
           transition={{ duration: 0.8, delay: 0.2 }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
-          {/* Background gradient */}
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-violet-600/5 via-transparent to-emerald-600/5 pointer-events-none" />
+          <div
+            className="absolute inset-0 rounded-2xl pointer-events-none"
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(99,102,241,0.04) 0%, transparent 50%, rgba(230,57,70,0.04) 100%)",
+            }}
+          />
 
           {steps.map((step, index) => (
             <div key={step.title} className="contents">
@@ -278,7 +278,6 @@ export function ArchitectureFlow() {
           ))}
         </motion.div>
 
-        {/* Auto-advance indicator */}
         <motion.div
           className="flex justify-center gap-1.5 mt-4"
           initial={{ opacity: 0 }}
@@ -291,10 +290,10 @@ export function ArchitectureFlow() {
               onClick={() => setActiveStep(index)}
               aria-label={`Go to step ${index + 1}`}
               className={cn(
-                "w-1.5 h-1.5 rounded-full transition-all duration-300",
+                "h-1.5 rounded-full transition-all duration-300",
                 activeStep === index
-                  ? "w-4 bg-violet-500"
-                  : "bg-white/20 hover:bg-white/40"
+                  ? "w-4 bg-brand-indigo"
+                  : "w-1.5 bg-[color:var(--border-default)] hover:bg-brand-subtle",
               )}
             />
           ))}
