@@ -122,7 +122,11 @@ export const ohi = {
   },
 
   healthDeep: async (opts: RequestOptions = {}): Promise<HealthDeep> => {
-    const res = await fetch(`${apiBase()}/health/deep`, {
+    // /health/* lives at the origin root, not under /api/v2 — Lambda keeps it
+    // there so its own container health probes hit /health/live without the
+    // /api/v2 prefix. Build a URL that drops whatever path apiBase() carries.
+    const url = new URL("/health/deep", apiBase()).toString();
+    const res = await fetch(url, {
       headers: { Accept: "application/json" },
       signal: opts.signal,
     });
