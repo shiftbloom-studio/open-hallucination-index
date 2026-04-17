@@ -82,6 +82,13 @@ def _is_fallback(result: NliResult) -> bool:
     )
 
 
+# Any averaged self-consistency confidence below this is snapped to 0.0
+# so D1's posterior update gets a clean "no usable signal" marker. Picked
+# small enough that merely-mediocre results (0.3–0.6) pass through but a
+# run of tied, very-unsure samples gets flagged.
+_LOW_CONFIDENCE_FLOOR = 0.05
+
+
 class NliGeminiAdapter:
     """LLM-backed NLI classifier. Satisfies :class:`~interfaces.nli.NliAdapter`."""
 
@@ -221,6 +228,8 @@ def _aggregate_samples(samples: list[NliResult]) -> NliResult:
         avg_refute /= total
         avg_neutral /= total
     avg_confidence = sum(s.confidence for s in winners) / n
+    if avg_confidence < _LOW_CONFIDENCE_FLOOR:
+        avg_confidence = 0.0
     # Surface the reasoning from the most confident winner — still
     # grounded in the winning label, unlike a free pick across buckets.
     best_winner = max(winners, key=lambda s: s.confidence)

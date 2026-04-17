@@ -15,6 +15,31 @@ _SRC_API = Path(__file__).resolve().parents[3] / "src" / "api"
 if str(_SRC_API) not in sys.path:
     sys.path.insert(0, str(_SRC_API))
 
+# Fabian has two worktrees sharing one venv (ohi-stream-b for this run,
+# open-hallucination-index as the main checkout). The venv's editable
+# install points at the MAIN checkout's src/api, so any earlier test in
+# the full-suite run that imports ``config`` transitively loads
+# ``adapters`` from there into sys.modules. Our path insert above would
+# then be too late because subsequent ``from adapters.foo import ...``
+# reuses the cached package and walks its frozen ``__path__`` — which
+# points at the main checkout's adapters/, where this worktree's new
+# ``nli_gemini`` module does NOT exist. Purging the flat-namespace
+# sibling packages from the import cache forces the next import to
+# re-resolve against the sys.path we just rewrote.
+_FLAT_PACKAGES = {
+    "adapters",
+    "interfaces",
+    "models",
+    "pipeline",
+    "config",
+    "server",
+    "services",
+}
+for _cached_name in list(sys.modules):
+    _root = _cached_name.split(".", 1)[0]
+    if _root in _FLAT_PACKAGES:
+        del sys.modules[_cached_name]
+
 from collections.abc import AsyncIterator  # noqa: E402
 from typing import Any  # noqa: E402
 
@@ -581,3 +606,100 @@ def test_nli_gemini_adapter_satisfies_nli_adapter_protocol() -> None:
     llm = _CannedLLM([])
     adapter = NliGeminiAdapter(llm=llm)
     assert isinstance(adapter, NliAdapter)
+
+
+def test_nli_types_are_re_exported_from_interfaces_package() -> None:
+    """The ``interfaces`` package already re-exports every other v2 port
+    (NLIService, PCGInferenceService, ConformalCalibrator, ...). The
+    LLM-based NLI contract should follow the same convention so D1 can
+    ``from interfaces import NliAdapter, NliResult`` without a deeper
+    import path. ``NliLabel`` is exported alongside because it's part of
+    the public contract (the plan §4.2 prompt enumerates it)."""
+    import interfaces as interfaces_pkg
+
+    assert interfaces_pkg.NliAdapter is NliAdapter
+    assert interfaces_pkg.NliResult is NliResult
+    assert "NliAdapter" in interfaces_pkg.__all__
+    assert "NliResult" in interfaces_pkg.__all__
+    assert "NliLabel" in interfaces_pkg.__all__
+
+
+# ---------------------------------------------------------------------------
+# Low-confidence snap at self-consistency aggregation
+# ---------------------------------------------------------------------------
+
+
+async def test_self_consistency_low_confidence_snaps_to_zero() -> None:
+    """All winning samples agree on the label but are each very low
+    confidence: averaged confidence falls under the snap threshold and
+    is forced to exactly 0.0. This gives D1 a clean ``confidence == 0.0``
+    signal regardless of whether the pathway was a terminal fallback or a
+    run of agreeing-but-unsure samples.
+
+    The label vote and scores still stand — the adapter isn't rewriting
+    the classification, only flagging it as low-signal via confidence.
+    Reasoning is also preserved (not swapped for ``nli_unavailable``)
+    because the UI should still be able to show the model's (weak)
+    explanation for why it picked the label.
+    """
+    llm = _CannedLLM(
+        [
+            _json_reply(
+                "support", 0.6, 0.2, 0.2,
+                reasoning="weak signal 1", confidence=0.02,
+            ),
+            _json_reply(
+                "support", 0.7, 0.2, 0.1,
+                reasoning="weak signal 2", confidence=0.03,
+            ),
+            _json_reply(
+                "support", 0.5, 0.3, 0.2,
+                reasoning="weak signal 3", confidence=0.01,
+            ),
+        ]
+    )
+    adapter = NliGeminiAdapter(llm=llm, self_consistency_k=3)
+
+    result = await adapter.classify("c", "e")
+
+    # Average raw confidence is (0.02+0.03+0.01)/3 = 0.02 — below the
+    # snap threshold, so forced to exactly 0.0.
+    assert result.confidence == 0.0
+    # The label vote and the renormalised scores are unaffected.
+    assert result.label == "support"
+    assert result.supporting_score > result.refuting_score
+    # Not a terminal fallback; the reasoning is still a real one.
+    assert result.reasoning != "nli_unavailable"
+    assert result.reasoning in {
+        "weak signal 1",
+        "weak signal 2",
+        "weak signal 3",
+    }
+
+
+async def test_self_consistency_above_floor_confidence_is_preserved() -> None:
+    """Averaged confidence comfortably above the snap threshold passes
+    through unchanged. Guards against a too-aggressive floor that would
+    swallow merely-mediocre results."""
+    llm = _CannedLLM(
+        [
+            _json_reply(
+                "support", 0.8, 0.1, 0.1,
+                reasoning="ok 1", confidence=0.65,
+            ),
+            _json_reply(
+                "support", 0.7, 0.2, 0.1,
+                reasoning="ok 2", confidence=0.70,
+            ),
+            _json_reply(
+                "support", 0.75, 0.2, 0.05,
+                reasoning="ok 3", confidence=0.75,
+            ),
+        ]
+    )
+    adapter = NliGeminiAdapter(llm=llm, self_consistency_k=3)
+
+    result = await adapter.classify("c", "e")
+
+    # Average 0.70 — well above any reasonable floor.
+    assert abs(result.confidence - 0.70) < 1e-6
