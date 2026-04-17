@@ -184,6 +184,21 @@ async def _initialize_adapters() -> None:
 
     # MCP sources (dynamic; settings drives which ones)
     _mcp_sources = _build_mcp_sources(settings)
+    # Per-source try/except: one bad endpoint must not abort lifespan. The
+    # collector's `if source.is_available` gate skips any source whose
+    # connect() raised, so failures here are tolerable and logged.
+    for _src in _mcp_sources:
+        try:
+            await _src.connect()
+            logger.info(
+                f"MCP source connected: {_src.source_name} "
+                f"(available={_src.is_available})"
+            )
+        except Exception as e:
+            logger.warning(
+                f"MCP source {getattr(_src, 'source_name', type(_src).__name__)} "
+                f"connect failed — skipping: {e}"
+            )
     _mcp_selector = SmartMCPSelector(_mcp_sources) if _mcp_sources else None
 
     # Adaptive collector (reused by v2 L1 retrieval layer)
@@ -268,6 +283,14 @@ async def _cleanup_adapters() -> None:
             await _trace_store.close()
         except Exception as e:
             logger.warning(f"Trace store close failed: {e}")
+    for _src in _mcp_sources:
+        try:
+            await _src.disconnect()
+        except Exception as e:
+            logger.warning(
+                f"MCP source {getattr(_src, 'source_name', type(_src).__name__)} "
+                f"disconnect failed: {e}"
+            )
     logger.info("DI container cleanup complete")
 
 
