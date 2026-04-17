@@ -57,10 +57,24 @@ resource "aws_lambda_function_url" "api" {
   authorization_type = "NONE"
   invoke_mode        = "RESPONSE_STREAM"
 
+  # Lambda Function URL CORS is permissive ("*"); the precise origin lockdown
+  # lives in FastAPI's CORSMiddleware (via OHI_CORS_ORIGINS). Function URL's
+  # allow_methods validator rejects "OPTIONS" (>6 chars) so use "*".
   cors {
     allow_origins = ["*"]
-    allow_methods = ["GET", "POST", "OPTIONS"]
+    allow_methods = ["*"]
     allow_headers = ["*"]
     max_age       = 86400
   }
+}
+
+# auth_type=NONE doesn't automatically grant public invocation; an explicit
+# Lambda resource-based policy is required. EdgeSecretMiddleware is what
+# actually gates requests — this just allows the anonymous HTTP→Lambda hop.
+resource "aws_lambda_permission" "public_url" {
+  statement_id           = "FunctionURLAllowPublicAccess"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.api.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
 }
