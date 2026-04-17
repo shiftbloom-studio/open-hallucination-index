@@ -80,3 +80,17 @@ def gemini_model() -> str:
 
 def gemini_daily_ceiling_eur() -> float:
     return float(os.environ.get("OHI_GEMINI_DAILY_CEILING_EUR", "0"))  # 0 = unlimited
+
+
+def cors_origins() -> list[str]:
+    """Comma-separated list of allowed CORS origins from env.
+
+    Empty list means "fall back to app settings defaults". Set by the compute
+    Terraform layer to the production frontend origin(s).
+
+    Example: OHI_CORS_ORIGINS=https://ohi.shiftbloom.studio,https://staging.ohi.shiftbloom.studio
+    """
+    raw = os.environ.get("OHI_CORS_ORIGINS", "").strip()
+    if not raw:
+        return []
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]

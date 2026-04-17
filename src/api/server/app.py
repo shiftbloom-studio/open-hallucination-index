@@ -45,8 +45,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan_manager,
     )
 
-    # CORS — open by default; infra sub-project may lock down in production.
-    cors_origins = getattr(settings.api, "cors_origins", ["*"])
+    # CORS — prod locks down to the Vercel-hosted frontend origin via the
+    # OHI_CORS_ORIGINS env var (set by infra compute layer). Falls back to
+    # settings.api.cors_origins (defaults to ["*"]) for local dev.
+    from config.infra_env import cors_origins as _infra_cors_origins
+
+    cors_origins = _infra_cors_origins() or getattr(settings.api, "cors_origins", ["*"])
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
