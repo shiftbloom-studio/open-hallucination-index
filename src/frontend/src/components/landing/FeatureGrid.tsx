@@ -5,13 +5,21 @@ import { useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-const features = [
+type FeatureAccent = "indigo" | "danger" | "success";
+
+const features: {
+  title: string;
+  description: string;
+  icon: string;
+  accent: FeatureAccent;
+  colSpan: string;
+}[] = [
   {
     title: "Calibrated probabilities",
     description:
       "Not black-box confidence. Per-domain split conformal prediction gives you intervals with empirical coverage you can audit — 0.85 [0.78, 0.91] at 90% target means the guarantee, not the vibe.",
     icon: "🎯",
-    gradient: "from-cyan-400/30 to-blue-500/30",
+    accent: "indigo",
     colSpan: "lg:col-span-3",
   },
   {
@@ -19,7 +27,7 @@ const features = [
     description:
       "Entailment and contradiction edges between claims propagate evidence through a loopy graph (TRW-BP). A refuted claim drags its dependencies. A contradiction pair can't both be 0.9.",
     icon: "🕸️",
-    gradient: "from-violet-400/30 to-purple-500/30",
+    accent: "danger",
     colSpan: "lg:col-span-3",
   },
   {
@@ -27,10 +35,16 @@ const features = [
     description:
       "Daily calibration report is public. Methodology lives in a single open spec. When the PC is off, we say so — not 'temporarily unavailable'.",
     icon: "🌅",
-    gradient: "from-emerald-400/30 to-teal-500/30",
+    accent: "success",
     colSpan: "lg:col-span-6",
   },
 ];
+
+const accentMap: Record<FeatureAccent, { ring: string; iconBg: string; iconFg: string }> = {
+  indigo: { ring: "rgba(99,102,241,0.35)", iconBg: "rgba(99,102,241,0.12)", iconFg: "var(--brand-indigo-strong)" },
+  danger: { ring: "rgba(230,57,70,0.35)", iconBg: "rgba(230,57,70,0.1)", iconFg: "var(--brand-danger)" },
+  success: { ring: "rgba(5,150,105,0.35)", iconBg: "rgba(5,150,105,0.1)", iconFg: "var(--brand-success)" },
+};
 
 export function FeatureGrid() {
   const ref = useRef<HTMLDivElement>(null);
@@ -45,75 +59,73 @@ export function FeatureGrid() {
           animate={isInView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.7 }}
         >
-          <span className="text-xs font-medium tracking-widest text-violet-400 uppercase">
+          <span className="label-mono" style={{ color: "var(--brand-indigo-strong)" }}>
             Features
           </span>
-          <h2 className="mt-3 text-3xl font-heading font-bold tracking-tighter text-neutral-50 md:text-5xl lg:text-6xl leading-[1.05]">
-            Not another confidence score.
+          <h2
+            className="mt-3 font-display font-semibold tracking-tight text-brand-ink"
+            style={{ fontSize: "clamp(2rem, 4.5vw, 3.5rem)", lineHeight: 1.05, letterSpacing: "-0.03em" }}
+          >
+            Not another <span className="display-accent">confidence</span> score.
           </h2>
-          <p className="mt-4 text-base leading-relaxed text-neutral-300/90 md:text-lg lg:text-xl font-light tracking-wide">
+          <p className="mt-4 text-base leading-relaxed text-brand-muted md:text-lg">
             Calibrated probabilities, a probabilistic claim graph, and a public audit trail.
           </p>
         </motion.div>
 
         <div className="mt-10 grid gap-4 lg:grid-cols-6">
-          {features.map((feature, index) => (
-            <motion.div
-              key={feature.title}
-              className={feature.colSpan}
-              initial={{ opacity: 0, y: 40, scale: 0.95 }}
-              animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
-              transition={{ duration: 0.6, delay: 0.2 + index * 0.15 }}
-            >
+          {features.map((feature, index) => {
+            const a = accentMap[feature.accent];
+            return (
               <motion.div
-                whileHover={{
-                  scale: 1.02,
-                  y: -4,
-                  transition: { duration: 0.2 },
-                }}
-                className="h-full"
+                key={feature.title}
+                className={feature.colSpan}
+                initial={{ opacity: 0, y: 40, scale: 0.97 }}
+                animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+                transition={{ duration: 0.6, delay: 0.15 + index * 0.1 }}
               >
-                <Card className={cn(
-                  "h-full border-white/15 bg-white/[0.08] backdrop-blur-xl overflow-hidden relative group cursor-pointer transition-all duration-300 hover:border-white/30 hover:bg-white/[0.12]"
-                )}>
-                  {/* Hover gradient */}
-                  <motion.div
+                <motion.div
+                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                  className="h-full"
+                >
+                  <Card
                     className={cn(
-                      "absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-500",
-                      feature.gradient
+                      "h-full relative overflow-hidden border-[color:var(--border-subtle)] bg-surface-elevated shadow-sm transition-all duration-300 group cursor-pointer",
                     )}
-                  />
-                  
-                  {/* Shimmer effect on hover */}
-                  <motion.div
-                    className="absolute inset-0 opacity-0 group-hover:opacity-100"
                     style={{
-                      background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)",
-                      backgroundSize: "200% 100%",
+                      // subtle lavender wash on hover via the ring border color
                     }}
-                    animate={{ backgroundPosition: ["-100% 0%", "200% 0%"] }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                  />
+                  >
+                    <div
+                      className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                      style={{
+                        background: `radial-gradient(120% 60% at 0% 0%, ${a.ring} 0%, transparent 55%)`,
+                      }}
+                    />
 
-                  <CardHeader className="relative z-10">
-                    <div className="flex items-center gap-3">
-                      <motion.span
-                        className="text-2xl"
-                        animate={isInView ? { rotate: [0, 10, -10, 0] } : {}}
-                        transition={{ duration: 0.5, delay: 0.5 + index * 0.1 }}
-                      >
-                        {feature.icon}
-                      </motion.span>
-                      <CardTitle className="text-neutral-50">{feature.title}</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="relative z-10 text-neutral-300">
-                    {feature.description}
-                  </CardContent>
-                </Card>
+                    <CardHeader className="relative z-10">
+                      <div className="flex items-center gap-3">
+                        <motion.span
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-lg"
+                          style={{ background: a.iconBg, color: a.iconFg }}
+                          animate={isInView ? { rotate: [0, 8, -6, 0] } : {}}
+                          transition={{ duration: 0.5, delay: 0.5 + index * 0.1 }}
+                        >
+                          {feature.icon}
+                        </motion.span>
+                        <CardTitle className="font-heading text-lg font-semibold text-brand-ink md:text-xl">
+                          {feature.title}
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="relative z-10 text-sm leading-relaxed text-brand-muted md:text-base">
+                      {feature.description}
+                    </CardContent>
+                  </Card>
+                </motion.div>
               </motion.div>
-            </motion.div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

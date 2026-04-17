@@ -116,7 +116,7 @@ export function VerifyPage() {
         )}
 
         {state.status === "idle" && (
-          <div className="rounded-xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-500">
+          <div className="rounded-xl border border-dashed border-[color:var(--border-default)] bg-surface-elevated p-12 text-center text-sm text-brand-subtle">
             Paste text in the form to start. Nothing is stored; only a hash of your input.
           </div>
         )}

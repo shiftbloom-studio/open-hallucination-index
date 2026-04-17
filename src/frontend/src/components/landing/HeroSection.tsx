@@ -5,12 +5,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, type Variants, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { ButtonMovingBorder } from "@/components/ui/moving-border";
-import { Spotlight } from "@/components/ui/spotlight";
 
 const KnowledgeGraphCanvas = dynamic(
   () => import("@/components/landing/_KnowledgeGraphCanvas"),
-  { ssr: false }
+  { ssr: false },
 );
 
 const containerVariants: Variants = {
@@ -19,7 +17,7 @@ const containerVariants: Variants = {
     opacity: 1,
     transition: {
       staggerChildren: 0.15,
-      delayChildren: 0.3,
+      delayChildren: 0.2,
     },
   },
 };
@@ -67,112 +65,114 @@ export function HeroSection() {
 
   return (
     <section className="relative w-full overflow-hidden">
-      <div className="relative h-[44rem] w-full bg-slate-950/95 antialiased bg-grid-white/[0.03]">
-        {showHeroAnimations && (
-          <Spotlight className="-top-40 left-0 md:left-60 md:-top-20" fill="white" />
-        )}
-        {showHeroAnimations ? (
-          <>
-            <motion.div
-              className="absolute top-20 right-20 w-64 h-64 rounded-full bg-violet-500/30 blur-[100px]"
-              animate={{
-                scale: [1, 1.2, 1],
-                opacity: [0.4, 0.6, 0.4],
-              }}
-              transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-            />
-            <motion.div
-              className="absolute bottom-40 left-10 w-96 h-96 rounded-full bg-cyan-400/20 blur-[120px]"
-              animate={{
-                scale: [1.2, 1, 1.2],
-                opacity: [0.3, 0.5, 0.3],
-              }}
-              transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-            />
-          </>
-        ) : (
-          <>
-            <div className="absolute top-20 right-20 w-64 h-64 rounded-full bg-violet-500/20 blur-[100px]" />
-            <div className="absolute bottom-40 left-10 w-96 h-96 rounded-full bg-cyan-400/15 blur-[120px]" />
-          </>
-        )}
-        {showHeroAnimations && <KnowledgeGraphCanvas />}
+      {/* Lavender wash anchored at top center, fading to base surface */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 60% at 50% -10%, var(--surface-soft) 0%, transparent 65%)",
+        }}
+      />
+      {/* Ambient indigo glows */}
+      {showHeroAnimations ? (
+        <>
+          <motion.div
+            aria-hidden
+            className="pointer-events-none absolute top-32 right-10 h-64 w-64 rounded-full"
+            style={{ background: "var(--brand-indigo)", opacity: 0.14, filter: "blur(110px)" }}
+            animate={{ scale: [1, 1.15, 1], opacity: [0.12, 0.2, 0.12] }}
+            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            aria-hidden
+            className="pointer-events-none absolute bottom-10 left-10 h-80 w-80 rounded-full"
+            style={{ background: "var(--brand-danger)", opacity: 0.07, filter: "blur(130px)" }}
+            animate={{ scale: [1.1, 1, 1.1], opacity: [0.06, 0.1, 0.06] }}
+            transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </>
+      ) : (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute top-32 right-10 h-64 w-64 rounded-full"
+            style={{ background: "var(--brand-indigo)", opacity: 0.1, filter: "blur(110px)" }}
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute bottom-10 left-10 h-80 w-80 rounded-full"
+            style={{ background: "var(--brand-danger)", opacity: 0.06, filter: "blur(130px)" }}
+          />
+        </>
+      )}
+      {showHeroAnimations && <KnowledgeGraphCanvas />}
 
+      <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center px-4 pt-24 pb-20 md:pt-32 md:pb-28">
         <motion.div
-          className="relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center justify-center px-4 pt-24 md:pt-0"
           variants={showContentAnimations ? containerVariants : undefined}
           initial={showContentAnimations ? "hidden" : false}
           animate={showContentAnimations ? "visible" : undefined}
+          className="flex flex-col items-center w-full"
         >
-          <motion.div
-            variants={showContentAnimations ? itemVariants : undefined}
-            className="mb-4"
-            animate={showHeroAnimations ? { y: [0, -8, 0] } : undefined}
-            transition={showHeroAnimations ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : undefined}
-          >
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-neutral-200 backdrop-blur">
+          <motion.div variants={showContentAnimations ? itemVariants : undefined}>
+            <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-subtle)] bg-surface-elevated/75 px-3 py-1 text-xs font-medium text-brand-muted backdrop-blur">
               <motion.span
-                className="h-2 w-2 rounded-full bg-emerald-500"
-                animate={showHeroAnimations ? { scale: [1, 1.3, 1], opacity: [1, 0.7, 1] } : undefined}
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ background: "var(--brand-success)" }}
+                animate={showHeroAnimations ? { scale: [1, 1.35, 1], opacity: [1, 0.7, 1] } : undefined}
                 transition={showHeroAnimations ? { duration: 2, repeat: Infinity } : undefined}
               />
               Open Hallucination Index
-              <span className="h-1 w-1 rounded-full bg-white/40" />
+              <span className="h-1 w-1 rounded-full bg-brand-subtle" />
               Open Source
             </span>
           </motion.div>
 
           <motion.h1
             variants={showContentAnimations ? itemVariants : undefined}
-            className="text-center text-4xl font-heading font-bold tracking-tighter text-transparent md:text-7xl lg:text-8xl bg-clip-text bg-gradient-to-b from-neutral-50 via-neutral-100 to-neutral-400 leading-[0.95]"
+            className="mt-8 text-center font-display font-semibold tracking-tight text-brand-ink"
+            style={{ fontSize: "clamp(2.75rem, 6.5vw, 5.5rem)", lineHeight: 1.02, letterSpacing: "-0.035em" }}
           >
             How much should you{" "}
-            <motion.span
-              className="bg-gradient-to-r from-violet-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent"
-              animate={showHeroAnimations ? {
-                backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"],
-              } : undefined}
-              transition={showHeroAnimations ? { duration: 5, repeat: Infinity, ease: "linear" } : undefined}
-              style={{ backgroundSize: "200% 200%" }}
-            >
-              trust that answer?
-            </motion.span>
+            <span className="display-accent">trust</span>
+            <br className="hidden md:inline" />
+            {" "}that answer?
           </motion.h1>
 
           <motion.p
             variants={showContentAnimations ? itemVariants : undefined}
-            className="mt-6 max-w-2xl text-center text-base text-neutral-300/90 md:text-lg lg:text-xl leading-relaxed font-light tracking-wide"
+            className="mt-6 max-w-2xl text-center text-base leading-relaxed text-brand-muted md:text-lg"
           >
             OHI decomposes AI-generated text into atomic claims and assigns each one a{" "}
-            <span className="font-medium text-neutral-100">calibrated probability</span> of being
+            <span className="font-medium text-brand-ink">calibrated probability</span> of being
             true — with an explicit uncertainty interval. No black-box confidence. No silent
             failures.
           </motion.p>
 
           <motion.div
             variants={showContentAnimations ? itemVariants : undefined}
-            className="mt-10 flex flex-col items-center gap-4 sm:flex-row"
+            className="mt-10 flex flex-col items-center gap-3 sm:flex-row"
           >
             <Link href="/verify">
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
-                <ButtonMovingBorder
-                  borderRadius="1.75rem"
-                  className="bg-slate-900 text-white border-slate-800"
-                >
-                  Try /verify →
-                </ButtonMovingBorder>
-              </motion.div>
+              <Button
+                size="lg"
+                className="h-12 rounded-full bg-brand-indigo px-7 text-[15px] font-semibold text-white shadow-sm transition-all hover:bg-[color:var(--brand-indigo-strong)] hover:shadow-md"
+              >
+                Try /verify
+                <span className="ml-1" aria-hidden>
+                  →
+                </span>
+              </Button>
             </Link>
             <Link href="/calibration">
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
-                <Button
-                  size="lg"
-                  variant="ghost"
-                  className="h-12 rounded-full border border-white/10 bg-white/5 px-8 text-neutral-200 hover:bg-white/10"
-                >
-                  Read the calibration report
-                </Button>
-              </motion.div>
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-12 rounded-full border-[color:var(--border-default)] bg-surface-elevated/70 px-7 text-[15px] font-medium text-brand-ink backdrop-blur hover:bg-surface-elevated"
+              >
+                Read the calibration report
+              </Button>
             </Link>
           </motion.div>
         </motion.div>

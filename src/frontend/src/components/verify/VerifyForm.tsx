@@ -35,8 +35,8 @@ function Chip({
       className={cn(
         "rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
         active
-          ? "border-indigo-400/60 bg-indigo-500/20 text-indigo-100"
-          : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-200",
+          ? "border-[color:var(--brand-indigo)] bg-[color:var(--brand-indigo-soft)] text-[color:var(--brand-indigo-strong)]"
+          : "border-[color:var(--border-subtle)] bg-surface-elevated text-brand-muted hover:border-[color:var(--border-default)] hover:text-brand-ink",
         disabled && "cursor-not-allowed opacity-50",
       )}
       data-active={active}
@@ -74,15 +74,13 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
     <form
       onSubmit={handleSubmit}
       className={cn(
-        "space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4",
+        "space-y-3 rounded-xl border border-[color:var(--border-subtle)] bg-surface-elevated p-4 shadow-sm",
         className,
       )}
       aria-label="Verify text"
     >
       <label className="block">
-        <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-          Input text
-        </span>
+        <span className="label-mono mb-1.5 block">Input text</span>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -90,7 +88,7 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
           disabled={streaming}
           maxLength={MAX_CHARS + 1000}
           placeholder={'Paste an AI-generated paragraph here. e.g. "In 1905 Einstein published four papers…"'}
-          className="w-full resize-y rounded-md border border-white/10 bg-slate-950/60 p-2.5 font-mono text-xs leading-relaxed text-slate-100 focus:border-indigo-400 focus:outline-none disabled:opacity-60"
+          className="w-full resize-y rounded-md border border-[color:var(--border-default)] bg-surface-base p-2.5 font-mono text-xs leading-relaxed text-brand-ink focus:border-[color:var(--brand-indigo)] focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-indigo)]/25 disabled:opacity-60"
           aria-invalid={overLimit}
           aria-describedby="char-counter"
         />
@@ -98,20 +96,18 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
           id="char-counter"
           className={cn(
             "mt-1 flex justify-between text-[10px]",
-            overLimit ? "text-rose-400" : "text-slate-500",
+            overLimit ? "text-[color:var(--brand-danger)]" : "text-brand-subtle",
           )}
         >
           <span>{overLimit && "Too long. Max 50,000 characters."}</span>
-          <span className="font-mono">
+          <span className="num-mono">
             {chars.toLocaleString()} / {MAX_CHARS.toLocaleString()}
           </span>
         </div>
       </label>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-          Rigor
-        </span>
+        <span className="label-mono">Rigor</span>
         {RIGORS.map((r) => (
           <Chip
             key={r}
@@ -124,9 +120,7 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-          Domain
-        </span>
+        <span className="label-mono">Domain</span>
         {DOMAINS.map((d) => (
           <Chip
             key={d}
@@ -139,9 +133,7 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-          Coverage target
-        </span>
+        <span className="label-mono">Coverage target</span>
         {[0.8, 0.9, 0.95].map((c) => (
           <Chip
             key={c}
@@ -154,14 +146,14 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
       </div>
 
       <div className="flex items-center justify-between pt-1">
-        <p className="text-[10px] text-slate-500">
+        <p className="text-[10px] text-brand-subtle">
           Submitted text is not retained. Hashed for caching only.
         </p>
         {streaming ? (
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-md bg-rose-500/20 px-4 py-1.5 text-xs font-semibold text-rose-200 ring-1 ring-inset ring-rose-400/30 hover:bg-rose-500/30"
+            className="rounded-md border border-[color:var(--brand-danger)]/40 bg-[color:var(--brand-danger-soft)] px-4 py-1.5 text-xs font-semibold text-[color:var(--brand-danger)] hover:bg-[color:var(--brand-danger-soft)]/80"
           >
             Cancel
           </button>
@@ -169,9 +161,10 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
           <button
             type="submit"
             disabled={!canSubmit}
-            className="rounded-md bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-1.5 text-xs font-semibold text-white shadow-md hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-md bg-[color:var(--brand-indigo)] px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[color:var(--brand-indigo-strong)] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Verify →
+            Verify
+            <span className="ml-1" aria-hidden>→</span>
           </button>
         )}
       </div>
