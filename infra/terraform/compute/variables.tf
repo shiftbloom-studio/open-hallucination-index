@@ -15,8 +15,27 @@ variable "memory_mb" {
 }
 
 variable "timeout_s" {
-  type    = number
-  default = 60
+  description = "Lambda function timeout. Bumped 60->180 for Phase 2 D1: a 5-claim x 3-evidence document issues up to 15 Gemini 3 Pro NLI calls with thinkingLevel=HIGH (~10-20s each). Semaphore(10) in pipeline caps concurrency at 10 in-flight, so max wall-clock ~= ceil(n_pairs/10) * ~20s. 180s covers the serial tail and matches the SSE /verify/stream path that Stream D2 will land (served via Lambda Function URL with RESPONSE_STREAM, which bypasses the HTTP API's 30s integration cap). Sync /verify still transits api_gateway.tf's 30000ms integration timeout — a slow long-document sync request will 504 at API Gateway even though Lambda keeps running; that's expected until D2 routes the slow path through streaming."
+  type        = number
+  default     = 180
+}
+
+variable "nli_llm_model" {
+  description = "Gemini model id used by the Phase 2 LLM-based NLI adapter. Read by NLISettings as NLI_LLM_MODEL. Default preview; flip to gemini-2.5-pro GA if preview is flaky."
+  type        = string
+  default     = "gemini-3-pro-preview"
+}
+
+variable "nli_thinking_level" {
+  description = "Gemini 3 thinking budget for NLI. Plumbed to the env for future tuning; GeminiLLMAdapter intrinsically sets thinkingLevel=HIGH for any gemini-3* model today."
+  type        = string
+  default     = "HIGH"
+}
+
+variable "nli_self_consistency_k" {
+  description = "Majority-vote samples per (claim, evidence) NLI classification. K=1 disables self-consistency. Flipping to K>1 multiplies Gemini spend by K (plan §6.2 G6 gate)."
+  type        = number
+  default     = 1
 }
 
 variable "log_retention_days" {
