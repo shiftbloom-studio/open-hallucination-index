@@ -204,7 +204,9 @@ async def deep_health(
             return
         start = perf_counter()
         try:
-            instance = await getter()
+            # get_* dependency functions are synchronous — they return the
+            # singleton adapter instance populated during lifespan startup.
+            instance = getter()
         except Exception as exc:
             layers[name] = LayerStatus(status="down", detail=f"init: {exc}")
             overall = "degraded"
