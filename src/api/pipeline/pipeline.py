@@ -19,6 +19,7 @@ same.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import TYPE_CHECKING, Literal
@@ -36,7 +37,7 @@ from pipeline.assembly import (
 
 if TYPE_CHECKING:
     from interfaces.domain import DomainAdapter, DomainRouter
-    from interfaces.nli import NLIService
+    from interfaces.nli import NliAdapter, NLIService
     from interfaces.pcg import PCGInferenceService
     from models.results import DocumentVerdict
     from pipeline.retrieval import AdaptiveEvidenceCollector
@@ -46,6 +47,15 @@ logger = logging.getLogger(__name__)
 
 
 RigorTier = Literal["fast", "balanced", "maximum"]
+
+
+# Maximum concurrent NLI classify() calls per /verify request. Sized so a
+# realistic 5-claim × 3-evidence fan-out (15 calls) runs fully parallel
+# while still capping the tail when a long document surfaces many more
+# pairs. Tuned with Gemini 3 Pro's per-request latency (HIGH thinking ≈
+# 10–20 s) in mind: too low and latency blows past the Lambda timeout;
+# too high and we'd hit Gemini's per-project QPS ceiling under load.
+_NLI_MAX_CONCURRENCY = 10
 
 
 class Pipeline:
@@ -64,14 +74,22 @@ class Pipeline:
         conformal: ConformalCalibrator,
         domain_router: DomainRouter | None = None,
         nli: NLIService | None = None,
+        nli_adapter: NliAdapter | None = None,
         pcg: PCGInferenceService | None = None,
         domain_adapters: dict[Domain, DomainAdapter] | None = None,
     ) -> None:
+        # ``nli`` (NLIService) is the cross-encoder port that predates
+        # Phase 2 and is still reserved for a future cross-encoder
+        # deployment. ``nli_adapter`` (NliAdapter) is the Phase 2 LLM-
+        # backed 3-way classifier that D1 wires; both coexist so the
+        # older port isn't prematurely deleted. The new adapter takes
+        # precedence in ``_compute_posteriors`` when both are set.
         self._decomposer = decomposer
         self._retrieval = retrieval
         self._conformal = conformal
         self._router = domain_router
         self._nli = nli
+        self._nli_adapter = nli_adapter
         self._pcg = pcg
         self._domain_adapters = domain_adapters or {}
 
@@ -221,19 +239,39 @@ class Pipeline:
         evidence_per_claim: dict[UUID, list[Evidence]],
         assignments: dict[UUID, DomainAssignment],
     ) -> dict[UUID, PosteriorBelief]:
-        """Phase 1 placeholder: posterior = mean evidence similarity score.
+        """Compute one :class:`PosteriorBelief` per claim.
 
-        When NLI + PCG are wired (Task 2.8), this method swaps for a
-        real call to ``self._pcg.infer(...)``. The placeholder keeps
-        the pipeline end-to-end functional so /verify returns valid
-        DocumentVerdicts during Phase 1 rollout.
+        Three code paths, in precedence order:
+
+        1. **Phase 2 LLM-NLI path** (``self._nli_adapter is not None``):
+           Fan out ``NliAdapter.classify`` over every (claim, evidence)
+           pair under an ``asyncio.Semaphore`` bound by
+           :data:`_NLI_MAX_CONCURRENCY`, fold each successful
+           ``supporting_score`` / ``refuting_score`` into a per-claim
+           Beta(α, β) update, and return ``α / (α + β)``. Sentinel
+           ``nli_unavailable`` results are *skipped* (no signal) rather
+           than folded as neutral — a flaky LLM must not silently bias
+           the posterior toward zero.
+
+        2. **Future cross-encoder + PCG path** (``self._nli is not None
+           and self._pcg is not None``): raises ``NotImplementedError``
+           until Task 2.8 wires the real joint-inference flow.
+
+        3. **Phase 1 placeholder path** (everything else): posterior =
+           mean evidence similarity score. Keeps the pipeline end-to-
+           end functional so /verify returns valid ``DocumentVerdict``
+           objects even before any NLI is injected.
         """
-        del assignments  # Phase 1: domain doesn't influence the naive posterior
+        del assignments  # Domain routing feeds L5 conformal, not L3/L4 here.
+
+        if self._nli_adapter is not None:
+            return await self._compute_posteriors_via_nli_adapter(
+                claims, evidence_per_claim
+            )
+
         if self._nli is not None and self._pcg is not None:
-            # Full path will land in Task 2.8. Import here to avoid
-            # mandatory NLI/PCG imports at module load.
+            # Full cross-encoder + TRW-BP path will land in Task 2.8.
             logger.debug("Running NLI + PCG joint inference")
-            # Placeholder return: Task 2.8 wires the real flow.
             raise NotImplementedError(
                 "NLI + PCG wiring lands in Task 2.8; currently only "
                 "the Phase 1 placeholder posterior is active."
@@ -260,6 +298,61 @@ class Pipeline:
             )
         return out
 
+    async def _compute_posteriors_via_nli_adapter(
+        self,
+        claims: list[Claim],
+        evidence_per_claim: dict[UUID, list[Evidence]],
+    ) -> dict[UUID, PosteriorBelief]:
+        """Beta-posterior fold over LLM-classified NLI results.
+
+        One ``classify`` call per (claim, evidence) pair, bounded by
+        :data:`_NLI_MAX_CONCURRENCY`. Results come back tagged with
+        their originating ``claim_id`` so a single ``asyncio.gather``
+        handles the full document fan-out.
+        """
+        assert self._nli_adapter is not None
+
+        semaphore = asyncio.Semaphore(_NLI_MAX_CONCURRENCY)
+
+        async def _classify_pair(
+            claim_id: UUID, claim_text: str, evidence_text: str
+        ) -> tuple[UUID, "NliResult"]:
+            async with semaphore:
+                result = await self._nli_adapter.classify(claim_text, evidence_text)
+            return claim_id, result
+
+        tasks = [
+            _classify_pair(claim.id, claim.text, ev.content)
+            for claim in claims
+            for ev in evidence_per_claim.get(claim.id, [])
+        ]
+        classified: list[tuple[UUID, "NliResult"]] = (
+            list(await asyncio.gather(*tasks)) if tasks else []
+        )
+
+        # Bucket NLI results back onto their claims so the Beta update
+        # can run once per claim.
+        results_by_claim: dict[UUID, list["NliResult"]] = {c.id: [] for c in claims}
+        for claim_id, nli_result in classified:
+            results_by_claim[claim_id].append(nli_result)
+
+        out: dict[UUID, PosteriorBelief] = {}
+        for claim in claims:
+            alpha, beta, folded = _beta_update_from_nli(results_by_claim[claim.id])
+            p_true = alpha / (alpha + beta)
+            out[claim.id] = PosteriorBelief(
+                p_true=p_true,
+                p_false=1.0 - p_true,
+                converged=True,
+                # Still the TRW-BP literal (the only one allowed today by
+                # the PosteriorBelief.algorithm field); distinguished in
+                # ``_model_versions`` as "phase2-beta-posterior-from-nli".
+                algorithm="TRW-BP",
+                iterations=folded,
+                edge_count=0,
+            )
+        return out
+
     @staticmethod
     def _compute_decomp_coverage(text: str, claims: list[Claim]) -> float:
         """Rough heuristic: ratio of claims to sentence-like units."""
@@ -279,9 +372,50 @@ class Pipeline:
         versions: dict[str, str] = {
             "decomposer": getattr(self._decomposer, "model_id", "phase1-default"),
             "domain_router": "phase1-placeholder-general",
-            "pcg": "phase1-placeholder-mean-similarity",
+            "pcg": (
+                "phase2-beta-posterior-from-nli"
+                if self._nli_adapter is not None
+                else "phase1-placeholder-mean-similarity"
+            ),
             "conformal": "phase1-split-conformal-stub",
         }
         if self._nli is not None:
             versions["nli"] = getattr(self._nli, "model_id", "unknown")
+        if self._nli_adapter is not None:
+            # NliAdapter doesn't expose a model_id (it composes over an
+            # LLMProvider); best we can do is surface the adapter class.
+            versions["nli_adapter"] = type(self._nli_adapter).__name__
         return versions
+
+
+def _beta_update_from_nli(
+    nli_results: list["NliResult"],
+) -> tuple[float, float, int]:
+    """Fold NLI classifications into a Beta(α, β) posterior.
+
+    Starting from a uniform prior (α=β=1, p_true=0.5), each successful
+    NLI result contributes:
+
+    * ``α += supporting_score``
+    * ``β += refuting_score``
+    * neutral_score has no effect on α/β (it naturally shrinks the
+      magnitude of the update since the three scores sum to 1)
+
+    Terminal-failure sentinels (``reasoning == "nli_unavailable"``) are
+    *skipped* — they carry no information, so they must not push the
+    posterior around. This is distinct from an LLM that classified as
+    "neutral" with nonzero support/refute mass, which IS folded in.
+
+    Returns ``(alpha, beta, folded_count)`` for the caller's
+    :class:`PosteriorBelief` construction.
+    """
+    alpha = 1.0
+    beta = 1.0
+    folded = 0
+    for result in nli_results:
+        if result.reasoning == "nli_unavailable":
+            continue
+        alpha += result.supporting_score
+        beta += result.refuting_score
+        folded += 1
+    return alpha, beta, folded
