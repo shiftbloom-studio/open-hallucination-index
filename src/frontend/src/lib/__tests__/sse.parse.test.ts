@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
+// chunkedResponse returns a native Response (stream body). Cast via unknown
+// because msw types only permit HttpResponse<BodyType> at the handler site.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseFrame, streamVerify } from "../sse";
@@ -70,7 +72,7 @@ function readFixture(): string {
   );
 }
 
-function chunkedResponse(chunks: string[]): HttpResponse {
+function chunkedResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -82,7 +84,7 @@ function chunkedResponse(chunks: string[]): HttpResponse {
       controller.close();
     },
   });
-  return new HttpResponse(stream, {
+  return new Response(stream, {
     headers: { "Content-Type": "text/event-stream" },
   });
 }
@@ -90,7 +92,11 @@ function chunkedResponse(chunks: string[]): HttpResponse {
 describe("streamVerify", () => {
   it("emits all 8 events in order for the golden fixture delivered in one chunk", async () => {
     const text = readFixture();
-    server.use(http.post(`${API_BASE}/verify/stream`, () => chunkedResponse([text])));
+    server.use(
+      http.post(`${API_BASE}/verify/stream`, () =>
+        chunkedResponse([text]) as unknown as HttpResponse<string>,
+      ),
+    );
 
     const events: SseEvent["event"][] = [];
     const onError = vi.fn();
@@ -126,7 +132,11 @@ describe("streamVerify", () => {
     for (let i = 0; i < text.length; i += 40) {
       chunks.push(text.slice(i, i + 40));
     }
-    server.use(http.post(`${API_BASE}/verify/stream`, () => chunkedResponse(chunks)));
+    server.use(
+      http.post(`${API_BASE}/verify/stream`, () =>
+        chunkedResponse(chunks) as unknown as HttpResponse<string>,
+      ),
+    );
 
     const events: SseEvent["event"][] = [];
     await streamVerify(

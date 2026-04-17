@@ -3,7 +3,7 @@ import { verifyReducer, initialState } from "../verify-controller";
 import type { ClaimVerdict, DocumentVerdict, SseEvent } from "../ohi-types";
 import golden from "../../test/fixtures/document-verdict.golden.json";
 
-const doc = golden as DocumentVerdict;
+const doc = golden as unknown as DocumentVerdict;
 const [claim1, claim2] = doc.claims as [ClaimVerdict, ClaimVerdict];
 
 describe("verifyReducer", () => {
