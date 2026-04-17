@@ -3,8 +3,8 @@ output "zone_id" {
 }
 
 output "apex_hostname" {
-  description = "Zone apex — served by Vercel (frontend)."
-  value       = var.zone_name
+  description = "Public apex of the OHI app — served by Vercel (frontend)."
+  value       = local.apex_hostname
 }
 
 output "api_hostname" {
@@ -26,5 +26,5 @@ output "service_token_client_id" {
 }
 
 output "tunnel_hostnames" {
-  value = { for k, v in local.tunnel_hostnames : k => "${v}.${var.zone_name}" }
+  value = { for k, v in local.tunnel_hostnames : k => "${v}.${local.apex_hostname}" }
 }

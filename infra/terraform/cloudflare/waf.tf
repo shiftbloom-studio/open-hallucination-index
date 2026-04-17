@@ -42,7 +42,7 @@ resource "cloudflare_ruleset" "custom_waf" {
     action      = "block"
     description = "Block obvious SSRF attempts (metadata endpoints) on api host"
     expression  = <<-EOT
-      (http.host eq "${var.api_subdomain}.${var.zone_name}") and (
+      (http.host eq "${local.api_hostname}") and (
         (http.request.uri.path contains "/169.254.169.254") or
         (http.request.uri.path contains "/latest/meta-data") or
         (http.request.body.raw contains "169.254.169.254")
@@ -55,7 +55,7 @@ resource "cloudflare_ruleset" "custom_waf" {
     action      = "managed_challenge"
     description = "Challenge non-browser User-Agent patterns on /feedback"
     expression  = <<-EOT
-      (http.host eq "${var.api_subdomain}.${var.zone_name}") and
+      (http.host eq "${local.api_hostname}") and
       (http.request.uri.path eq "/api/v2/feedback") and
       (http.user_agent eq "" or http.user_agent contains "curl" or http.user_agent contains "wget")
     EOT
@@ -74,7 +74,7 @@ resource "cloudflare_ruleset" "rate_limits" {
   rules {
     action      = "block"
     description = "POST /api/v2/verify on api host — ${var.rate_limit_verify_per_min} req/min/IP"
-    expression  = "(http.host eq \"${var.api_subdomain}.${var.zone_name}\") and (http.request.uri.path eq \"/api/v2/verify\") and (http.request.method eq \"POST\")"
+    expression  = "(http.host eq \"${local.api_hostname}\") and (http.request.uri.path eq \"/api/v2/verify\") and (http.request.method eq \"POST\")"
     ratelimit {
       characteristics     = ["ip.src"]
       period              = 60
@@ -87,7 +87,7 @@ resource "cloudflare_ruleset" "rate_limits" {
   rules {
     action      = "block"
     description = "Global per-IP ceiling on api host — ${var.rate_limit_global_per_hour} req/hour/IP"
-    expression  = "(http.host eq \"${var.api_subdomain}.${var.zone_name}\")"
+    expression  = "(http.host eq \"${local.api_hostname}\")"
     ratelimit {
       characteristics     = ["ip.src"]
       period              = 3600

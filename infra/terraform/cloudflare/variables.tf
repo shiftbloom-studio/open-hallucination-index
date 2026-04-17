@@ -4,9 +4,15 @@ variable "region" {
 }
 
 variable "zone_name" {
-  description = "Cloudflare zone managed by this layer (apex of delegated subdomain)."
+  description = "Cloudflare zone managed by this layer. Full-zone delegation ('shiftbloom.studio') with apex_subdomain='ohi' is the current topology."
   type        = string
-  default     = "ohi.shiftbloom.studio"
+  default     = "shiftbloom.studio"
+}
+
+variable "apex_subdomain" {
+  description = "Subdomain under zone_name that serves the OHI frontend. Set to '' to use the zone apex directly."
+  type        = string
+  default     = "ohi"
 }
 
 variable "cf_account_id" {
@@ -38,7 +44,7 @@ variable "vercel_verification_token" {
 }
 
 variable "api_subdomain" {
-  description = "Subdomain serving the API (full hostname = <this>.<zone_name>)."
+  description = "Subdomain label for the API endpoint. Full hostname = <api_subdomain>.<apex_subdomain>.<zone_name> when apex_subdomain is set, else <api_subdomain>.<zone_name>."
   type        = string
   default     = "api"
 }
