@@ -575,13 +575,13 @@ export function ProblemSection() {
                 transition={{ duration: 0.7, delay: 0.1 }}
                 className="mt-4 text-3xl font-heading font-bold tracking-tighter text-neutral-50 md:text-5xl lg:text-6xl leading-[1.05]"
               >
-                LLMs Hallucinate.{" "}
+                LLM confidence is theater.{" "}
                 <motion.span
                   className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400"
                   animate={isInView ? { opacity: [0.5, 1, 0.5] } : {}}
                   transition={{ duration: 2, repeat: Infinity }}
                 >
-                  We Verify.
+                  Calibration isn&apos;t.
                 </motion.span>
               </motion.h2>
 
@@ -591,7 +591,9 @@ export function ProblemSection() {
                 transition={{ duration: 0.7, delay: 0.2 }}
                 className="mt-6 max-w-xl text-base leading-relaxed text-neutral-300 md:text-lg"
               >
-                Modern models can sound certain while being wrong. OHI turns that confidence into measurable trust.
+                Ask an LLM how sure it is and it&apos;ll say 95%. Ask again — still 95%. Ask after
+                it&apos;s wrong — still 95%. Self-reported confidence is uncorrelated with truth.
+                OHI&apos;s 0.85 [0.78, 0.91] at 90% coverage is a guarantee, not a vibe.
               </motion.p>
 
               {/* Stats */}

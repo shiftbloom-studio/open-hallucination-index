@@ -126,7 +126,7 @@ export function HeroSection() {
             variants={showContentAnimations ? itemVariants : undefined}
             className="text-center text-4xl font-heading font-bold tracking-tighter text-transparent md:text-7xl lg:text-8xl bg-clip-text bg-gradient-to-b from-neutral-50 via-neutral-100 to-neutral-400 leading-[0.95]"
           >
-            The Trust Layer for{" "}
+            How much should you{" "}
             <motion.span
               className="bg-gradient-to-r from-violet-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent"
               animate={showHeroAnimations ? {
@@ -135,7 +135,7 @@ export function HeroSection() {
               transition={showHeroAnimations ? { duration: 5, repeat: Infinity, ease: "linear" } : undefined}
               style={{ backgroundSize: "200% 200%" }}
             >
-              Artificial Intelligence.
+              trust that answer?
             </motion.span>
           </motion.h1>
 
@@ -143,31 +143,34 @@ export function HeroSection() {
             variants={showContentAnimations ? itemVariants : undefined}
             className="mt-6 max-w-2xl text-center text-base text-neutral-300/90 md:text-lg lg:text-xl leading-relaxed font-light tracking-wide"
           >
-            Decompose outputs into verifiable claims, route them through a verification oracle, and surface a trust score you can act on.
+            OHI decomposes AI-generated text into atomic claims and assigns each one a{" "}
+            <span className="font-medium text-neutral-100">calibrated probability</span> of being
+            true — with an explicit uncertainty interval. No black-box confidence. No silent
+            failures.
           </motion.p>
 
           <motion.div
             variants={showContentAnimations ? itemVariants : undefined}
             className="mt-10 flex flex-col items-center gap-4 sm:flex-row"
           >
-            <Link href="/auth/signup">
+            <Link href="/verify">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                 <ButtonMovingBorder
                   borderRadius="1.75rem"
                   className="bg-slate-900 text-white border-slate-800"
                 >
-                  Get Started
+                  Try /verify →
                 </ButtonMovingBorder>
               </motion.div>
             </Link>
-            <Link href="/about">
+            <Link href="/calibration">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                 <Button
                   size="lg"
                   variant="ghost"
                   className="h-12 rounded-full border border-white/10 bg-white/5 px-8 text-neutral-200 hover:bg-white/10"
                 >
-                  Learn More
+                  Read the calibration report
                 </Button>
               </motion.div>
             </Link>

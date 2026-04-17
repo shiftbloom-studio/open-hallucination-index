@@ -107,7 +107,8 @@ export function CtaSection() {
               animate={isInView ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.3 }}
             >
-              Start verifying today—run it locally, integrate it into your pipeline, and ship AI you can trust.
+              Try it now. No account. No waitlist. Paste text, get a calibrated verdict with
+              per-claim intervals and the full evidence graph.
             </motion.p>
 
             <motion.div
@@ -116,37 +117,41 @@ export function CtaSection() {
               animate={isInView ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.4 }}
             >
-              <Link href="/auth/signup">
+              <Link href="/verify">
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                   <ButtonMovingBorder
                     borderRadius="1.75rem"
                     className="bg-slate-900 text-white border-slate-800 h-12 px-8"
                   >
-                    Get Started
+                    Try /verify →
                   </ButtonMovingBorder>
                 </motion.div>
               </Link>
 
-              <Link href="/pricing">
+              <a
+                href="https://github.com/shiftbloom-studio/open-hallucination-index"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                   <Button
                     size="lg"
                     variant="ghost"
                     className="h-12 rounded-full border border-blue-500/30 bg-blue-500/10 px-8 text-blue-300 hover:bg-blue-500/20 hover:border-blue-500/50"
                   >
-                    View Pricing
+                    API on GitHub
                   </Button>
                 </motion.div>
-              </Link>
+              </a>
 
-              <Link href="/about">
+              <Link href="/calibration">
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                   <Button
                     size="lg"
                     variant="ghost"
                     className="h-12 rounded-full border border-white/10 bg-white/5 px-8 text-neutral-200 hover:bg-white/10"
                   >
-                    Learn More
+                    Calibration report
                   </Button>
                 </motion.div>
               </Link>

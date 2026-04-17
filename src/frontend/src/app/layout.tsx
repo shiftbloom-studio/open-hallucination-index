@@ -36,7 +36,7 @@ const siteUrl =
     : "http://localhost:3000");
 const siteName = "Open Hallucination Index";
 const siteDescription =
-  "Open-source project to measure and mitigate hallucinations in generative AI — practical tools, benchmarks and honest evaluations to improve model reliability.";
+  "OHI decomposes AI-generated text into atomic claims and assigns each one a calibrated probability of being true — with explicit uncertainty intervals, an auditable probabilistic claim graph, and a public calibration report. Open-source.";
 
 const structuredData = {
   "@context": "https://schema.org",

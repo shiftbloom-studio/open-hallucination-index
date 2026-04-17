@@ -7,23 +7,26 @@ import { cn } from "@/lib/utils";
 
 const features = [
   {
-    title: "GraphRAG",
-    description: "Beyond simple vector search—model claims against a structured graph of entities, relations, and citations.",
-    icon: "🔗",
-    gradient: "from-violet-400/30 to-purple-500/30",
-    colSpan: "lg:col-span-3",
-  },
-  {
-    title: "Atomic Verification",
-    description: "Checking facts, not just tokens. Each statement is scored independently so failures are visible and actionable.",
-    icon: "⚛️",
+    title: "Calibrated probabilities",
+    description:
+      "Not black-box confidence. Per-domain split conformal prediction gives you intervals with empirical coverage you can audit — 0.85 [0.78, 0.91] at 90% target means the guarantee, not the vibe.",
+    icon: "🎯",
     gradient: "from-cyan-400/30 to-blue-500/30",
     colSpan: "lg:col-span-3",
   },
   {
-    title: "Open Source",
-    description: "Transparent and community-driven—inspect the methodology, reproduce results, and contribute improvements.",
-    icon: "🌐",
+    title: "Probabilistic Claim Graph",
+    description:
+      "Entailment and contradiction edges between claims propagate evidence through a loopy graph (TRW-BP). A refuted claim drags its dependencies. A contradiction pair can't both be 0.9.",
+    icon: "🕸️",
+    gradient: "from-violet-400/30 to-purple-500/30",
+    colSpan: "lg:col-span-3",
+  },
+  {
+    title: "Open, auditable, rest-respecting",
+    description:
+      "Daily calibration report is public. Methodology lives in a single open spec. When the PC is off, we say so — not 'temporarily unavailable'.",
+    icon: "🌅",
     gradient: "from-emerald-400/30 to-teal-500/30",
     colSpan: "lg:col-span-6",
   },
@@ -46,10 +49,10 @@ export function FeatureGrid() {
             Features
           </span>
           <h2 className="mt-3 text-3xl font-heading font-bold tracking-tighter text-neutral-50 md:text-5xl lg:text-6xl leading-[1.05]">
-            Built for grounded systems.
+            Not another confidence score.
           </h2>
           <p className="mt-4 text-base leading-relaxed text-neutral-300/90 md:text-lg lg:text-xl font-light tracking-wide">
-            A verification-first stack for teams that need reliable outputs.
+            Calibrated probabilities, a probabilistic claim graph, and a public audit trail.
           </p>
         </motion.div>
 
