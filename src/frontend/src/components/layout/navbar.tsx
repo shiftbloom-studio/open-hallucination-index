@@ -17,33 +17,40 @@ export function Navbar() {
   const pathname = usePathname();
 
   return (
-    <header className="border-b border-white/10 relative z-50 bg-black/70">
+    <header className="sticky top-0 z-50 border-b border-[color:var(--border-subtle)] bg-surface-base/85 backdrop-blur-md">
       <div className="container mx-auto px-4 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-3 group">
           <Image
-            src="/logo_white.svg"
+            src="/logo_black.svg"
             alt="Open Hallucination Index Logo"
-            width={40}
-            height={38}
+            width={36}
+            height={34}
             className="transition-transform duration-300 group-hover:scale-105"
+            priority
           />
-          <span className="text-xl font-heading font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-neutral-50 via-neutral-200 to-neutral-400">
-            Open Hallucination Index
+          <span className="font-heading text-base font-semibold tracking-tight text-brand-ink">
+            Open Hallucination <span className="text-brand-muted font-normal">Index</span>
           </span>
         </Link>
-        <nav className="flex items-center gap-2">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={cn(
-                "text-sm text-neutral-300 hover:text-white font-medium transition-colors px-3 py-2",
-                pathname === link.href && "text-white",
-              )}
-            >
-              {link.label}
-            </Link>
-          ))}
+        <nav className="flex items-center gap-1">
+          {NAV_LINKS.map((link) => {
+            const active = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "relative rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                  active
+                    ? "text-brand-ink bg-[color:var(--surface-soft)]"
+                    : "text-brand-muted hover:text-brand-ink hover:bg-[color:var(--surface-soft)]/70",
+                )}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
           <div className="pl-2">
             <StatusDot />
           </div>
