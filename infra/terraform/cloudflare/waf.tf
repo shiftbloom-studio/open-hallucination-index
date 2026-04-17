@@ -20,8 +20,12 @@ resource "cloudflare_zone_settings_override" "this" {
     cache_level       = "aggressive"
     browser_cache_ttl = 14400
     always_online     = "off"
-    # SSL/TLS
-    ssl                      = "strict"
+    # SSL/TLS — "full" (not "strict") so CF accepts the ACM cert that API
+    # Gateway presents for ohi-api.shiftbloom.studio. Strict mode would
+    # require the cert's SAN to match the CF→origin SNI, which is the
+    # custom-domain regional target (d-<id>.execute-api...), and the ACM
+    # cert only covers the public hostname.
+    ssl                      = "full"
     automatic_https_rewrites = "on"
     min_tls_version          = "1.2"
     tls_1_3                  = "on"

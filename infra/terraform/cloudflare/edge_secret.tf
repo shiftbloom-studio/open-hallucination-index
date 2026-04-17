@@ -27,6 +27,14 @@ resource "cloudflare_ruleset" "transform_edge_secret" {
   }
 }
 
+# NOTE (2026-04-17): Origin Rule with Host Header Override would solve the
+# Lambda Function URL Host-header validation (URL rejects requests whose
+# Host doesn't match <id>.lambda-url.<region>.on.aws). On CF free/pro tiers
+# the Host Header override action is Enterprise-only, so we pivoted to
+# API Gateway as the Lambda front (compute/api_gateway.tf) — API Gateway
+# tolerates any Host header. This comment is a tombstone in case the plan
+# changes.
+
 # Mirror the edge-secret value into AWS Secrets Manager so Lambda can read it.
 resource "aws_secretsmanager_secret_version" "cf_edge_secret" {
   secret_id     = local.secret_arns["cf_edge_secret"]

@@ -46,8 +46,16 @@ data "cloudflare_zone" "this" {
 }
 
 locals {
-  zone_id            = data.cloudflare_zone.this.id
-  account_id         = var.cf_account_id
+  zone_id    = data.cloudflare_zone.this.id
+  account_id = var.cf_account_id
+  # API origin used by cloudflare_record.api (CNAME target). We front Lambda
+  # with API Gateway HTTP API because Lambda Function URLs validate the Host
+  # header against their own hostname and CF free-tier can't override Host
+  # upstream. The custom domain's regional target is created by
+  # aws_apigatewayv2_domain_name.api (this layer), which presents the ACM
+  # cert for ohi-api.shiftbloom.studio and accepts that Host.
+  api_origin_hostname = aws_apigatewayv2_domain_name.api.domain_name_configuration[0].target_domain_name
+  # Kept for historical / back-compat refs. Not used as the CF origin.
   lambda_fn_hostname = data.terraform_remote_state.compute.outputs.function_url_hostname
   secret_arns        = data.terraform_remote_state.secrets.outputs.secret_arns
 
