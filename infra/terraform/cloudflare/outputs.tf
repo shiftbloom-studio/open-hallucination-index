@@ -3,7 +3,13 @@ output "zone_id" {
 }
 
 output "apex_hostname" {
-  value = var.zone_name
+  description = "Zone apex — served by Vercel (frontend)."
+  value       = var.zone_name
+}
+
+output "api_hostname" {
+  description = "API subdomain — served by AWS Lambda through CF proxy (WAF + rate limits + edge-secret)."
+  value       = local.api_hostname
 }
 
 output "tunnel_id" {
