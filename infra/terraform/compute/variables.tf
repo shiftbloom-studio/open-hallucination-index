@@ -54,3 +54,9 @@ variable "gemini_daily_ceiling_eur" {
   type        = number
   default     = 0
 }
+
+variable "cors_origins" {
+  description = "Comma-separated list of allowed CORS origins. Production value is the Vercel-hosted frontend apex."
+  type        = string
+  default     = "https://ohi.shiftbloom.studio"
+}

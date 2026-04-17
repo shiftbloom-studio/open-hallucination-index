@@ -20,6 +20,7 @@ resource "aws_lambda_function" "api" {
       OHI_LOG_LEVEL                  = "INFO"
       OHI_GEMINI_MODEL               = var.gemini_model
       OHI_GEMINI_DAILY_CEILING_EUR   = tostring(var.gemini_daily_ceiling_eur)
+      OHI_CORS_ORIGINS               = var.cors_origins
       OHI_CF_TUNNEL_HOSTNAME_NEO4J   = var.tunnel_hostname_neo4j
       OHI_CF_TUNNEL_HOSTNAME_QDRANT  = var.tunnel_hostname_qdrant
       OHI_CF_TUNNEL_HOSTNAME_PG_REST = var.tunnel_hostname_pg_rest
