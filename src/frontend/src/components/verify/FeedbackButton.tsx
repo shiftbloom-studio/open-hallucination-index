@@ -10,11 +10,6 @@ export interface FeedbackButtonProps {
   className?: string;
 }
 
-/**
- * Convenience wrapper: renders the flag button and owns its own open state.
- * Use directly if you want each claim card to manage its own sheet; for a
- * single shared sheet controlled by a parent, mount FeedbackSheet directly.
- */
 export function FeedbackButton({ requestId, claim, className }: FeedbackButtonProps) {
   const [open, setOpen] = useState(false);
   return (
@@ -22,10 +17,10 @@ export function FeedbackButton({ requestId, claim, className }: FeedbackButtonPr
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={className ?? "text-slate-500 hover:text-amber-300"}
+        className={className ?? "text-brand-subtle hover:text-[color:var(--brand-warning)]"}
         aria-label="Flag this claim for review"
       >
-        🚩 Flag
+        <span aria-hidden>🚩</span> Flag
       </button>
       <FeedbackSheet
         requestId={requestId}
