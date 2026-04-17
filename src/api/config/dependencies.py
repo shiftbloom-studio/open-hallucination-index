@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 from adapters.embeddings import LocalEmbeddingAdapter
 from adapters.gemini import GeminiLLMAdapter
 from adapters.mcp_ohi import OHIMCPAdapter, TargetedOHISource
+from adapters.mcp_sources.mediawiki import MediaWikiAdapter
 from adapters.neo4j import Neo4jGraphAdapter
 from adapters.openai import OpenAILLMAdapter
 from adapters.qdrant import QdrantVectorAdapter
@@ -225,13 +226,28 @@ def _build_mcp_sources(settings: Any) -> list[MCPKnowledgeSource]:
     except AttributeError:
         return sources
 
-    # Exact wiring preserved from v1 — the sources themselves are reusable.
-    if getattr(mcp_cfg, "ohi_enabled", False):
-        ohi_adapter = OHIMCPAdapter(mcp_cfg)
-        # Note: TargetedOHISource requires (settings, search_type, source_name);
-        # here we're wiring the unified OHI adapter which internally uses
-        # search_type="all". Use the base adapter directly.
-        sources.append(ohi_adapter)
+    # Skip MCP wiring in tests so unit tests never hit live external APIs
+    # even if MCP_*_ENABLED defaults are left at their pydantic values.
+    in_test_env = getattr(settings, "environment", "development") == "test"
+
+    # MediaWiki (live Wikipedia Action API) — Phase 2 Wave 1 cheap-evidence
+    # source. Default ON via MCPSettings.wikipedia_enabled.
+    if getattr(mcp_cfg, "wikipedia_enabled", True) and not in_test_env:
+        sources.append(MediaWikiAdapter())
+
+    # OHI unified MCP server. Default URL http://ohi-mcp-server:8080 is
+    # unresolvable in prod; require explicit MCP_OHI_ENABLED=true at the
+    # process env so pydantic's default-True cannot accidentally enable
+    # the dead adapter at Lambda cold-start. Import retained for local-
+    # compose/dev use.
+    _ohi_env = os.environ.get("MCP_OHI_ENABLED")
+    if (
+        _ohi_env is not None
+        and _ohi_env.lower() == "true"
+        and getattr(mcp_cfg, "ohi_enabled", False)
+    ):
+        sources.append(OHIMCPAdapter(mcp_cfg))
+
     return sources
 
 
