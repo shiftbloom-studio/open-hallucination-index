@@ -60,3 +60,54 @@ resource "aws_iam_role_policy" "lambda_artifacts" {
   role   = aws_iam_role.lambda_exec.id
   policy = data.aws_iam_policy_document.artifacts_rw.json
 }
+
+# ---------------------------------------------------------------------------
+# Stream D2: DynamoDB jobs table R/W + Lambda self-async-invoke permission.
+#
+# POST /api/v2/verify creates a DynamoDB record, self-async-invokes, and
+# returns 202. The async handler reads the record, runs pipeline.verify(),
+# and updates the record at each of the five phase boundaries. IAM is
+# scoped narrowly to the single table and to the Lambda's own ARN so this
+# permission set cannot be reused to invoke other Lambdas or read other
+# tables if the role were compromised.
+# ---------------------------------------------------------------------------
+data "aws_iam_policy_document" "jobs_rw" {
+  statement {
+    sid = "VerifyJobsReadWrite"
+    actions = [
+      "dynamodb:PutItem",
+      "dynamodb:GetItem",
+      "dynamodb:UpdateItem",
+    ]
+    resources = [local.jobs_table_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_jobs" {
+  name   = "${local.prefix}-api-jobs"
+  role   = aws_iam_role.lambda_exec.id
+  policy = data.aws_iam_policy_document.jobs_rw.json
+}
+
+# Self-async-invoke. `aws_lambda_function.api.arn` is a self-reference, so
+# Terraform orders this policy AFTER the Lambda is created. We intentionally
+# do NOT add this resource to `aws_lambda_function.api.depends_on` — doing
+# so would create a cycle. The async-invoke path is exercised only when the
+# first /verify request arrives, well after apply completes, so the brief
+# window between "Lambda created" and "self-invoke policy attached" is
+# harmless. A defensive `depth <= 1` guard in the handler caps worst-case
+# runaway recursion to 2 invocations per request if the policy ever
+# regresses.
+data "aws_iam_policy_document" "lambda_self_invoke" {
+  statement {
+    sid       = "SelfAsyncInvoke"
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_function.api.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_self_invoke" {
+  name   = "${local.prefix}-api-self-invoke"
+  role   = aws_iam_role.lambda_exec.id
+  policy = data.aws_iam_policy_document.lambda_self_invoke.json
+}

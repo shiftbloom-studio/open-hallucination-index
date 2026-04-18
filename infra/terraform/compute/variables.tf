@@ -97,3 +97,9 @@ variable "cors_origins" {
   type        = string
   default     = "https://ohi.shiftbloom.studio"
 }
+
+variable "async_verify_ttl_seconds" {
+  description = "Seconds a DynamoDB verify-job record survives after creation before TTL reaps it. 3600 (1h) comfortably covers the ~3min frontend polling cap plus a post-mortem debugging margin. Stream D2."
+  type        = number
+  default     = 3600
+}

@@ -50,6 +50,17 @@ data "terraform_remote_state" "storage" {
   }
 }
 
+# Stream D2: DynamoDB table for async /verify jobs. Compute reads the name
+# for the Lambda env var and the ARN for the IAM policy.
+data "terraform_remote_state" "jobs" {
+  backend = "s3"
+  config = {
+    bucket = "ohi-tfstate-${data.aws_caller_identity.current.account_id}"
+    key    = "prod/jobs/terraform.tfstate"
+    region = var.region
+  }
+}
+
 data "aws_ecr_repository" "api" {
   name = "${module.shared.name_prefix}-api"
 }
@@ -59,4 +70,6 @@ locals {
   prefix           = module.shared.name_prefix
   secret_arns      = data.terraform_remote_state.secrets.outputs.secret_arns
   artifacts_bucket = data.terraform_remote_state.storage.outputs.artifacts_bucket
+  jobs_table_name  = data.terraform_remote_state.jobs.outputs.verify_jobs_table_name
+  jobs_table_arn   = data.terraform_remote_state.jobs.outputs.verify_jobs_table_arn
 }
