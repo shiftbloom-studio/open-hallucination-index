@@ -1,0 +1,10 @@
+{"claim": "Marie Curie won two Nobel Prizes.", "label": "SUPPORTS"}
+{"claim": "Albert Einstein was born in Germany.", "label": "SUPPORTS"}
+{"claim": "The Eiffel Tower is in London.", "label": "REFUTES"}
+{"claim": "Stephen Hawking won the Nobel Prize in Physics.", "label": "REFUTES"}
+{"claim": "Charles Darwin wrote On the Origin of Species.", "label": "SUPPORTS"}
+{"claim": "Mount Everest is the tallest mountain on Earth.", "label": "SUPPORTS"}
+{"claim": "Water boils at 0 degrees Celsius at sea level.", "label": "REFUTES"}
+{"claim": "The Great Wall of China is visible from the Moon with the naked eye.", "label": "REFUTES"}
+{"claim": "Leonardo da Vinci painted the Mona Lisa.", "label": "SUPPORTS"}
+{"claim": "Isaac Newton discovered the law of universal gravitation.", "label": "SUPPORTS"}
