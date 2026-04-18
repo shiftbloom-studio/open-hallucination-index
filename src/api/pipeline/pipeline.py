@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Literal
 from uuid import UUID, uuid4
 
@@ -47,6 +48,29 @@ logger = logging.getLogger(__name__)
 
 
 RigorTier = Literal["fast", "balanced", "maximum"]
+
+# Stream D2: progress-reporter callback. The async polling handler passes
+# one of these so it can advance the DynamoDB record's ``phase`` field at
+# each of the five natural boundaries below. See the module docstring of
+# ``src/api/server/jobs.py`` for the polling protocol.
+PhaseCallback = Callable[[str], Awaitable[None]]
+
+
+async def _safe_fire(callback: PhaseCallback | None, phase: str) -> None:
+    """Invoke ``callback`` if present; swallow exceptions.
+
+    Progress reporting is best-effort — a transient DynamoDB write failure
+    from the polling handler MUST NOT abort an in-flight verdict. We log
+    and move on; the next phase will try again, and the final
+    ``complete_job`` / ``fail_job`` write still runs after verify()
+    returns.
+    """
+    if callback is None:
+        return
+    try:
+        await callback(phase)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("phase callback %r failed: %s", phase, exc)
 
 
 # Maximum concurrent NLI classify() calls per /verify request. Sized so a
@@ -107,17 +131,28 @@ class Pipeline:
         retrieval_tier: Literal["local", "default", "max"] = "default",
         max_claims: int = 50,
         request_id: UUID | None = None,
+        phase_callback: PhaseCallback | None = None,
     ) -> DocumentVerdict:
-        """Run the full L1→L7 pipeline on a single text, return a DocumentVerdict."""
+        """Run the full L1→L7 pipeline on a single text, return a DocumentVerdict.
+
+        ``phase_callback`` (Stream D2) is invoked once BEFORE each of the
+        five natural phases — decomposing, retrieving_evidence,
+        classifying, calibrating, assembling — so the async polling
+        handler can advance a DynamoDB ``phase`` field while the pipeline
+        runs. Callback failures are logged and swallowed; see
+        :func:`_safe_fire` for the exact semantic.
+        """
         del domain_hint  # Phase 1: domain hint honored in Phase 3 via the router
         request_id = request_id or uuid4()
         t0 = time.perf_counter()
 
         # L1 — decomposition
+        await _safe_fire(phase_callback, "decomposing")
         claims = await self._decomposer.decompose(text)
         logger.debug("request %s: decomposed into %d claims", request_id, len(claims))
 
         # L1 — evidence retrieval per claim (placeholder when no collector)
+        await _safe_fire(phase_callback, "retrieving_evidence")
         evidence_per_claim: dict[UUID, list[Evidence]] = {}
         if self._retrieval is not None and claims:
             for claim in claims:
@@ -132,13 +167,17 @@ class Pipeline:
             for claim in claims:
                 evidence_per_claim[claim.id] = []
 
-        # L2 — domain routing (placeholder: always general)
+        # L2 — domain routing (placeholder: always general). Not a polling
+        # boundary — L2 is a trivial dict lookup in the placeholder path
+        # and too fast for the UI to render anything meaningful.
         assignments = await self._route_claims(claims)
 
         # L3 / L4 — NLI + PCG joint inference (placeholder: naive posterior)
+        await _safe_fire(phase_callback, "classifying")
         posteriors = await self._compute_posteriors(claims, evidence_per_claim, assignments)
 
         # L5 — conformal calibration per claim
+        await _safe_fire(phase_callback, "calibrating")
         claim_verdicts = []
         for claim in claims:
             assignment = assignments[claim.id]
@@ -174,6 +213,7 @@ class Pipeline:
             claim_verdicts.append(cv)
 
         # L7 — document assembly
+        await _safe_fire(phase_callback, "assembling")
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         decomp_coverage = self._compute_decomp_coverage(text, claims)
         document_verdict = assemble_document_verdict(
