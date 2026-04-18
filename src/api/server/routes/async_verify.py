@@ -80,6 +80,16 @@ async def async_verify(
     body: _AsyncVerifyRequest,
     pipeline: Pipeline = Depends(get_pipeline),  # noqa: B008
 ) -> ORJSONResponse:
+    # Entry log: the ABSENCE of this line in CloudWatch is the clearest
+    # possible signal that the handler is not being reached (e.g. middleware
+    # 403'ing before dispatch, Web Adapter routing mismatch, Lambda warm-pool
+    # stuck on an older image). D2's first deploy silent-failed for exactly
+    # this reason; keeping the log line before every guard means regressions
+    # on "request never reached the handler" show up loudly in observability.
+    logger.info(
+        "async-verify entry: depth=%s job_id=%s", body.depth, body.job_id
+    )
+
     # 1. Depth guard FIRST — before any DynamoDB read, before anything
     #    that could itself self-invoke. This is a hard $-cap.
     if body.depth > 1:
