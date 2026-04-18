@@ -1,0 +1,41 @@
+name: v2 post-merge probe
+
+# Wave 3 post-deploy synthetic probe. Runs for 30 min after a
+# v2-main-deploy completes, polling /api/v2/verify with Marie-Curie
+# style claims every 2 min. Emits warnings on any failure but does NOT
+# auto-rollback (that path is owned by v2-post-deploy-verify.yml).
+
+on:
+  workflow_run:
+    workflows: ["v2 main deploy"]
+    types: [completed]
+
+concurrency:
+  group: v2-post-merge-probe
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  probe:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install httpx
+
+      - name: 30-min synthetic probe (2-min cadence)
+        env:
+          OHI_API_URL: https://ohi-api.shiftbloom.studio
+          OHI_EDGE_SECRET: ${{ secrets.CF_EDGE_SECRET }}
+        run: |
+          python scripts/synthetic_probe.py --duration 1800 --interval 120

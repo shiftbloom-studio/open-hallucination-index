@@ -1,0 +1,106 @@
+name: v2 main deploy
+
+# Wave 3 e2e-test-and-merge.md §2.6 — auto-deploy on main push. This is
+# the post-ff-merge half of the release pipeline. It builds the Lambda
+# image, pushes to ECR, updates ``ohi-api`` to the new digest, and
+# tags ECR with both ``:prod`` and ``:sha-<short>`` so rollback
+# scripts can look up the previous tag.
+#
+# On success → fires the v2-post-deploy-verify.yml workflow via
+# workflow_run. On failure → rollback step restores the previous
+# ``:prod`` digest.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - ".github/workflows/v2-unit-tests.yml"
+
+concurrency:
+  group: v2-main-deploy
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image_digest: ${{ steps.push.outputs.image_digest }}
+      previous_image_uri: ${{ steps.rollback_anchor.outputs.previous_image_uri }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-v2-main-deploy-${{ github.sha }}
+
+      - name: Capture previous image URI (rollback anchor)
+        id: rollback_anchor
+        run: |
+          prev=$(aws lambda get-function --function-name ohi-api \
+            --query 'Code.ResolvedImageUri' --output text)
+          echo "previous_image_uri=$prev" >> $GITHUB_OUTPUT
+          echo "Previous image: $prev"
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build + push image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/lambda/Dockerfile
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: |
+            ${{ vars.ECR_REPOSITORY_URL }}:prod
+            ${{ vars.ECR_REPOSITORY_URL }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update Lambda to new image
+        run: |
+          aws lambda update-function-code \
+            --function-name ohi-api \
+            --image-uri ${{ vars.ECR_REPOSITORY_URL }}:prod \
+            --query CodeSha256 --output text
+          until s=$(aws lambda get-function-configuration --function-name ohi-api \
+                      --query LastUpdateStatus --output text) \
+                && [ "$s" != "InProgress" ]; do sleep 5; done
+          echo "LastUpdateStatus=$s"
+          if [ "$s" != "Successful" ]; then
+            echo "::error::Lambda update failed: $s"
+            exit 1
+          fi
+
+      - name: Health check /health/deep
+        run: |
+          sleep 15
+          code=$(curl -s -o /tmp/health.json -w "%{http_code}" \
+            -H "X-OHI-Edge-Secret: ${{ secrets.CF_EDGE_SECRET }}" \
+            https://ohi-api.shiftbloom.studio/health/deep)
+          cat /tmp/health.json
+          if [ "$code" != "200" ]; then
+            echo "::error::/health/deep returned $code"
+            exit 1
+          fi
+
+      - name: Auto-rollback on failure
+        if: failure()
+        run: |
+          echo "::warning::Rolling back to ${{ steps.rollback_anchor.outputs.previous_image_uri }}"
+          aws lambda update-function-code \
+            --function-name ohi-api \
+            --image-uri "${{ steps.rollback_anchor.outputs.previous_image_uri }}" \
+            --query CodeSha256 --output text

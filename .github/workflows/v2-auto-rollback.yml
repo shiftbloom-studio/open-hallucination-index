@@ -1,0 +1,67 @@
+name: v2 auto rollback
+
+# Wave 3 auto-rollback workflow. Triggered either by:
+#   * repository_dispatch from the SNS → GitHub webhook (alarm fires
+#     in CloudWatch → SNS → webhook → POST to /repos/.../dispatches
+#     with event_type=ohi-alarm); or
+#   * manual workflow_dispatch via the GH UI / gh CLI when an operator
+#     spots a regression post-deploy.
+#
+# Uses scripts/rollback_lambda.py which reads the previous ECR tag via
+# ``aws lambda get-function --query 'Code.ImageUri'`` (Decision I) and
+# invokes ``update-function-code``.
+
+on:
+  repository_dispatch:
+    types: [ohi-alarm, ohi-rollback]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why rolling back"
+        required: true
+        type: string
+
+concurrency:
+  group: v2-auto-rollback
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-v2-auto-rollback-${{ github.run_id }}
+
+      - name: Install CLI deps
+        run: pip install boto3
+
+      - name: Rollback Lambda to previous tag
+        run: |
+          REASON="${{ github.event.client_payload.reason || inputs.reason || 'auto-rollback' }}"
+          python scripts/rollback_lambda.py --function ohi-api --reason "$REASON"
+
+      - name: Verify /health/deep after rollback
+        run: |
+          sleep 15
+          code=$(curl -s -o /tmp/health.json -w "%{http_code}" \
+            -H "X-OHI-Edge-Secret: ${{ secrets.CF_EDGE_SECRET }}" \
+            https://ohi-api.shiftbloom.studio/health/deep)
+          cat /tmp/health.json
+          if [ "$code" != "200" ]; then
+            echo "::error::/health/deep after rollback returned $code"
+            exit 1
+          fi

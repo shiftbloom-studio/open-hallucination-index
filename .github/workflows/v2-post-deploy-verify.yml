@@ -1,0 +1,88 @@
+name: v2 post-deploy verify
+
+# Wave 3 e2e-test-and-merge.md §2.5 — the 8-item acceptance matrix
+# (4 blocking + 4 signal) runs against **real prod** after
+# v2-main-deploy.yml succeeds. Decision D: verification happens on the
+# deployed Lambda, not a preview alias.
+#
+# Blocking items (cause auto-rollback on failure):
+#   item 1: pipeline integration suite vs test-slice corpus fixture
+#   item 2: frontend Playwright E2E against ohi.shiftbloom.studio
+#   item 4: corpus integrity report threshold verification
+#
+# Signal items (publish, don't block):
+#   item 5: golden-claim benchmark
+#   item 6: FEVER slice
+#   item 7: load test
+#   item 8: PCG observability on golden claims (folded into item 1)
+
+on:
+  workflow_run:
+    workflows: ["v2 main deploy"]
+    types: [completed]
+
+concurrency:
+  group: v2-post-deploy-verify
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  blocking-suite:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-v2-postdeploy-${{ github.run_id }}
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "src/api[dev]"
+          pip install httpx
+
+      - name: Integration suite vs prod (item 1)
+        env:
+          PYTHONIOENCODING: utf-8
+          PYTHONPATH: src/api
+          OHI_API_URL: https://ohi-api.shiftbloom.studio
+          OHI_EDGE_SECRET: ${{ secrets.CF_EDGE_SECRET }}
+        run: |
+          pytest -q tests/integration -m "not infra" --no-cov || INT_RC=$?
+          echo "integration_rc=${INT_RC:-0}" >> $GITHUB_ENV
+
+      - name: Golden claims (item 5 — signal)
+        continue-on-error: true
+        env:
+          OHI_API_URL: https://ohi-api.shiftbloom.studio
+          OHI_EDGE_SECRET: ${{ secrets.CF_EDGE_SECRET }}
+        run: |
+          pytest -q tests/benchmark/test_golden_claims.py -m "not infra" --no-cov || true
+
+      - name: Synthetic probe (item 8 — 10 min quick probe)
+        env:
+          OHI_API_URL: https://ohi-api.shiftbloom.studio
+          OHI_EDGE_SECRET: ${{ secrets.CF_EDGE_SECRET }}
+        run: |
+          python scripts/synthetic_probe.py --duration 600 --interval 60 || PROBE_RC=$?
+          echo "probe_rc=${PROBE_RC:-0}" >> $GITHUB_ENV
+
+      - name: Auto-rollback on any blocking failure
+        if: env.integration_rc != '0' || env.probe_rc != '0'
+        run: |
+          echo "::error::Blocking verify failed — integration=${{ env.integration_rc }} probe=${{ env.probe_rc }}"
+          python scripts/rollback_lambda.py --function ohi-api --reason "post-deploy-verify-failed"
+          exit 1

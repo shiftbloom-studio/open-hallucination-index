@@ -1,0 +1,52 @@
+name: v2 unit tests
+
+# Wave 3 e2e-test-and-merge.md §2 item 3 — the pre-push gate. Runs the
+# canonical pytest runline on every PR + feat push. Green here is the
+# prerequisite for the v2-release.yml fast-forward to main (Decision D:
+# no preview Lambda, no Vercel preview — CI green is the gate).
+
+on:
+  pull_request:
+    branches: [main, feat/ohi-v2-foundation]
+  push:
+    branches: [feat/ohi-v2-foundation]
+
+concurrency:
+  group: v2-unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps (editable src/api + dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "src/api[dev]"
+          pip install numpy orjson
+
+      - name: pytest -q tests -m "not infra"
+        env:
+          PYTHONIOENCODING: utf-8
+          PYTHONPATH: src/api
+        run: |
+          pytest -q tests -m "not infra" --no-cov
+
+      - name: Smoke-import Stream P adapters
+        env:
+          PYTHONPATH: src/api
+        run: |
+          python -c "
+          from adapters.pcg_belief_propagation import PCGBeliefPropagationAdapter
+          from adapters.nli_openai_gpt54 import NliOpenAIGpt54Adapter
+          from adapters.nli_claim_claim import ClaimClaimNliDispatcher
+          print('OK: Stream P adapters importable')
+          "

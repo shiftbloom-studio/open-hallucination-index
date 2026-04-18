@@ -1,0 +1,53 @@
+name: v2 release on feat green
+
+# Wave 3 e2e-test-and-merge.md §2.6 — automated feat→main fast-forward
+# merge when the v2-unit-tests workflow reports green for the tip of
+# feat. Decision E: fast-forward merge (not --no-ff) so main stays a
+# linear history of shipped commits.
+#
+# After the ff merge, main auto-deploys via the main-push trigger on
+# v2-main-deploy.yml (release.yml on tag push is kept for named-release
+# cutover below this workflow).
+
+on:
+  workflow_run:
+    workflows: ["v2 unit tests"]
+    types: [completed]
+    branches: [feat/ohi-v2-foundation]
+
+concurrency:
+  group: v2-release-on-feat-green
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  fast-forward-to-main:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "OHI Release Bot"
+          git config user.email "releases@shiftbloom.studio"
+
+      - name: Fast-forward main to feat tip
+        run: |
+          FEAT_SHA="${{ github.event.workflow_run.head_sha }}"
+          echo "Fast-forwarding main to feat tip $FEAT_SHA"
+          git fetch origin main feat/ohi-v2-foundation
+          git checkout main
+          # Abort if main is ahead of feat (guarding against post-hotfix drift).
+          if ! git merge-base --is-ancestor origin/main "$FEAT_SHA"; then
+            echo "::error::origin/main is not ancestor of feat tip $FEAT_SHA — cannot fast-forward."
+            exit 1
+          fi
+          git merge --ff-only "$FEAT_SHA"
+          git push origin main
