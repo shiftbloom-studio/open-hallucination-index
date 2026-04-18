@@ -81,15 +81,43 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+export interface JobAccepted {
+  job_id: string;
+}
+
+export interface JobStatus {
+  job_id: string;
+  status: "pending" | "done" | "error";
+  phase: string;
+  created_at: number;
+  updated_at: number;
+  completed_at?: number;
+  result?: DocumentVerdict;
+  error?: string;
+}
+
 export const ohi = {
-  verify: async (req: VerifyRequest, opts: RequestOptions = {}): Promise<DocumentVerdict> => {
+  /**
+   * Submit a verification job. Post-D2 this no longer blocks on the
+   * pipeline — it returns 202 with a job_id; poll `.verifyStatus(id)`
+   * until the status transitions to "done" or "error".
+   */
+  verify: async (req: VerifyRequest, opts: RequestOptions = {}): Promise<JobAccepted> => {
     const res = await fetch(`${apiBase()}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(req),
       signal: opts.signal,
     });
-    return asJson<DocumentVerdict>(res);
+    return asJson<JobAccepted>(res);
+  },
+
+  verifyStatus: async (jobId: string, opts: RequestOptions = {}): Promise<JobStatus> => {
+    const res = await fetch(`${apiBase()}/verify/status/${encodeURIComponent(jobId)}`, {
+      headers: { Accept: "application/json" },
+      signal: opts.signal,
+    });
+    return asJson<JobStatus>(res);
   },
 
   verdict: async (id: string, opts: RequestOptions = {}): Promise<DocumentVerdict> => {
