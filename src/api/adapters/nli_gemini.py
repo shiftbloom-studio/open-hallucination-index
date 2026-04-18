@@ -38,22 +38,71 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Prompt — copied verbatim from docs/superpowers/plans/2026-04-18-phase2-
-# orchestration.md §4.2. Any change here must be paired with an update to
-# that plan section; the prompt is part of the contract Fabian approved.
+# Prompt — v2 decisive variant (post Einstein-Russia tuning). The v1 prompt
+# was deliberately symmetric and terse; Gemini 3 Pro hedged to "neutral"
+# whenever the passage didn't literally quote the claim, which let
+# obviously-refutable claims ("Einstein was born in Russia") settle at
+# p_true ≈ 0.33 — too soft, and close to "uncertain" when the truth value
+# is not uncertain at all. v2 forces a decisive 3-way choice: passages
+# that provide a *contradicting fact* are REFUTE, not NEUTRAL; NEUTRAL is
+# reserved for genuinely off-topic text.
+#
+# Paired with a pipeline-side change: ``label="neutral"`` results are now
+# skipped from the Beta-posterior fold (``_beta_update_from_nli`` in
+# pipeline.py). The prompt and the fold rule must stay in lockstep — if
+# one is loosened, off-topic tilt starts leaking into the posterior again.
 # ---------------------------------------------------------------------------
 
-_NLI_PROMPT_TEMPLATE = """You are a fact-checking NLI model. Given a claim and an evidence
-passage, classify: does the evidence SUPPORT, REFUTE, or stay NEUTRAL
-on the claim? Return strict JSON:
+_NLI_PROMPT_TEMPLATE = """You are a strict fact-checking NLI classifier. Given a CLAIM and an
+EVIDENCE passage, decide whether the evidence SUPPORTS, REFUTES, or is
+truly NEUTRAL with respect to the claim.
+
+Decision rules (apply in order):
+
+1. SUPPORT — the evidence confirms the claim's central assertion,
+   either by explicitly stating it or by providing facts from which a
+   reasonable reader would conclude the claim is true. Use SUPPORT
+   whenever the evidence is on-topic and consistent with the claim.
+
+2. REFUTE — the evidence contradicts the claim, EITHER directly ("X
+   did not do Y") OR by providing facts that are **mutually exclusive**
+   with the claim. Example: evidence "Albert Einstein was born in Ulm,
+   Germany in 1879" REFUTES the claim "Einstein was born in Russia",
+   because a person is born in exactly one country. Do NOT downgrade
+   such cases to NEUTRAL; providing the correct answer to a factual
+   question that the claim gets wrong IS a refutation.
+
+3. NEUTRAL — reserved ONLY for passages that do not address the claim's
+   subject-predicate-object at all. Example: "Einstein won the Nobel
+   Prize in Physics in 1921" is NEUTRAL with respect to the claim
+   "Einstein was born in Russia" — the Nobel fact is on a different
+   predicate and neither confirms nor contradicts the birthplace claim.
+   NEUTRAL is NOT for "I am uncertain" — if you can infer SUPPORT or
+   REFUTE from the evidence, you MUST pick one of those.
+
+Score guidance:
+
+- For SUPPORT, ``supporting_score`` should be ≥ 0.70 when the evidence
+  clearly confirms the claim; reserve lower support scores for weak or
+  partial confirmation.
+- For REFUTE, ``refuting_score`` should be ≥ 0.70 when the evidence
+  clearly contradicts the claim; reserve lower refute scores for
+  partial contradiction.
+- For NEUTRAL, ``neutral_score`` should be ≥ 0.70. Off-topic evidence
+  has no meaningful support or refute mass; keep ``supporting_score``
+  and ``refuting_score`` low (≤ 0.15 each).
+- All three scores must sum to 1.0.
+
+Return strict JSON, no prose outside the object:
   {{
     "label": "support" | "refute" | "neutral",
     "supporting_score": 0.0-1.0,
     "refuting_score":   0.0-1.0,
-    "neutral_score":    0.0-1.0,   (all three sum to 1.0)
-    "reasoning": "<one sentence, the key fact>",
+    "neutral_score":    0.0-1.0,
+    "reasoning": "<one sentence, the single key fact from the evidence>",
     "confidence": 0.0-1.0
   }}
+
 Claim: "{claim_text}"
 Evidence: "{evidence_text}"
 """
