@@ -47,6 +47,7 @@ _FLAT_PACKAGES = {
     "config",
     "server",
     "services",
+    "ingestion",  # Wave 3 Stream C
 }
 for _cached_name in list(sys.modules):
     _root = _cached_name.split(".", 1)[0]

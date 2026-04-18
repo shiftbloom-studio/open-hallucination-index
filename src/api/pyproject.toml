@@ -57,7 +57,7 @@ dev = [
 ohi-server = "config.entrypoint:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["models", "interfaces", "pipeline", "adapters", "server", "config", "services"]
+packages = ["models", "interfaces", "pipeline", "adapters", "server", "config", "services", "ingestion"]
 
 [tool.ruff]
 target-version = "py314"
