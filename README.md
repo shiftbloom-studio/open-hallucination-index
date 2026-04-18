@@ -5,15 +5,15 @@
 <h1 align="center">Open Hallucination Index</h1>
 
 <p align="center">
-  <strong>🔍 Scientifically grounded real-time fact-checking for LLM outputs</strong>
+  <strong>Scientifically grounded fact-checking for LLM outputs — with calibrated uncertainty.</strong>
 </p>
 
 <p align="center">
-  <a href="#project-overview">Project Overview</a> •
-  <a href="#-part-1--saas-web-application">SaaS Website</a> •
-  <a href="#-part-2--ohi-verification-service">OHI Service</a> •
-  <a href="#-part-3--benchmarking--evaluation">Benchmarking</a> •
+  <a href="#current-status">Status</a> •
+  <a href="#how-it-works">How It Works</a> •
+  <a href="#architecture">Architecture</a> •
   <a href="#getting-started">Getting Started</a> •
+  <a href="#documentation">Docs</a> •
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -25,489 +25,390 @@
 
 ---
 
-**Open Hallucination Index (OHI)** is a high-performance middleware and analysis platform that decomposes LLM outputs into atomic claims, verifies them against curated knowledge sources, and calculates a traceable trust score in real-time. The focus is on reproducible, evidence-based hallucination detection with clear interfaces for research, production use, and auditability.
+**Open Hallucination Index (OHI)** decomposes LLM output into atomic
+claims, retrieves real evidence for each, and returns a calibrated
+`p_true ∈ [0, 1]` with a confidence interval. The goal is a traceable,
+reproducible, open-source alternative to black-box "trust scores" — one
+where every verdict is backed by citable evidence and every number has
+a published calibration methodology.
 
-## 🧭 Project Overview
+The live service is at **<https://ohi.shiftbloom.studio>**.
 
-The project is organized into **three distinct parts**, each with its own purpose, technology stack, and workflows:
+---
 
-| # | Part | What it does | Tech Stack |
-|---|------|-------------|------------|
-| 1 | [**SaaS Web Application**](#-part-1--saas-web-application) | User-facing website with authentication, token-based billing, dashboards, and evidence visualization | Next.js, React, Supabase, Stripe |
-| 2 | [**OHI Verification Service**](#-part-2--ohi-verification-service) | Core algorithm that decomposes text into claims, retrieves evidence from multiple knowledge sources, and computes trust scores | FastAPI, Neo4j, Qdrant, Redis, MCP |
-| 3 | [**Benchmarking & Evaluation**](#-part-3--benchmarking--evaluation) | Research-grade test suite comparing OHI accuracy and performance against other hallucination detection approaches | Python, statistical testing, HuggingFace datasets |
+## Current status
+
+OHI is mid-way through its **v2 rework** on branch
+`feat/ohi-v2-foundation`. v2 replaces the v1 "trust score" heuristic with
+a proper probabilistic pipeline: NLI-based claim verification, Bayesian
+posterior update via Probabilistic Claim Graph (PCG), and split-conformal
+calibration.
+
+**Live today (Wave 2):**
+
+- Async verify flow: `POST /api/v2/verify` → `202` + `job_id`, client
+  polls `/api/v2/verify/status/{job_id}` until `status=done` or `error`
+- Gemini 3 Pro NLI (with `thinkingLevel=HIGH`, `safetySettings=BLOCK_NONE`)
+  over live Wikipedia evidence (MediaWiki MCP)
+- Verdict shape: per-claim `p_true`, confidence interval, supporting +
+  refuting evidence passages, PCG Beta-posterior update from NLI
+- AWS Lambda + API Gateway + Cloudflare WAF + Neo4j Aura + Qdrant-on-PC;
+  Next.js 16 static export on Vercel
+
+**In progress (Wave 3, final pre-merge):**
+
+- Full TRW-BP belief propagation + damped LBP fallback + Gibbs MCMC
+  sanity in `balanced`+ rigor (replaces the per-claim Beta placeholder)
+- Claim-claim NLI via OpenAI GPT-5.4 (`reasoning.effort=xhigh`) with
+  Gemini-3-Pro fallback — builds the actual probabilistic *claim graph*
+- Full-enwiki + Wikidata corpus ingestion (Aura = content source of
+  truth, Qdrant = vector-only passage index)
+- Automated merge-to-main gate with post-deploy synthetic probe +
+  auto-rollback
+
+**Deferred to v2.1 / Wave 4:**
+
+- Domain routing (v2.0 uses a single `general` stratum)
+- Calibration data (v2.0 ships with `fallback_used: "general"` badges;
+  intervals will be wide and honest)
+- Qdrant-to-AWS migration (EC2 / OpenSearch / Bedrock Knowledge Base —
+  sponsorship-pitch-driven choice)
+
+See [docs/superpowers/checkpoints/](docs/superpowers/checkpoints/) for
+full state (gitignored — local only; ask for access if needed).
+
+---
+
+## How it works
+
+For every verify request:
+
+1. **Decomposition.** The input text is broken into atomic claims via a
+   Gemini 3 Pro call. Each claim gets an SPO shape (subject, predicate,
+   object) plus a type classifier (quantitative, temporal, factual,
+   etc.).
+2. **Evidence retrieval.** Claims are routed through `AdaptiveEvidenceCollector`:
+   - **MediaWiki MCP** (live Wikipedia search) for the current v2.0
+     baseline
+   - Wave 3+: Neo4j Aura graph walks (entity-centered, Wikidata-aligned)
+     + Qdrant passage-vector similarity search over a pinned enwiki
+     snapshot
+3. **Natural-Language Inference (NLI).** Each `(claim, evidence)` pair
+   goes to Gemini 3 Pro for a SUPPORT / REFUTE / NEUTRAL classification
+   with calibrated scores.
+4. **Probabilistic claim graph (PCG).** Wave 3 adds claim-claim NLI
+   (OpenAI GPT-5.4) over claim pairs that share entities. The graph
+   feeds TRW-BP belief propagation (with damped-LBP fallback + Gibbs
+   MCMC sanity) to produce coherent posteriors across claims.
+5. **Conformal calibration.** A split-conformal layer produces an
+   interval around each `p_true`. Wave 4 adds per-domain calibration
+   strata; until then every verdict carries an honest `fallback_used:
+   "general"` badge.
+6. **Verdict assembly.** Document-level `document_score` is the
+   geometric mean of per-claim `p_true`. Full provenance (evidence
+   passages with URLs) is included in the response.
+
+See [docs/API.md](docs/API.md) for the complete API surface and response
+schemas.
+
+---
+
+## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        Open Hallucination Index                          │
-│                                                                          │
-│  ┌──────────────────┐  ┌──────────────────────┐  ┌───────────────────┐  │
-│  │  Part 1: SaaS    │  │  Part 2: OHI Service │  │  Part 3: Bench-  │  │
-│  │  Web Application │  │  & Algorithm         │  │  mark & Evaluate │  │
-│  │                  │  │                      │  │                   │  │
-│  │  Next.js UI      │─▶│  FastAPI API          │◀─│  Benchmark Suite  │  │
-│  │  Supabase Auth   │  │  MCP Server          │  │  Statistical      │  │
-│  │  Stripe Billing  │  │  Neo4j + Qdrant      │  │  Analysis         │  │
-│  │  Dashboard       │  │  Claim Decomposition │  │  Strategy Compare │  │
-│  └──────────────────┘  └──────────────────────┘  └───────────────────┘  │
-│                                                                          │
-│         src/frontend/       src/api/ + src/ohi-mcp-server/               │
-│                             gui_ingestion_app/        gui_benchmark_app/ │
-└──────────────────────────────────────────────────────────────────────────┘
+Browser (static Next.js export)
+   │
+   │  fetch https://ohi.shiftbloom.studio
+   ▼
+Vercel CDN
+   │
+   │  fetch https://ohi-api.shiftbloom.studio/api/v2/*
+   ▼
+Cloudflare edge            WAF • rate limit • Transform Rule (X-OHI-Edge-Secret)
+   │
+   ▼
+AWS API Gateway (HTTP API, regional custom domain + ACM cert)
+   │
+   ▼
+AWS Lambda (container image, 180s timeout)
+   ├─► DynamoDB ohi-verify-jobs (async job state, 1h TTL)
+   ├─► Self-invoke (async)   ─► same Lambda runs the pipeline
+   ├─► Gemini API (decomposer + claim-evidence NLI)
+   ├─► OpenAI API (claim-claim NLI — Wave 3)
+   ├─► MediaWiki MCP (live Wikipedia evidence)
+   ├─► Neo4j Aura Pro (entity graph + entity-level vector index)
+   ├─► Qdrant on PC (passage vectors, vector-only payload)
+   └─► AWS Secrets Manager (API keys, edge secret, Aura creds)
+```
+
+**Key architectural decisions** (full context in
+[CLAUDE.md](CLAUDE.md)):
+
+- **Lambda + API Gateway** over Lambda Function URL, because Function
+  URLs strict-check the Host header and Cloudflare's free/pro tier
+  can't override it
+- **Flat Cloudflare naming** (`ohi-api.shiftbloom.studio` not
+  `api.ohi.shiftbloom.studio`) because CF free-tier Universal SSL
+  covers only one level of wildcard
+- **Neo4j Aura** over PC-Neo4j — Bolt (TCP:7687) doesn't work through
+  CF's free-tier HTTPS tunnel
+- **Embeddings run on PC** (`pc-embed`, MiniLM-L12-v2, free CPU) —
+  keeps the Lambda image slim (<500 MB rather than 2.4 GB)
+- **Qdrant stays on PC** as vector-only index with payload
+  `{passage_id, qid}` — text content lives in Aura as the single source
+  of truth. v1's "redundancy pain" (text duplicated across both stores)
+  is eliminated
+- **Async polling** over SSE, because SSE would need Lambda Function
+  URL's `RESPONSE_STREAM` mode, which CF free-tier can't proxy due to
+  the Host-header issue above
+
+---
+
+## Repository structure
+
+```
+open-hallucination-index/
+├── src/
+│   ├── api/                   # FastAPI verification service (v2 rework active)
+│   │   ├── adapters/          # Gemini, OpenAI, Qdrant, Neo4j, MediaWiki,
+│   │   │                      #   NLI, embeddings, conformal calibrator
+│   │   ├── pipeline/          # Decomposer → evidence → NLI → PCG → assembly
+│   │   ├── server/            # FastAPI app, routes, middleware
+│   │   ├── interfaces/        # Ports (NliAdapter, PcgInferenceService, …)
+│   │   └── config/            # Settings, DI container, infra env
+│   ├── frontend/              # Next.js 16 static export (Vercel)
+│   │   ├── src/app/           # App Router pages
+│   │   ├── src/components/    # UI (shadcn/ui + Tailwind)
+│   │   └── src/lib/           # ohi-client, verify-controller, types
+│   └── ohi-mcp-server/        # (legacy) standalone MCP server; Wave 2 wired
+│                              #   MediaWiki directly into src/api
+├── gui_ingestion_app/         # (legacy v1) Wikipedia ingestion pipeline.
+│                              #   v2 Wave 3 replaces with src/api/ingestion
+├── gui_benchmark_app/         # Benchmark suite (Part 3)
+├── infra/
+│   └── terraform/             # AWS + CF + Vercel infra (layered: bootstrap,
+│                              #   storage, secrets, compute, cloudflare,
+│                              #   vercel, observability, jobs)
+├── docker/
+│   ├── lambda/                # Lambda container image build
+│   ├── compose/pc-data.yml    # PC-hosted Neo4j/Qdrant/embed stack
+│   └── pc-embed/              # MiniLM embedding service
+├── tests/                     # pytest: unit/, integration/, infra/
+├── docs/
+│   ├── API.md                 # Current API surface (v2)
+│   ├── FRONTEND.md            # Frontend architecture (polling)
+│   ├── runbooks/              # Bootstrap, deploy, rollback, rotation
+│   └── superpowers/           # Internal plans/specs/checkpoints (gitignored)
+├── .github/workflows/         # CI: plan, apply, release, drift detection
+├── CLAUDE.md                  # Operational knowledge for agents + humans
+└── LICENSE                    # MIT
 ```
 
 ---
 
-## 🌐 Part 1 — SaaS Web Application
+## Getting started
 
-The user-facing website provides authentication, token-based billing, interactive dashboards, and evidence visualization for verification results.
+### Prerequisites
 
-**Directory:** [`src/frontend/`](src/frontend/) · **Guide:** [src/frontend/README.md](src/frontend/README.md)
+- **Python 3.14+** (API + benchmark suite)
+- **Node.js 22+** (frontend)
+- **Docker Desktop** (Lambda image builds, local PC stack)
+- **AWS CLI v2, Terraform 1.14+, jq, gh** for infra work
 
-### Technology
-
-| Technology | Purpose |
-|-----------|---------|
-| **Next.js 16** (App Router) | Server Components, Server Actions, routing |
-| **React 19 + TypeScript** | UI components and type safety |
-| **Tailwind CSS 4 + shadcn/ui** | Styling and design system |
-| **Supabase** | Authentication (OAuth), user profiles, token tracking |
-| **Stripe** | Token-based billing (one-time purchases, webhook processing) |
-| **React Query** | API state management and caching |
-
-### Key Features
-
-- **Authentication & Sessions** — Supabase OAuth login/signup with protected routes and middleware
-- **Token-Based Billing** — Three purchase tiers (Starter / Professional / Enterprise) via Stripe checkout; free daily tokens for registered users
-- **Verification Dashboard** — Submit claims, view real-time verification results, and explore evidence traces
-- **Evidence Traceability** — Drill down into source provenance, confidence intervals, and citation chains
-- **API Proxy** — Server-side proxy at `/api/ohi/*` forwards requests to the OHI API, injecting authentication
-- **Legal & Compliance** — Terms of Service, Privacy Policy, Cookie Policy, Accessibility statement
-
-### Frontend Workflow
-
-```mermaid
-flowchart TD
-  U[User] --> A[Next.js App Router]
-  A --> B["Auth and Session - Supabase"]
-  A --> C[React Query / Server Actions]
-  C --> D["API Proxy - /api/ohi/*"]
-  D --> E[OHI API]
-  E --> F[Verification Results]
-  F --> G[UI Rendering + Charts]
-  G --> U
-```
-
-### Frontend Setup
-
-```bash
-cd src/frontend
-npm install
-npm run dev      # Development server
-npm run test     # Unit tests
-npm run lint     # Linting
-npm run test:e2e # E2E tests (Playwright)
-```
-
-Environment variables (create `src/frontend/.env.local`):
-```env
-DEFAULT_API_URL=http://localhost:8080
-DEFAULT_API_KEY=your-api-key
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-STRIPE_SECRET_KEY=your-stripe-secret-key
-STRIPE_WEBHOOK_SECRET=your-stripe-webhook-secret
-```
-
----
-
-## ⚙️ Part 2 — OHI Verification Service
-
-The core engine that powers hallucination detection. It decomposes text into atomic claims, retrieves evidence from local and external knowledge sources, and computes traceable trust scores with confidence intervals.
-
-### Components
-
-| Component | Directory | Purpose |
-|-----------|-----------|---------|
-| **Verification API** | [`src/api/`](src/api/) | FastAPI backend orchestrating claim decomposition, verification, and scoring |
-| **MCP Server** | [`src/ohi-mcp-server/`](src/ohi-mcp-server/) | Aggregates 13+ external knowledge sources (Wikipedia, PubMed, OpenAlex, etc.) via MCP protocol |
-| **Ingestion Pipeline** | [`gui_ingestion_app/`](gui_ingestion_app/) | Populates Neo4j and Qdrant with Wikipedia knowledge for local verification |
-| **Infrastructure** | [`docker/`](docker/) | Docker Compose stack with Neo4j, Qdrant, Redis, vLLM, Nginx |
-
-**Guides:** [src/api/README.md](src/api/README.md) · [src/ohi-mcp-server/README.md](src/ohi-mcp-server/README.md) · [gui_ingestion_app/README.md](gui_ingestion_app/README.md) · [docker/README.md](docker/README.md)
-
-### How It Works
-
-1. **Claim Decomposition** — An LLM breaks input text into atomic, independently verifiable claims
-2. **Evidence Retrieval** — Claims are routed to knowledge sources based on domain classification:
-   - **Local Tier:** Neo4j (exact graph queries) + Qdrant (semantic vector search)
-   - **External Tier:** MCP sources (Wikipedia, PubMed, OpenAlex, Crossref, GDELT, and more)
-3. **Verification Oracle** — Evidence is evaluated against each claim using configurable strategies
-4. **Trust Scoring** — A weighted scorer computes a trust score (0.0–1.0) with confidence intervals
-5. **Knowledge Track** — Full provenance chain linking claims → evidence → sources for auditability
-
-### Verification Strategies
-
-| Strategy | Description | Use Case |
-|----------|-------------|----------|
-| `mcp_enhanced` | Query external sources (Wikipedia, Context7) + local stores | **Recommended** — Most comprehensive |
-| `hybrid` | Parallel graph + vector search | Fast local-only verification |
-| `cascading` | Graph first, vector fallback | When exact matches preferred |
-| `graph_exact` | Neo4j only | Known entity verification |
-| `vector_semantic` | Qdrant only | Semantic similarity matching |
-| `adaptive` | Tiered retrieval with early-exit heuristics | Balanced speed + coverage |
-
-### Architecture
-
-The API follows a **hexagonal (ports & adapters)** design, making knowledge sources, scoring strategies, and retrieval pipelines fully interchangeable.
-
-| Feature | Description |
-|---------|-------------|
-| **🧠 Claim Decomposition** | Breaks text into verifiable atomic claims using LLM-powered extraction |
-| **📊 Multi-Source Verification** | Validates against Neo4j graph, Qdrant vectors, and MCP sources |
-| **⚡ High Performance** | Session pooling, batch processing, parallel verification, Redis caching |
-| **🧭 Adaptive Evidence** | Adaptive strategy balances speed and coverage with tiered retrieval |
-| **🎯 Trust Scoring** | Evidence-ratio-based scoring with confidence intervals (0.0–1.0) |
-| **🧩 Knowledge Track** | Source-aware provenance and 3D-mesh graph for each verified claim |
-| **🔌 Pluggable Architecture** | Hexagonal design — easily swap knowledge sources and strategies |
-
-### API Verification Workflow
-
-```mermaid
-flowchart TD
-  A[Input Text] --> B["Cache Lookup - Redis"]
-  B -->|Hit| Z[Return Cached VerificationResult]
-  B -->|Miss| C["Claim Decomposition - LLM"]
-  C --> D["Claim Routing - Domain and Sources"]
-  D --> E[Evidence Collection]
-  E --> E1["Local Tier - Neo4j and Qdrant"]
-  E1 -->|Insufficient| E2[MCP Tier: External Sources]
-  E2 --> F[Hybrid Verification Oracle]
-  F --> G["Trust Scoring and Confidence"]
-  G --> H[VerificationResult + Citation Trace]
-  H --> I[Cache + Response]
-```
-
-### Ingestion Workflow
-
-```mermaid
-flowchart TD
-  A[CLI / Scheduler] --> B[Download Wikipedia Dumps]
-  B --> C[Parse + Preprocess]
-  C --> D["Chunk and Tokenize"]
-  D --> E["Embed - Dense and Sparse"]
-  E --> F[Upload to Qdrant]
-  E --> G[Upload to Neo4j]
-  F --> H[Checkpoint + Metrics]
-  G --> H
-```
-
-### MCP Server Workflow
-
-```mermaid
-flowchart TD
-  A[MCP Client] --> B["Transport - SSE STDIO"]
-  B --> C["Rate Limiter and Cache"]
-  C --> D[Tool Router]
-  D --> E[Source Adapters (Parallel)]
-  E --> F["Normalize and Aggregate"]
-  F --> G[Response Payload]
-```
-
-### API Setup
+### Run the backend locally
 
 ```bash
 cd src/api
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate       # Windows Git Bash: source .venv/Scripts/activate
 pip install -e ".[dev]"
-pytest             # Run tests
-ohi-server         # Start the API server
+
+# Runs FastAPI on http://localhost:8080
+ohi-server
 ```
 
-### Required Services
-
-| Service | Purpose | Documentation |
-|---------|---------|---------------|
-| **Neo4j** | Graph database for structured knowledge | [neo4j.com](https://neo4j.com/) |
-| **Qdrant** | Vector database for semantic search | [qdrant.tech](https://qdrant.tech/) |
-| **Redis** | Caching layer (optional) | [redis.io](https://redis.io/) |
-| **LLM Service** | For claim decomposition (OpenAI, vLLM, etc.) | [vllm.ai](https://vllm.ai/) |
-
----
-
-## 📊 Part 3 — Benchmarking & Evaluation
-
-A research-grade benchmark suite that evaluates OHI's accuracy and performance relative to other broadly used hallucination detection approaches (VectorRAG, GraphRAG). Produces publication-ready reports with statistical rigor.
-
-**Directory:** [`gui_benchmark_app/`](gui_benchmark_app/) · **Guide:** [gui_benchmark_app/README.md](gui_benchmark_app/README.md)
-
-### What It Compares
-
-The benchmark evaluates all six OHI verification strategies against baseline approaches:
-
-| Approach | Type | What It Tests |
-|----------|------|---------------|
-| `graph_exact` | OHI (Neo4j only) | Pure knowledge-graph lookup (comparable to GraphRAG) |
-| `vector_semantic` | OHI (Qdrant only) | Pure semantic vector search (comparable to VectorRAG) |
-| `hybrid` | OHI (Graph + Vector) | Parallel graph and vector fusion |
-| `cascading` | OHI | Graph first, vector fallback |
-| `mcp_enhanced` | OHI | Local + external MCP sources |
-| `adaptive` | OHI | Tiered retrieval with early-exit heuristics |
-
-### Metrics
-
-- **Classification:** Accuracy, Precision, Recall, F1, MCC, ROC-AUC, PR-AUC
-- **Calibration:** Brier Score, ECE (Expected Calibration Error), MCE (Maximum Calibration Error)
-- **Statistical Rigor:** Bootstrap confidence intervals, DeLong test for ROC-AUC comparison, McNemar test for paired strategy comparison, Wilson score intervals
-- **Performance:** Latency percentiles (p50, p90, p95, p99), throughput
-
-### Benchmark Modes
-
-| Mode | Description |
-|------|-------------|
-| **Standard** | Single strategy against one dataset |
-| **Strategy Comparison** | Head-to-head comparison of multiple strategies |
-| **Cache Testing** | Measures warm vs. cold cache performance impact |
-| **COMPLETE** | Research-grade evaluation across multiple HuggingFace datasets with full statistical significance testing |
-
-### Benchmark Workflow
-
-```mermaid
-flowchart TD
-  A[Dataset CSV] --> B[Benchmark Runner]
-  B --> C[Strategy Executor]
-  C --> D[OHI API Calls]
-  D --> E[Result Collector]
-  E --> F[Metrics + Statistical Tests]
-  F --> G["Reporters - Markdown JSON CSV HTML"]
-  G --> H[benchmark_results/]
-```
-
-### Output Artifacts
-
-Reports are generated in multiple formats: Markdown (summary tables), JSON (machine-readable), CSV (raw results), and HTML (interactive console). Results include per-strategy breakdowns, cross-strategy statistical comparisons, and confidence intervals.
-
-### Benchmark Setup
+Tests:
 
 ```bash
-cd gui_benchmark_app
-pip install -e "benchmark[dev]"
-ruff check . && mypy . && pytest   # Validate
-ohi-benchmark-gui                  # Launch GUI
+pytest -q tests -m "not infra" --no-cov   # canonical runline (skips infra tests)
 ```
 
----
+### Run the frontend locally
 
-## 📚 Documentation
-
-Detailed documentation is stored in the `docs/` folder:
-
-- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) – Contribution guidelines, conventions, and review process
-- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) – Community standards
-- [docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md) – Public access and usage framework
-- [docs/API.md](docs/API.md) – Full API specification, models, examples
-- [docs/FRONTEND.md](docs/FRONTEND.md) – UI architecture, page structure, design principles
-- [docs/CLASSIFICATION_IMPROVEMENTS.md](docs/CLASSIFICATION_IMPROVEMENTS.md) – Evidence classification improvements and deployment
-- [docs/CLASSIFICATION_CONFIG.md](docs/CLASSIFICATION_CONFIG.md) – Classification configuration guide with profiles
-
-### Subsystem Guides
-
-| Guide | Scope |
-|-------|-------|
-| [src/api/README.md](src/api/README.md) | Verification API, filters, caching, strategies, knowledge-track |
-| [src/ohi-mcp-server/README.md](src/ohi-mcp-server/README.md) | MCP server, tools, routing, and ops |
-| [src/frontend/README.md](src/frontend/README.md) | Frontend architecture, data flows, and UI |
-| [gui_benchmark_app/README.md](gui_benchmark_app/README.md) | Benchmark suite, metrics, and reports |
-| [gui_ingestion_app/README.md](gui_ingestion_app/README.md) | Wikipedia ingestion pipeline and tuning |
-| [docker/README.md](docker/README.md) | Full stack Docker orchestration and service map |
-
-## 📁 Project Structure
-
-```
-open-hallucination-index/
-│
-│  ── Part 1: SaaS Web Application ──────────────────────────
-├── src/frontend/           # Next.js Frontend Application
-│   ├── src/                # React/Next.js source code
-│   │   ├── app/            # App Router pages & API routes
-│   │   ├── components/     # UI components (shadcn/ui)
-│   │   ├── lib/            # Supabase clients, Stripe, API wrapper
-│   │   └── hooks/          # React hooks
-│   ├── e2e/                # Playwright E2E tests
-│   └── package.json        # Node.js dependencies
-│
-│  ── Part 2: OHI Verification Service ──────────────────────
-├── src/api/                # Python FastAPI Backend
-│   ├── src/                # Main source code
-│   │   └── open_hallucination_index/
-│   │       ├── domain/     # Core entities (Claim, Evidence, TrustScore)
-│   │       ├── ports/      # Abstract interfaces
-│   │       ├── application/ # Use-case orchestration
-│   │       ├── adapters/   # External service implementations
-│   │       ├── infrastructure/ # Config, DI, lifecycle
-│   │       └── api/        # FastAPI routes
-│   ├── tests/              # Unit & integration tests
-│   └── pyproject.toml      # Python dependencies
-├── src/ohi-mcp-server/     # MCP Server (Node/TypeScript)
-│   ├── src/                # Source adapters, aggregator, tools
-│   └── package.json        # Node.js dependencies
-├── gui_ingestion_app/      # Wikipedia ingestion pipeline + GUI
-│   └── ingestion/          # Pipeline package (CLI + GUI)
-│
-│  ── Part 3: Benchmarking & Evaluation ─────────────────────
-├── gui_benchmark_app/      # Benchmark suite + GUI
-│   └── benchmark/          # Benchmark package (CLI + GUI)
-│
-│  ── Shared / Infrastructure ───────────────────────────────
-├── docs/                   # Documentation
-│   ├── CONTRIBUTING.md     # Contribution guidelines
-│   ├── CODE_OF_CONDUCT.md  # Community standards
-│   └── PUBLIC_ACCESS.md    # Public access documentation
-├── docker/                 # Docker assets (compose, nginx, data)
-│   ├── api/                # API Dockerfile
-│   ├── mcp-server/         # MCP Server Dockerfile
-│   ├── compose/            # docker-compose.yml
-│   └── data/               # Local storage for Neo4j/Qdrant/Redis
-├── .github/                # GitHub configuration
-│   ├── workflows/          # CI/CD pipelines
-│   └── ISSUE_TEMPLATE/     # Issue templates
-├── README.md               # This file
-├── LICENSE                 # MIT License
-└── SECURITY.md             # Security policy
-```
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- **Python 3.14+** for the API and benchmark suite
-- **Node.js 18+** for the frontend and MCP server (22+ recommended)
-- **Optional Docker Compose** for local/dev infrastructure (see [Infrastructure](#infrastructure))
-
-### Quick Start by Part
-
-| Part | Commands |
-|------|----------|
-| **1 — SaaS Website** | `cd src/frontend && npm install && npm run dev` |
-| **2 — OHI API** | `cd src/api && pip install -e ".[dev]" && ohi-server` |
-| **2 — MCP Server** | `cd src/ohi-mcp-server && npm install && npm run build && npm start` |
-| **3 — Benchmarks** | `cd gui_benchmark_app && pip install -e "benchmark[dev]" && ohi-benchmark-gui` |
-
-## 🏗️ Infrastructure
-
-Docker Compose definitions for the full stack live in `docker/compose/docker-compose.yml`. For local/dev you can copy [.env.example](.env.example) to `.env` and run the compose stack:
-
-```bash
-docker compose -f docker/compose/docker-compose.yml up -d
-```
-
-### Configuration
-
-Create a `.env` file at the repository root (see [.env.example](.env.example)):
-
-```env
-# API Settings
-API_HOST=0.0.0.0
-API_PORT=8080
-API_API_KEY=your-secret-api-key
-
-# LLM Configuration
-LLM_BASE_URL=http://your-llm-service:8000/v1
-LLM_MODEL=mistralai/Mistral-7B-Instruct-v0.2
-LLM_API_KEY=your-llm-api-key
-
-# Neo4j Graph Database
-NEO4J_URI=bolt://your-neo4j-host:7687
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=your-neo4j-password
-
-# Qdrant Vector Database
-QDRANT_HOST=your-qdrant-host
-QDRANT_PORT=6333
-
-# Redis Cache (optional)
-REDIS_HOST=your-redis-host
-REDIS_PORT=6379
-REDIS_ENABLED=true
-
-# MCP Sources (optional)
-MCP_WIKIPEDIA_ENABLED=true
-MCP_CONTEXT7_ENABLED=true
-
-# Stripe (optional, for Part 1 billing)
-STRIPE_SECRET_KEY=your-stripe-secret-key
-STRIPE_WEBHOOK_SECRET=your-stripe-webhook-secret
-```
-
-### Deployment Options
-
-You can deploy these services using:
-
-- **Docker Compose** (included in this repo)
-- **Kubernetes** (Helm charts recommended)
-- **Managed Services** (Neo4j Aura, Qdrant Cloud, Redis Cloud)
-- **Self-hosted** on bare metal or VMs
-
-## 📖 API Reference
-
-Full API documentation including request/response schemas, example calls, error concepts, and strategies can be found in [docs/API.md](docs/API.md).
-
-## 🧪 Development
-
-### Running Tests
-
-**Part 1 — Frontend:**
 ```bash
 cd src/frontend
-npm run test
-npm run lint
-npm run test:e2e
+npm install
+npm run dev        # http://localhost:3000
+npm run test       # vitest
+npm run build      # production static export
 ```
 
-**Part 2 — API:**
+### Local Docker stack (PC data services)
+
+Neo4j, Qdrant, Postgres, Redis (disabled in prod but available locally),
+and `pc-embed` embedding service:
+
 ```bash
-cd src/api
-pytest tests/ -v
-mypy src
-ruff check src tests
+docker compose -f docker/compose/pc-data.yml --profile pc-prod up -d
 ```
 
-**Part 3 — Benchmarks:**
+See [docs/runbooks/pc-compose-start.md](docs/runbooks/pc-compose-start.md)
+for the PC stack's bring-up details.
+
+### Infrastructure (AWS + Cloudflare + Vercel)
+
+Bootstrap and layered Terraform live in `infra/terraform/`. To spin up a
+full clone of the production deployment:
+
 ```bash
-cd gui_benchmark_app
-pip install -e "benchmark[dev]"
-ruff check . && mypy . && pytest
+cd infra/terraform/bootstrap
+terraform init && terraform apply
+# Then apply layers: storage → secrets → compute → cloudflare → vercel
+#                    → observability → jobs
 ```
 
-## 🤝 Contributing
+Bootstrap runbook: [docs/runbooks/bootstrap-cold-start.md](docs/runbooks/bootstrap-cold-start.md).
 
-Contributions are welcome! Please read our [Contributing Guide](docs/CONTRIBUTING.md) for details.
+---
+
+## Configuration
+
+v2 config flows through AWS Secrets Manager + Lambda env vars. For local
+dev or when running the FastAPI app outside Lambda, create
+`src/api/.env` with the values below:
+
+```env
+# LLM — Gemini native adapter (production path)
+LLM_BACKEND=gemini
+LLM_API_KEY=<gemini-api-key>
+LLM_MODEL=gemini-3-flash-preview
+NLI_LLM_MODEL=gemini-3-pro-preview
+NLI_THINKING_LEVEL=HIGH
+NLI_SELF_CONSISTENCY_K=1
+
+# Wave 3+: claim-claim NLI via OpenAI
+CC_NLI_LLM_PROVIDER=openai
+CC_NLI_LLM_MODEL=gpt-5.4-xhigh
+CC_NLI_LLM_FALLBACK_MODEL=gemini-3-pro-preview
+# OHI_OPENAI_API_KEY=<openai-api-key>  # from ohi/openai-api-key secret in prod
+
+# Neo4j Aura (managed graph + vector index)
+NEO4J_URI=neo4j+s://<instance-id>.databases.neo4j.io
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=<password>
+
+# Qdrant (vector-only index on PC via CF tunnel in prod)
+QDRANT_URL=https://ohi-qdrant.shiftbloom.studio
+QDRANT_API_KEY=<optional>
+
+# Embedding service (PC-hosted, free CPU, MiniLM-L12-v2)
+OHI_EMBEDDING_URL=https://ohi-embed.shiftbloom.studio
+OHI_EMBEDDING_MODEL=all-MiniLM-L12-v2
+
+# Evidence sources
+MEDIAWIKI_ENABLED=true
+MCP_OHI_ENABLED=false        # legacy MCP server; not wired in v2 prod
+
+# Async verify (DynamoDB polling)
+JOBS_TABLE_NAME=ohi-verify-jobs
+OHI_ASYNC_VERIFY_TTL_SECONDS=3600
+
+# Edge protection (production)
+OHI_CF_EDGE_SECRET=<same-value-injected-by-cloudflare-transform-rule>
+```
+
+Full environment reference: [CLAUDE.md](CLAUDE.md) and the compute
+Terraform layer's `variables.tf`.
+
+---
+
+## API reference
+
+Full specification with request/response schemas, error codes, and
+examples: **[docs/API.md](docs/API.md)**.
+
+Summary:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/v2/verify` | Submit text, receive `202 Accepted` + `job_id` |
+| `GET /api/v2/verify/status/{job_id}` | Poll for pipeline progress + final verdict |
+| `GET /health/live` | Liveness probe |
+| `GET /health/deep` | Per-layer health (decomposer, Neo4j, Qdrant, embed, PCG version…) |
+
+Authentication: production traffic requires the
+`X-OHI-Edge-Secret` header, injected by Cloudflare's Transform Rule on
+the `ohi-api.shiftbloom.studio` host. Local dev skips the header.
+
+---
+
+## Documentation
+
+- [docs/API.md](docs/API.md) — v2 API reference (endpoints, schemas,
+  polling flow, rigor tiers)
+- [docs/FRONTEND.md](docs/FRONTEND.md) — frontend architecture (static
+  Next.js export, polling state machine, design system)
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — contribution process
+- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — community standards
+- [docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md) — public access framework
+- [docs/runbooks/](docs/runbooks/) — deploy, rollback, secret rotation,
+  cold-start bootstrap, PC stack bring-up
+- [CLAUDE.md](CLAUDE.md) — operational knowledge (gotchas, Windows
+  traps, agent instructions)
+
+Internal planning / specs / checkpoints / stream handoffs live in
+`docs/superpowers/` and are gitignored.
+
+---
+
+## Benchmarking
+
+A research-grade benchmark suite comparing OHI against hallucination-
+detection baselines is in `gui_benchmark_app/`. The Wave 3 E2E gate adds
+an automated FEVER slice run that commits `docs/benchmarks/v2.0-*.md`
+per release. Once v2.0 ships, full benchmark methodology and results
+will be published there.
+
+---
+
+## Contributing
+
+Contributions welcome. Please read
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the review process and
+conventions, and [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md).
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Commit with Conventional Commits + "end state verified by" lines
+   (see CLAUDE.md §Git workflow)
+4. Open a pull request against `feat/ohi-v2-foundation` (v2 dev branch)
 
-Please also review our [Code of Conduct](docs/CODE_OF_CONDUCT.md).
+Security issues: see [SECURITY.md](SECURITY.md).
 
-## 📄 License
+---
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## License
 
-## 🙏 Acknowledgments
+MIT — see [LICENSE](LICENSE).
 
-- [FastAPI](https://fastapi.tiangolo.com/) - Modern Python web framework
-- [Next.js](https://nextjs.org/) - React framework for the frontend
-- [Neo4j](https://neo4j.com/) - Graph database
-- [Qdrant](https://qdrant.tech/) - Vector search engine
-- [Stripe](https://stripe.com/) - Payment processing
-- [Supabase](https://supabase.com/) - Authentication and database
-- [MCP](https://modelcontextprotocol.io/) - Model Context Protocol
+---
+
+## Acknowledgments
+
+- [**FastAPI**](https://fastapi.tiangolo.com/) — Python API framework
+- [**Next.js**](https://nextjs.org/) — React framework for the frontend
+- [**Gemini** (Google)](https://ai.google.dev/) — decomposer + claim-
+  evidence NLI
+- [**Neo4j** (Aura)](https://neo4j.com/) — entity graph + vector index
+- [**Qdrant**](https://qdrant.tech/) — passage vector store
+- [**MCP** (Anthropic)](https://modelcontextprotocol.io/) — Model
+  Context Protocol for knowledge-source aggregation
+- **AWS** (Lambda, API Gateway, DynamoDB, Secrets Manager, CloudWatch,
+  S3), **Cloudflare** (edge + WAF + tunnel), **Vercel** (frontend
+  hosting)
 
 ---
 
 <p align="center">
-  Made with ❤️ by the OHI Team
+  <em>Knowledge as a graph, not a list.</em>
 </p>
