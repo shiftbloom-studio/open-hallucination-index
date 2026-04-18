@@ -18,6 +18,84 @@ gives you the hard-won operational knowledge the current owner
    `src/api/pipeline/pipeline.py::verify` first to understand what's
    actually wired and what's `None`.
 
+## Anti-hallucination protocol (mandatory for every agent)
+
+Verified session-lapses on this project include: citing a file's line
+number from memory (was wrong by 40+ lines); writing a shell recipe
+for ECR retagging that silently corrupted the manifest digest;
+writing smoke assertions that were structurally unreachable given the
+pipeline's current state (caused two deploy rollbacks in a row); and
+assuming handoff files were saved to disk when they were only pasted
+into chat. All cases: memory-recall without tool verification. This
+section is the project-wide countermeasure.
+
+**Every agent (including the coordinator) MUST:**
+
+- **Read before claim.** Never state what a file contains (line
+  numbers, function signatures, imports, specific strings, types,
+  interfaces) without having `Read` it in the current session. A
+  prior session's read does not count if the file may have changed.
+- **Grep before claim.** Never quote a symbol (function name,
+  variable, class, import path) from memory. Run `Grep` first.
+- **Git-command before claim.** Never state what's on a branch,
+  what's merged, what the feat tip is, or what a merge-base is
+  without running `git log`, `git diff`, `git rev-parse`,
+  `git branch`, or `git merge-base`.
+- **Query prod before claim.** Before claiming Lambda's current
+  image, `/health/deep` state, DynamoDB record contents, Vercel
+  deployment state, or any other prod condition, run the `aws` /
+  `curl` / `gh` / `ls` command.
+- **Fetch docs before API claims.** Never assert parameter names,
+  return-type shapes, or behaviour of an external library/SDK/API
+  from training-data recall. Use `WebFetch` (or `context7` MCP when
+  connected) to pull the current docs; pin SDK versions in code that
+  depends on the shape.
+- **Run the tests before saying they pass.** Never state "pytest
+  green" or "228 passed" from memory. Run the canonical runline:
+  `pytest -q tests -m "not infra"`.
+- **Test or runbook-source every shell recipe for destructive
+  operations.** Especially for force-push, ECR retag, secret
+  rotation, `terraform destroy`, `update-function-code`. If writing
+  a new recipe, validate each step before handing it to another
+  agent.
+- **Trace the code path before writing smoke assertions.** Before
+  asserting `p_true > X`, `refuting_evidence non-empty`,
+  `fallback_used != "general"`, or any semantic property in a smoke
+  script, Read the current pipeline code to confirm the expected
+  value is actually produced by this deploy's codebase. Asserting
+  forward on not-yet-shipped behavior is structurally unreachable
+  and will roll back the deploy.
+- **`ls` or `Read` before claiming a file was saved.** Producing
+  content in chat is not the same as persisting to disk. Confirm.
+
+**When uncertain, state uncertainty.** "I don't know," "I'd need to
+check," and "let me verify" are first-class responses. Strictly
+better than a confident-wrong claim.
+
+**Self-critique trigger (before any factual message):** ask "what
+tool did I run to know this, and what did it output?" If you can't
+name the tool + output, you haven't verified — go run it or flag
+the claim as unverified.
+
+**Template for agent prompts** (paste verbatim into every new stream
+prompt under "First actions"):
+
+```
+<investigate_before_answering>
+Never speculate about code, files, git state, deployed state, or API
+shapes you have not verified with a tool. Before any factual claim
+about this project: (a) for file content — `Read` the file; (b) for
+code symbols — `Grep` the symbol; (c) for git state — run the `git`
+command; (d) for deployed state — run the `aws` / `curl` / `gh`
+command; (e) for external APIs — `WebFetch` the docs. State
+uncertainty explicitly when you haven't verified. "I don't know" is
+a valid and preferred response to a confident-wrong one.
+</investigate_before_answering>
+```
+
+This mirrors Anthropic's official Opus 4.7 prompting-guide pattern
+for reducing hallucinations in agentic coding workflows.
+
 ## Environment assumptions
 
 - **OS:** Windows 11 + Git Bash. cwd does **not** persist between `Bash`
