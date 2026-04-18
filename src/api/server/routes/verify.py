@@ -77,7 +77,7 @@ async def verify(body: VerifyRequest, request: Request) -> ORJSONResponse:
         ) from exc
 
     try:
-        jobs.async_invoke_verify(
+        invoke_status = jobs.async_invoke_verify(
             job_id=job_id, text=body.text, ticket=ticket, depth=1
         )
     except Exception as exc:
@@ -96,6 +96,42 @@ async def verify(body: VerifyRequest, request: Request) -> ORJSONResponse:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "async_invoke_failed", "message": str(exc)},
         ) from exc
+
+    # The boto3 invoke call itself can succeed (no exception) while the
+    # async queue still refuses the payload — throttling, IAM regression,
+    # reserved-concurrency ceiling hit. When that happens the downstream
+    # pipeline never runs and the DynamoDB record stays at 'pending'
+    # forever. Returning 202 to the caller in that state is exactly the
+    # silent-fail mode D2's first deploy exhibited via a different
+    # (missing edge-secret) cause. Inspect StatusCode and surface the
+    # failure both to the record and to the client.
+    if invoke_status != 202:
+        logger.error(
+            "jobs.async_invoke_verify returned non-202 StatusCode=%s "
+            "for %s — failing record and returning 503.",
+            invoke_status,
+            job_id,
+        )
+        try:
+            jobs.fail_job(
+                job_id,
+                f"async_invoke_rejected: status={invoke_status}",
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "follow-up jobs.fail_job also failed for %s (record will TTL)",
+                job_id,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "async_invoke_rejected",
+                "message": (
+                    f"async queue returned StatusCode={invoke_status}; "
+                    "expected 202"
+                ),
+            },
+        )
 
     return ORJSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
