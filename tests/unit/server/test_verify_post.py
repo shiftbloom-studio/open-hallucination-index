@@ -78,32 +78,44 @@ def verify_client(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, dict[str, Any]]
     recorded: dict[str, Any] = {
         "create": [],
         "invoke": [],
+        "fail": [],
     }
+
+    # Per-test override of the invoke status — defaults to 202 (success)
+    # so existing happy-path tests see a successful async accept. The
+    # non-202-rejection test below flips it to 429 to exercise the
+    # failure path introduced in Stream D3.
+    invoke_status: list[int] = [202]
 
     def fake_create_job(*, job_id: str, text: str, ticket: str) -> None:
         recorded["create"].append({"job_id": job_id, "text": text, "ticket": ticket})
 
     def fake_async_invoke(
         *, job_id: str, text: str, ticket: str, depth: int = 1
-    ) -> None:
+    ) -> int:
         recorded["invoke"].append(
             {"job_id": job_id, "text": text, "ticket": ticket, "depth": depth}
         )
+        return invoke_status[0]
+
+    def fake_fail_job(job_id: str, error: str) -> None:
+        recorded["fail"].append({"job_id": job_id, "error": error})
 
     monkeypatch.setattr(_jobs, "create_job", fake_create_job)
     monkeypatch.setattr(_jobs, "async_invoke_verify", fake_async_invoke)
+    monkeypatch.setattr(_jobs, "fail_job", fake_fail_job)
 
     app = FastAPI()
     app.add_middleware(RetentionMiddleware)
     app.include_router(_verify_mod.router, prefix="/api/v2")
     client = TestClient(app)
-    return client, recorded
+    return client, recorded, invoke_status
 
 
 def test_post_verify_returns_202_with_job_id(
-    verify_client: tuple[Any, dict[str, Any]],
+    verify_client: tuple[Any, dict[str, Any], list[int]],
 ) -> None:
-    client, _ = verify_client
+    client, _, _ = verify_client
     resp = client.post("/api/v2/verify", json={"text": "Marie Curie won Nobel."})
     assert resp.status_code == 202
     body = resp.json()
@@ -115,9 +127,9 @@ def test_post_verify_returns_202_with_job_id(
 
 
 def test_post_verify_writes_pending_record_then_async_invokes(
-    verify_client: tuple[Any, dict[str, Any]],
+    verify_client: tuple[Any, dict[str, Any], list[int]],
 ) -> None:
-    client, recorded = verify_client
+    client, recorded, _ = verify_client
     resp = client.post("/api/v2/verify", json={"text": "hello"})
     assert resp.status_code == 202
     returned_job_id = resp.json()["job_id"]
@@ -141,9 +153,9 @@ def test_post_verify_writes_pending_record_then_async_invokes(
 
 
 def test_post_verify_persists_text_when_retain_true(
-    verify_client: tuple[Any, dict[str, Any]],
+    verify_client: tuple[Any, dict[str, Any], list[int]],
 ) -> None:
-    client, recorded = verify_client
+    client, recorded, _ = verify_client
     resp = client.post(
         "/api/v2/verify?retain=true", json={"text": "retained data"}
     )
@@ -157,9 +169,9 @@ def test_post_verify_persists_text_when_retain_true(
 
 
 def test_post_verify_generates_fresh_ticket_per_call(
-    verify_client: tuple[Any, dict[str, Any]],
+    verify_client: tuple[Any, dict[str, Any], list[int]],
 ) -> None:
-    client, recorded = verify_client
+    client, recorded, _ = verify_client
     client.post("/api/v2/verify", json={"text": "one"})
     client.post("/api/v2/verify", json={"text": "two"})
     tickets = [c["ticket"] for c in recorded["create"]]
@@ -167,3 +179,31 @@ def test_post_verify_generates_fresh_ticket_per_call(
     assert tickets[0] != tickets[1]
     # Each ticket is long enough to be a secrets.token_urlsafe
     assert all(len(t) >= 32 for t in tickets)
+
+
+def test_post_verify_fails_job_and_503s_on_non_202_invoke_status(
+    verify_client: tuple[Any, dict[str, Any], list[int]],
+) -> None:
+    """If boto3's ``lambda.invoke`` returns a non-202 StatusCode the async
+    queue refused the payload (throttling, IAM, quota). The handler must
+    mark the DynamoDB record as failed and return 503 to the caller
+    instead of the fire-and-forget 202 it would otherwise return.
+
+    Introduced in D3 to close the silent-fail mode E2 surfaced: D2's
+    first deploy returned 202 even when the downstream invocation never
+    succeeded, leaving pollers stuck on ``pending queued`` forever."""
+    client, recorded, invoke_status = verify_client
+    invoke_status[0] = 429  # async queue throttled us
+
+    resp = client.post("/api/v2/verify", json={"text": "rejected"})
+    assert resp.status_code == 503
+    detail = resp.json()["detail"]
+    assert detail["code"] == "async_invoke_rejected"
+    assert "StatusCode=429" in detail["message"]
+
+    # Record was created then flipped to error with a structured reason.
+    assert len(recorded["create"]) == 1
+    assert len(recorded["fail"]) == 1
+    failed = recorded["fail"][0]
+    assert failed["job_id"] == recorded["create"][0]["job_id"]
+    assert failed["error"] == "async_invoke_rejected: status=429"

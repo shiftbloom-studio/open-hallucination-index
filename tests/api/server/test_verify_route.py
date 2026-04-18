@@ -88,7 +88,11 @@ def jobs_env(monkeypatch: pytest.MonkeyPatch) -> _JobsRecorder:
     """Replace jobs.create_job + jobs.async_invoke_verify with recorders.
     Patches the ``_jobs`` module bound at file-top import time, which is
     the same object ``server.routes.verify`` and
-    ``server.routes.async_verify`` hold under their own ``jobs`` name."""
+    ``server.routes.async_verify`` hold under their own ``jobs`` name.
+
+    ``fake_async_invoke`` returns 202 to mirror a healthy async-queue
+    accept — D3 added a StatusCode check on the POST handler so any
+    non-202 is treated as an async-invoke failure."""
     recorder = _JobsRecorder()
 
     def fake_create_job(*, job_id: str, text: str, ticket: str) -> None:
@@ -96,13 +100,20 @@ def jobs_env(monkeypatch: pytest.MonkeyPatch) -> _JobsRecorder:
 
     def fake_async_invoke(
         *, job_id: str, text: str, ticket: str, depth: int = 1
-    ) -> None:
+    ) -> int:
         recorder.invoked.append(
             {"job_id": job_id, "text": text, "ticket": ticket, "depth": depth}
         )
+        return 202
+
+    def fake_fail_job(job_id: str, error: str) -> None:
+        # Belt-and-braces: the POST handler's failure path calls fail_job,
+        # which otherwise hits the real DynamoDB KeyError on JOBS_TABLE_NAME.
+        pass
 
     monkeypatch.setattr(_jobs, "create_job", fake_create_job)
     monkeypatch.setattr(_jobs, "async_invoke_verify", fake_async_invoke)
+    monkeypatch.setattr(_jobs, "fail_job", fake_fail_job)
     return recorder
 
 

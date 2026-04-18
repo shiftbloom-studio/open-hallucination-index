@@ -429,3 +429,132 @@ def test_async_invoke_verify_propagates_depth_counter(
     jobs.async_invoke_verify(job_id="jid-3", text="hi", ticket="tkt-c", depth=2)
     body = json.loads(json.loads(lam.invoke_calls[0]["Payload"])["body"])
     assert body["depth"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Edge-secret header injection — D3 fix for D2's silent 403 path.
+# ---------------------------------------------------------------------------
+
+
+def test_async_invoke_verify_embeds_edge_secret_header_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_env: None,
+    stub_clients: tuple[_StubDynamoDBClient, _StubLambdaClient],
+) -> None:
+    """The synthetic APIGW v2 event travels back through EdgeSecretMiddleware
+    before reaching /_internal/async-verify. Without the header injection
+    it would 403 silently (D2's first prod deploy pathology). Verify the
+    lower-case header is present with the cached value."""
+    _ddb, lam = stub_clients
+    from server import jobs
+
+    monkeypatch.setattr(jobs, "_get_edge_secret", lambda: "edge-secret-test-abc")
+
+    jobs.async_invoke_verify(job_id="jid-4", text="t", ticket="tkt-d")
+
+    payload = json.loads(lam.invoke_calls[0]["Payload"])
+    headers = payload["headers"]
+    # Lower-case per Web Adapter normalisation; matches Starlette's
+    # case-insensitive read on the middleware side.
+    assert headers["x-ohi-edge-secret"] == "edge-secret-test-abc"
+    # Existing headers are preserved — regression guard against a future
+    # refactor that replaces the headers dict wholesale.
+    assert headers["content-type"] == "application/json"
+    assert headers["x-ohi-async-job-id"] == "jid-4"
+
+
+def test_async_invoke_verify_omits_edge_secret_header_in_local_dev(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_env: None,
+    stub_clients: tuple[_StubDynamoDBClient, _StubLambdaClient],
+) -> None:
+    """In local dev (OHI_CF_EDGE_SECRET_ARN unset), EdgeSecretMiddleware
+    is not registered, so injecting a bogus header value is pointless
+    and could even mislead log readers. ``_get_edge_secret`` returns None
+    and the header is omitted."""
+    _ddb, lam = stub_clients
+    from server import jobs
+
+    monkeypatch.setattr(jobs, "_get_edge_secret", lambda: None)
+
+    jobs.async_invoke_verify(job_id="jid-5", text="t", ticket="tkt-e")
+
+    payload = json.loads(lam.invoke_calls[0]["Payload"])
+    assert "x-ohi-edge-secret" not in payload["headers"]
+
+
+def test_async_invoke_verify_returns_invoke_status_code(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_env: None,
+    stub_clients: tuple[_StubDynamoDBClient, _StubLambdaClient],
+) -> None:
+    """Callers need the StatusCode to distinguish an async-queue accept
+    (202) from a throttle/IAM/quota reject (non-202). Silently returning
+    202 to the user's client while the async path never fired is exactly
+    the silent-fail D3 is hardening against."""
+    _ddb, lam = stub_clients
+    from server import jobs
+
+    monkeypatch.setattr(jobs, "_get_edge_secret", lambda: None)
+
+    # Stub lambda returns 202 by default
+    assert jobs.async_invoke_verify(job_id="jid-6", text="t", ticket="tkt-f") == 202
+
+
+def test_async_invoke_verify_surfaces_non_202_status_code(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_env: None,
+    stub_clients: tuple[_StubDynamoDBClient, _StubLambdaClient],
+) -> None:
+    _ddb, lam = stub_clients
+    from server import jobs
+
+    monkeypatch.setattr(jobs, "_get_edge_secret", lambda: None)
+    # Override the stub's invoke response
+    monkeypatch.setattr(lam, "invoke", lambda **kw: {"StatusCode": 429})
+
+    assert jobs.async_invoke_verify(job_id="jid-7", text="t", ticket="tkt-g") == 429
+
+
+def test_get_edge_secret_returns_none_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Local-dev safety: no SM read, no KeyError, just None."""
+    from server import jobs
+
+    monkeypatch.delenv("OHI_CF_EDGE_SECRET_ARN", raising=False)
+    # Clear the module-level cache so earlier tests don't leak their value
+    monkeypatch.setattr(jobs, "_edge_secret_cache", None)
+
+    assert jobs._get_edge_secret() is None
+
+
+def test_get_edge_secret_caches_first_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Module-level cache so the self-invoke fast path is zero-syscall
+    on a warm container. We monkeypatch the lazy secrets_loader import to
+    avoid any real AWS SDK activity and count calls."""
+    from server import jobs
+
+    monkeypatch.setenv("OHI_CF_EDGE_SECRET_ARN", "arn:aws:test:secret:abc")
+    monkeypatch.setattr(jobs, "_edge_secret_cache", None)
+
+    calls: list[str] = []
+
+    class _StubLoader:
+        def get(self, arn: str, **_: Any) -> str:
+            calls.append(arn)
+            return "cached-value"
+
+    # The jobs._get_edge_secret() function does a lazy import inside; we
+    # reach into config.secrets_loader and swap get_loader to return our
+    # stub.
+    from config import secrets_loader
+
+    monkeypatch.setattr(secrets_loader, "get_loader", lambda: _StubLoader())
+
+    assert jobs._get_edge_secret() == "cached-value"
+    assert jobs._get_edge_secret() == "cached-value"
+    # Second call hit the module cache, not the loader.
+    assert len(calls) == 1

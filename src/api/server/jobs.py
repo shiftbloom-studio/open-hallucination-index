@@ -64,6 +64,7 @@ logger = logging.getLogger(__name__)
 
 _dynamodb_client: Any | None = None
 _lambda_client: Any | None = None
+_edge_secret_cache: str | None = None
 
 
 def _get_dynamodb_client() -> Any:
@@ -78,6 +79,54 @@ def _get_lambda_client() -> Any:
     if _lambda_client is None:
         _lambda_client = boto3.client("lambda")
     return _lambda_client
+
+
+def _get_edge_secret() -> str | None:
+    """Return the CF edge secret value, or None in local dev.
+
+    The edge secret is what ``EdgeSecretMiddleware`` compares requests
+    against: any request reaching the Lambda over HTTP must carry
+    ``X-OHI-Edge-Secret: <value>`` or the middleware 403s before the
+    route handler runs. The D2 polling flow's self-async-invoke sends a
+    synthetic APIGW v2 event back through the SAME Lambda — which means
+    it too traverses the middleware and must carry the header. (D2's
+    first prod deploy shipped without this and every async-verify 403'd
+    silently because ``InvocationType=Event`` swallows downstream
+    failures; see the D3 handoff for the forensic write-up.)
+
+    Caching semantics:
+
+    * Module-level cache + lazy resolution so the fast path on a warm
+      Lambda sandbox is zero syscalls. Combined with
+      ``SecretsLoader``'s own 600 s TTL cache, the secret is fetched
+      once per warm container and, in practice, once per cold start.
+    * Rotation: the module-level cache lives for the container's
+      lifetime (minutes to ~hours). A rotated secret propagates on the
+      next cold start; we do NOT actively invalidate mid-warm. If that
+      becomes a problem a future stream can switch to relying solely
+      on ``SecretsLoader`` TTL — but middleware reads the same
+      ``get_loader().get(...)`` surface and has the same property, so
+      there is nothing to gain from invalidating here alone.
+    * Local dev: when ``OHI_CF_EDGE_SECRET_ARN`` is unset,
+      ``EdgeSecretMiddleware`` isn't registered (see ``server.app``)
+      and we return None so the caller can omit the header rather than
+      send a bogus one.
+    """
+    global _edge_secret_cache
+    if _edge_secret_cache is not None:
+        return _edge_secret_cache
+    if not os.environ.get("OHI_CF_EDGE_SECRET_ARN"):
+        return None
+    # Lazy imports: the config.* modules pull in pydantic settings and
+    # boto3's SecretsManager client. Deferring until first actual use
+    # keeps module-import cost off the Lambda cold-start path and keeps
+    # tests that don't exercise this code able to import server.jobs
+    # without AWS credentials in scope.
+    from config.infra_env import edge_secret_arn
+    from config.secrets_loader import get_loader
+
+    _edge_secret_cache = get_loader().get(edge_secret_arn())
+    return _edge_secret_cache
 
 
 def _get_table_name() -> str:
@@ -278,21 +327,43 @@ _ASYNC_ROUTE = "/_internal/async-verify"
 
 def async_invoke_verify(
     *, job_id: str, text: str, ticket: str, depth: int = 1
-) -> None:
+) -> int:
     """Fire a fire-and-forget Lambda invocation at this function itself.
 
     ``depth`` is relayed inside the body so the internal handler can
     refuse recursion past depth 1 — a defensive backstop in case the
     self-invoke IAM policy is ever widened or a misconfiguration makes
-    the handler re-enter."""
+    the handler re-enter.
+
+    Returns the ``StatusCode`` from boto3's invoke response. For a
+    successful ``InvocationType=Event`` accept this is 202. Anything
+    else means the async queue refused the payload (throttle, IAM
+    regression, quota) and the caller MUST treat it as a failure —
+    silently returning 202 to the user's client when the async path
+    never fired is exactly how D2's first deploy hid the
+    edge-secret-missing silent 403. See the log lines below for the
+    CloudWatch signal an E2 smoke uses to confirm the invoke succeeded.
+    """
     payload = _build_async_event(
         job_id=job_id, text=text, ticket=ticket, depth=depth
     )
-    _get_lambda_client().invoke(
+    logger.info(
+        "async_invoke_verify: invoking self job_id=%s depth=%s",
+        job_id,
+        depth,
+    )
+    resp = _get_lambda_client().invoke(
         FunctionName=_get_self_function_name(),
         InvocationType="Event",
         Payload=json.dumps(payload).encode("utf-8"),
     )
+    status_code = int(resp.get("StatusCode", 0))
+    logger.info(
+        "async_invoke_verify: result status_code=%s job_id=%s",
+        status_code,
+        job_id,
+    )
+    return status_code
 
 
 def _build_async_event(
@@ -313,15 +384,27 @@ def _build_async_event(
             "ticket": ticket,
         }
     )
+    headers: dict[str, str] = {
+        "content-type": "application/json",
+        "x-ohi-async-job-id": job_id,
+    }
+    # The synthetic event travels back through the SAME Lambda via the
+    # async queue, which means it traverses EdgeSecretMiddleware exactly
+    # like an external HTTP request. Omitting this header is why D2's
+    # first prod deploy silently 403'd every self-invoke and DynamoDB
+    # jobs never advanced past 'queued'. Lambda Web Adapter normalises
+    # header keys to lowercase on the wire; Starlette's ``request.headers``
+    # is case-insensitive so either case works but we use lowercase to
+    # match what Web Adapter produces for real APIGW v2 events.
+    edge_secret = _get_edge_secret()
+    if edge_secret is not None:
+        headers["x-ohi-edge-secret"] = edge_secret
     return {
         "version": "2.0",
         "routeKey": f"POST {_ASYNC_ROUTE}",
         "rawPath": _ASYNC_ROUTE,
         "rawQueryString": "",
-        "headers": {
-            "content-type": "application/json",
-            "x-ohi-async-job-id": job_id,
-        },
+        "headers": headers,
         "requestContext": {
             "http": {
                 "method": "POST",
