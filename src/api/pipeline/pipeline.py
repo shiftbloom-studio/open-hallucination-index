@@ -377,17 +377,26 @@ class Pipeline:
         ``Evidence`` alongside its ``NliResult`` so assembly can
         partition evidence by ``label`` without re-classifying:
 
-        * ``label == "support"`` → ``supporting_evidence``
-        * ``label == "refute"``  → ``refuting_evidence``
-        * ``label == "neutral"`` → dropped from both buckets (treated as
-          off-topic for the claim — neither confirms nor contradicts)
+        * ``label == "support"`` → ``supporting_evidence`` bucket
+          AND folded into Beta(α, β) posterior.
+        * ``label == "refute"``  → ``refuting_evidence`` bucket
+          AND folded into Beta(α, β) posterior.
+        * ``label == "neutral"`` → dropped from both buckets AND
+          **skipped** in the Beta fold. Neutrals represent "no signal"
+          (off-topic or genuinely uncertain); previously their tilted
+          scores were still being folded, which accumulated noise in
+          the posterior on claims with many off-topic passages (post-
+          v2.0 Einstein-Russia bug). Unified semantic now: if it's not
+          in a display bucket, it's not in the posterior.
         * ``reasoning == "nli_unavailable"`` (terminal-failure sentinel)
-          → dropped from both buckets (no signal to file under)
+          → dropped from both buckets AND skipped in the Beta fold.
 
-        The Beta update still folds support / refute *scores* (not just
-        the label), so a passage with ``label="support"`` but
-        ``refuting_score=0.2`` contributes 0.2 to β — the label only
-        governs bucketing, not the posterior math.
+        For ``support`` / ``refute``-labeled results, the Beta update
+        still folds **both** ``supporting_score`` and ``refuting_score``
+        (not just the label's score), so a passage with
+        ``label="support"`` and ``refuting_score=0.2`` contributes 0.2
+        to β. The label gates whether we fold at all; once we fold,
+        the 2-D score vector shapes the magnitude.
         """
         assert self._nli_adapter is not None
 
@@ -488,18 +497,32 @@ def _beta_update_from_nli(
 ) -> tuple[float, float, int]:
     """Fold NLI classifications into a Beta(α, β) posterior.
 
-    Starting from a uniform prior (α=β=1, p_true=0.5), each successful
-    NLI result contributes:
+    Starting from a uniform prior (α=β=1, p_true=0.5), each decisive NLI
+    result (``label ∈ {"support", "refute"}``) contributes:
 
     * ``α += supporting_score``
     * ``β += refuting_score``
-    * neutral_score has no effect on α/β (it naturally shrinks the
-      magnitude of the update since the three scores sum to 1)
 
-    Terminal-failure sentinels (``reasoning == "nli_unavailable"``) are
-    *skipped* — they carry no information, so they must not push the
-    posterior around. This is distinct from an LLM that classified as
-    "neutral" with nonzero support/refute mass, which IS folded in.
+    Two classes of result are **skipped** (no α/β contribution):
+
+    1. Terminal-failure sentinels (``reasoning == "nli_unavailable"``) —
+       they carry no information, so they must not push the posterior
+       around.
+    2. ``label == "neutral"`` results — these correspond to passages
+       that neither confirm nor contradict the claim (off-topic or
+       genuinely uncertain). Post-v2.0-live-bug (Einstein-Russia case,
+       p_true=0.33 for a 100%-refutable claim): off-topic-but-score-
+       tilted neutrals were accumulating noise in the posterior. The
+       fix is to treat the ``neutral`` label as a first-class "no
+       signal" marker matching its bucket semantic (neutrals already
+       dropped from both supporting_evidence and refuting_evidence
+       display buckets). Only ``support`` / ``refute`` labels move α/β.
+
+    The ``support`` / ``refute`` buckets still fold *both* scores (not
+    just the label's score), so a passage with ``label="support"`` and
+    ``refuting_score=0.2`` still contributes 0.2 to β. The label gates
+    whether we fold at all; once we decide to fold, the full 2-D score
+    shapes the magnitude.
 
     Returns ``(alpha, beta, folded_count)`` for the caller's
     :class:`PosteriorBelief` construction.
@@ -509,6 +532,8 @@ def _beta_update_from_nli(
     folded = 0
     for result in nli_results:
         if result.reasoning == "nli_unavailable":
+            continue
+        if result.label == "neutral":
             continue
         alpha += result.supporting_score
         beta += result.refuting_score

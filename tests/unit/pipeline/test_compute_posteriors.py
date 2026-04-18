@@ -11,9 +11,12 @@ evidence ``classify()`` calls run concurrently under a
 3. In-flight concurrency never exceeds 10 (the Semaphore cap), and at
    least one over-subscribed claim does observe >1 concurrent call —
    proving the gather is actually parallel, not accidentally serial.
-4. ``reasoning == "nli_unavailable"`` results are *skipped*, not folded
-   in as neutral evidence — a down LLM must leave the posterior at the
-   uniform prior, not push it around with zeroed scores.
+4. Both ``reasoning == "nli_unavailable"`` sentinels AND ``label ==
+   "neutral"`` results are *skipped*, not folded into the Beta fold —
+   a down LLM and an off-topic classification must both leave the
+   posterior at the uniform prior (post-v2.0 Einstein-Russia bug:
+   off-topic-but-tilted neutrals were accumulating noise; the fix
+   treats "neutral" as a first-class no-signal marker).
 
 Tests are stubbed end-to-end: no live Gemini, no network, no $.
 """
@@ -199,13 +202,15 @@ def _unavailable_result() -> NliResult:
 
 
 def _asymmetric_neutral_result() -> NliResult:
-    """A *real* neutral classification that still carries a mild
-    support tilt — distinguishable from an ``nli_unavailable``
-    sentinel because the Beta update *does* fold it in.
+    """A real ``label="neutral"`` classification that *happens* to
+    carry asymmetric support/refute tilt (0.4 / 0.1 / 0.5).
 
-    Scores are asymmetric (0.4 / 0.1 / 0.5) so a folded-in result
-    produces a p_true measurably different from the uniform 0.5,
-    letting the test separate "folded" from "skipped".
+    Post-v2.0 semantic change: even such a tilted neutral is skipped
+    from the Beta fold (same rule as the ``nli_unavailable`` sentinel)
+    — the label governs whether we fold at all. The asymmetric scores
+    are retained here so the test can still distinguish "skipped with
+    tilt" from "skipped with zero mass": both must leave the posterior
+    at the uniform prior.
     """
     return NliResult(
         label="neutral",
@@ -321,15 +326,21 @@ async def test_semaphore_caps_in_flight_nli_calls_at_ten() -> None:
     )
 
 
-async def test_nli_unavailable_results_are_skipped_not_folded_as_neutral() -> None:
-    """The terminal-failure sentinel (``reasoning='nli_unavailable'``)
-    must NOT push the Beta posterior around. An asymmetric real
-    neutral (with a mild support tilt) must be folded in and move
-    ``p_true`` off 0.5. The two together prove "skip" ≠ "fold neutral".
+async def test_neutral_label_and_unavailable_sentinel_are_both_skipped_from_beta_fold() -> None:
+    """Both ``reasoning == "nli_unavailable"`` (terminal-failure
+    sentinel) AND ``label == "neutral"`` (off-topic / uncertain
+    passage) must leave the Beta posterior at the uniform prior
+    (p_true ≈ 0.5), even when the neutral carries asymmetric tilt.
 
-    Without this distinction a flaky LLM would silently bias every
-    posterior toward 0.5 with zeroed scores even when the rest of
-    the evidence disagreed — which is exactly what we don't want.
+    Pre-v2.0 semantic had neutrals still folding their tilted scores
+    into α/β, which let off-topic passages accumulate noise on claims
+    with many irrelevant evidence snippets (Einstein-Russia live-bug:
+    p_true=0.33 on a claim that should have been firmly false). The
+    post-v2.0 rule aligns the posterior fold with the display-bucket
+    semantic: if an evidence piece is not in ``supporting_evidence``
+    and not in ``refuting_evidence`` (both are label-driven), it must
+    not move the posterior either. Only ``support`` / ``refute``
+    labels contribute signal.
     """
     claim_unavailable = _claim("claim whose NLI is down")
     claim_neutral = _claim("claim classified as mild neutral")
@@ -351,25 +362,24 @@ async def test_nli_unavailable_results_are_skipped_not_folded_as_neutral() -> No
         {claim_neutral.id: _DEFAULT_ASSIGNMENT},
     )
 
-    # The stub WAS called for every evidence piece (proves we didn't
-    # short-circuit before classify) — but the results were skipped,
-    # leaving the Beta posterior at the uniform prior.
+    # Unavailable-sentinel path: stub called 3× (we don't short-circuit
+    # the classify call), results skipped, posterior sits at uniform
+    # prior, buckets empty.
     assert len(stub_unavail.calls) == 3
     assert post_unavail[claim_unavailable.id].p_true == pytest.approx(0.5)
-    # Terminal-failure sentinels are ALSO dropped from bucket split —
-    # no information to file under supporting OR refuting.
+    assert post_unavail[claim_unavailable.id].iterations == 0
     supp_unavail, refute_unavail = buckets_unavail[claim_unavailable.id]
     assert len(supp_unavail) == 0
     assert len(refute_unavail) == 0
 
-    # The asymmetric-neutral case DID fold in (s=0.4, r=0.1 per call),
-    # so p_true shifts off 0.5 by a measurable margin (α=1+3*0.4=2.2,
-    # β=1+3*0.1=1.3 → p_true ≈ 0.629).
+    # Label=neutral path (asymmetric tilt s=0.4, r=0.1): classified 3×
+    # but ALL THREE skipped from Beta fold despite the nonzero score
+    # tilt — the label is what gates folding. Posterior also sits at
+    # uniform prior. Buckets still empty (neutrals not shown in either
+    # supporting_evidence or refuting_evidence).
     assert len(stub_neutral.calls) == 3
-    assert abs(post_neutral[claim_neutral.id].p_true - 0.5) > 0.05
-    # Label is "neutral" for this stub — all 3 pieces dropped from
-    # both buckets (off-topic passages don't belong in either display
-    # bucket even though their scores nudge the posterior).
+    assert post_neutral[claim_neutral.id].p_true == pytest.approx(0.5)
+    assert post_neutral[claim_neutral.id].iterations == 0
     supp_neutral, refute_neutral = buckets_neutral[claim_neutral.id]
     assert len(supp_neutral) == 0
     assert len(refute_neutral) == 0
