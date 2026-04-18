@@ -247,11 +247,13 @@ async def test_supporting_evidence_pushes_p_true_above_uniform_prior() -> None:
     stub = _StubNli(_support_result())
     pipeline = _build_pipeline(nli_adapter=stub)
 
-    posteriors, buckets = await pipeline._compute_posteriors(
+    _result = await pipeline._compute_posteriors(
         [claim],
         {claim.id: evidence},
         {claim.id: _DEFAULT_ASSIGNMENT},
     )
+    posteriors = _result.posteriors
+    buckets = _result.buckets
 
     belief = posteriors[claim.id]
     assert isinstance(belief, PosteriorBelief)
@@ -278,11 +280,13 @@ async def test_refuting_evidence_pushes_p_true_below_uniform_prior() -> None:
     stub = _StubNli(_refute_result())
     pipeline = _build_pipeline(nli_adapter=stub)
 
-    posteriors, buckets = await pipeline._compute_posteriors(
+    _result = await pipeline._compute_posteriors(
         [claim],
         {claim.id: evidence},
         {claim.id: _DEFAULT_ASSIGNMENT},
     )
+    posteriors = _result.posteriors
+    buckets = _result.buckets
 
     belief = posteriors[claim.id]
     # Symmetric to the support case: p_true ≈ 1.15/4.85 ≈ 0.237.
@@ -307,11 +311,12 @@ async def test_semaphore_caps_in_flight_nli_calls_at_ten() -> None:
     stub = _StubNli(_support_result())
     pipeline = _build_pipeline(nli_adapter=stub)
 
-    posteriors, _buckets = await pipeline._compute_posteriors(
+    _result = await pipeline._compute_posteriors(
         [claim],
         {claim.id: evidence},
         {claim.id: _DEFAULT_ASSIGNMENT},
     )
+    posteriors = _result.posteriors
 
     # All 25 classifications eventually ran.
     assert len(stub.calls) == 25
@@ -348,19 +353,23 @@ async def test_neutral_label_and_unavailable_sentinel_are_both_skipped_from_beta
 
     stub_unavail = _StubNli(_unavailable_result())
     pipe_unavail = _build_pipeline(nli_adapter=stub_unavail)
-    post_unavail, buckets_unavail = await pipe_unavail._compute_posteriors(
+    _r_unavail = await pipe_unavail._compute_posteriors(
         [claim_unavailable],
         {claim_unavailable.id: list(evidence)},
         {claim_unavailable.id: _DEFAULT_ASSIGNMENT},
     )
+    post_unavail = _r_unavail.posteriors
+    buckets_unavail = _r_unavail.buckets
 
     stub_neutral = _StubNli(_asymmetric_neutral_result())
     pipe_neutral = _build_pipeline(nli_adapter=stub_neutral)
-    post_neutral, buckets_neutral = await pipe_neutral._compute_posteriors(
+    _r_neutral = await pipe_neutral._compute_posteriors(
         [claim_neutral],
         {claim_neutral.id: list(evidence)},
         {claim_neutral.id: _DEFAULT_ASSIGNMENT},
     )
+    post_neutral = _r_neutral.posteriors
+    buckets_neutral = _r_neutral.buckets
 
     # Unavailable-sentinel path: stub called 3× (we don't short-circuit
     # the classify call), results skipped, posterior sits at uniform

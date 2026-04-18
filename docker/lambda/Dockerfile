@@ -28,7 +28,8 @@ RUN pip install --no-cache-dir --target /deps \
     "structlog>=24.1" \
     "boto3>=1.34" \
     "wikitextparser>=0.56" \
-    "mcp>=1.25"
+    "mcp>=1.25" \
+    "numpy>=2.0"
 
 # --- Stage 2: runtime ------------------------------------------------------
 FROM public.ecr.aws/docker/library/python:3.12-slim

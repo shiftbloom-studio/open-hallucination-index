@@ -317,6 +317,82 @@ class NLISettings(BaseSettings):
     )
 
 
+class PCGSettings(BaseSettings):
+    """Configuration for the Wave 3 Stream P probabilistic claim graph
+    inference layer (TRW-BP primary, damped LBP fallback, Gibbs MCMC
+    sanity).
+
+    All fields read ``PCG_*`` env vars. Defaults match the Wave 3 spec
+    §4.2 and the TF-plumbed Lambda env values in
+    ``infra/terraform/compute/lambda.tf``. Consumed by
+    :class:`adapters.pcg_belief_propagation.PCGBeliefPropagationAdapter`.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="PCG_")
+
+    max_iters: int = Field(default=200, ge=1)
+    convergence_tol: float = Field(default=1e-4, gt=0.0)
+    damping_factor: float = Field(default=0.8, gt=0.0, le=1.0)
+    rigor_default: Literal["fast", "balanced", "maximum"] = Field(default="balanced")
+    entity_overlap_threshold: int = Field(default=1, ge=0)
+    gibbs_burn_in: int = Field(default=500, ge=0)
+    gibbs_samples: int = Field(default=2000, ge=1)
+    gibbs_tolerance: float = Field(default=0.05, ge=0.0, le=1.0)
+    claim_claim_max_pairs: int = Field(default=200, ge=1)
+
+
+class CCNliSettings(BaseSettings):
+    """Configuration for the Wave 3 Stream P claim-claim NLI dispatcher.
+
+    OpenAI ``gpt-5.4`` with ``reasoning.effort=xhigh`` is the primary
+    adapter (Decision H); Gemini 3 Pro preview via
+    :class:`adapters.nli_gemini.NliGeminiAdapter` is the one-shot
+    fallback on terminal primary failure.
+
+    ``llm_model`` encodes both model name + reasoning effort via a
+    suffix convention (``gpt-5.4-xhigh``); the parser at adapter-ctor
+    splits it into a model ID + effort kwarg.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="CC_NLI_")
+
+    llm_provider: Literal["openai", "gemini"] = Field(
+        default="openai",
+        description=(
+            "Primary cc-NLI provider. ``gemini`` forces fallback-only "
+            "(cost-cap emergency lever)."
+        ),
+    )
+    llm_model: str = Field(
+        default="gpt-5.4-xhigh",
+        description=(
+            "Primary cc-NLI model spec; suffix -xhigh/-high/-medium/-low "
+            "parses as reasoning.effort."
+        ),
+    )
+    llm_fallback_model: str = Field(
+        default="gemini-3-pro-preview",
+        description="Fallback cc-NLI model (Gemini). Used via NliGeminiAdapter.",
+    )
+    openai_max_retries: int = Field(default=3, ge=1)
+    openai_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "OpenAI API key for cc-NLI. Read from OHI_OPENAI_API_KEY env var "
+            "(which TF plumbs from the ohi/openai-api-key Secrets Manager entry)."
+        ),
+    )
+
+    def __init__(self, **kwargs: object) -> None:
+        import os
+
+        # TF injects the raw key value as OHI_OPENAI_API_KEY at runtime
+        # (mirrors the Gemini LLM_API_KEY pattern in compute/lambda.tf).
+        if "openai_api_key" not in kwargs and os.environ.get("OHI_OPENAI_API_KEY"):
+            kwargs["openai_api_key"] = SecretStr(os.environ["OHI_OPENAI_API_KEY"])
+        super().__init__(**kwargs)
+
+
 class EmbeddingSettings(BaseSettings):
     """Configuration for local embedding generation."""
 
@@ -359,6 +435,8 @@ class Settings(BaseSettings):
     verification: VerificationSettings = Field(default_factory=VerificationSettings)
     mcp: MCPSettings = Field(default_factory=MCPSettings)
     nli: NLISettings = Field(default_factory=NLISettings)
+    pcg: PCGSettings = Field(default_factory=PCGSettings)
+    cc_nli: CCNliSettings = Field(default_factory=CCNliSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
 
     # Environment

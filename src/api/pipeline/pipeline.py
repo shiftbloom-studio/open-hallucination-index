@@ -23,6 +23,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 from uuid import UUID, uuid4
 
@@ -30,7 +31,10 @@ from interfaces.conformal import ConformalCalibrator
 from interfaces.decomposition import ClaimDecomposer
 from models.domain import Domain, DomainAssignment
 from models.entities import Claim, Evidence
+from models.nli import NLIDistribution
 from models.pcg import PosteriorBelief
+from models.results import ClaimEdge, EdgeType
+from models.verdict_extensions import PCGObservability
 from pipeline.assembly import (
     assemble_claim_verdict,
     assemble_document_verdict,
@@ -38,10 +42,12 @@ from pipeline.assembly import (
 
 if TYPE_CHECKING:
     from interfaces.domain import DomainAdapter, DomainRouter
-    from interfaces.nli import NliAdapter, NLIService
+    from interfaces.nli import NliAdapter, NliResult, NLIService
     from interfaces.pcg import PCGInferenceService
     from models.results import DocumentVerdict
     from pipeline.retrieval import AdaptiveEvidenceCollector
+
+    from adapters.nli_claim_claim import ClaimClaimNliDispatcher
 
 
 logger = logging.getLogger(__name__)
@@ -82,6 +88,28 @@ async def _safe_fire(callback: PhaseCallback | None, phase: str) -> None:
 _NLI_MAX_CONCURRENCY = 10
 
 
+@dataclass
+class _PosteriorsResult:
+    """Internal return type for ``_compute_posteriors``.
+
+    Four dicts, keyed by claim id:
+    * ``posteriors`` — the per-claim ``PosteriorBelief`` (p_true etc.)
+    * ``buckets`` — ``(supporting_evidence, refuting_evidence)``; only
+      populated when NLI ran (Phase-2 Beta path or Wave-3 PCG path
+      use the same label-driven split — Hebel A + Fix 1+3).
+    * ``pcg_observability`` — per-claim PCG observability block when
+      the PCG path ran; ``None`` otherwise (placeholder / Beta paths).
+    * ``pcg_edges`` — per-claim list of ``ClaimEdge`` neighbours
+      derived from the PCG graph's binary factors; empty for paths
+      that didn't build a graph.
+    """
+
+    posteriors: dict[UUID, PosteriorBelief]
+    buckets: dict[UUID, tuple[list[Evidence], list[Evidence]]]
+    pcg_observability: dict[UUID, PCGObservability | None] = field(default_factory=dict)
+    pcg_edges: dict[UUID, list[ClaimEdge]] = field(default_factory=dict)
+
+
 class Pipeline:
     """Stateless orchestrator — one instance per app, no per-request state.
 
@@ -100,14 +128,27 @@ class Pipeline:
         nli: NLIService | None = None,
         nli_adapter: NliAdapter | None = None,
         pcg: PCGInferenceService | None = None,
+        cc_nli_dispatcher: ClaimClaimNliDispatcher | None = None,
         domain_adapters: dict[Domain, DomainAdapter] | None = None,
     ) -> None:
         # ``nli`` (NLIService) is the cross-encoder port that predates
         # Phase 2 and is still reserved for a future cross-encoder
         # deployment. ``nli_adapter`` (NliAdapter) is the Phase 2 LLM-
         # backed 3-way classifier that D1 wires; both coexist so the
-        # older port isn't prematurely deleted. The new adapter takes
-        # precedence in ``_compute_posteriors`` when both are set.
+        # older port isn't prematurely deleted.
+        #
+        # Wave 3 Stream P adds two layered precedences in
+        # ``_compute_posteriors``:
+        #   1. PCG path — when ``pcg`` AND ``nli_adapter`` are wired
+        #      (``cc_nli_dispatcher`` is optional; if omitted the PCG
+        #      path runs without a binary-factor layer, effectively
+        #      LBP-on-unaries). Produces TRW-BP / LBP / LBP-nonconvergent
+        #      posteriors and populates ``PCGObservability``.
+        #   2. Phase-2 Beta-posterior path — when ``nli_adapter`` is
+        #      wired but ``pcg`` isn't. Keeps D1 behaviour for local
+        #      dev / degraded-mode deploys.
+        #   3. Phase-1 placeholder — no NLI adapter at all. Used in
+        #      unit tests only.
         self._decomposer = decomposer
         self._retrieval = retrieval
         self._conformal = conformal
@@ -115,6 +156,7 @@ class Pipeline:
         self._nli = nli
         self._nli_adapter = nli_adapter
         self._pcg = pcg
+        self._cc_nli_dispatcher = cc_nli_dispatcher
         self._domain_adapters = domain_adapters or {}
 
     # ------------------------------------------------------------------
@@ -172,11 +214,15 @@ class Pipeline:
         # and too fast for the UI to render anything meaningful.
         assignments = await self._route_claims(claims)
 
-        # L3 / L4 — NLI + PCG joint inference (placeholder: naive posterior)
+        # L3 / L4 — NLI + PCG joint inference
         await _safe_fire(phase_callback, "classifying")
-        posteriors, nli_buckets = await self._compute_posteriors(
-            claims, evidence_per_claim, assignments
+        posteriors_result = await self._compute_posteriors(
+            claims, evidence_per_claim, assignments, rigor=rigor
         )
+        posteriors = posteriors_result.posteriors
+        nli_buckets = posteriors_result.buckets
+        pcg_observability = posteriors_result.pcg_observability
+        pcg_edges_by_claim = posteriors_result.pcg_edges
 
         # L5 — conformal calibration per claim
         await _safe_fire(phase_callback, "calibrating")
@@ -195,6 +241,18 @@ class Pipeline:
             queued_for_review = False
 
             supporting_bucket, refuting_bucket = nli_buckets[claim.id]
+            observability = pcg_observability.get(claim.id)
+            neighbours = pcg_edges_by_claim.get(claim.id, [])
+            # BP validation flag: True when Gibbs ran and matched BP
+            # within tolerance; False when Gibbs flagged a mismatch;
+            # None when Gibbs skipped (e.g. fast rigor / placeholder path).
+            if observability is None:
+                bp_validated: bool | None = None
+            elif observability.gibbs_mismatch is None:
+                # Gibbs ran (we have a PCG block) and didn't flag a mismatch.
+                bp_validated = True
+            else:
+                bp_validated = False
 
             cv = assemble_claim_verdict(
                 claim=claim,
@@ -205,9 +263,10 @@ class Pipeline:
                 domain_assignment_weights={d: w for d, w in assignment.weights.items()},
                 supporting_evidence=supporting_bucket,
                 refuting_evidence=refuting_bucket,
-                pcg_neighbors=[],  # Phase 2: populated from PCG
+                pcg_neighbors=neighbours,
+                pcg=observability,
                 nli_self_consistency_variance=0.0,
-                bp_validated=None,
+                bp_validated=bp_validated,
                 information_gain=information_gain,
                 queued_for_review=queued_for_review,
                 calibration_set_id=cal.calibration_set_id,
@@ -282,57 +341,44 @@ class Pipeline:
         claims: list[Claim],
         evidence_per_claim: dict[UUID, list[Evidence]],
         assignments: dict[UUID, DomainAssignment],
-    ) -> tuple[
-        dict[UUID, PosteriorBelief],
-        dict[UUID, tuple[list[Evidence], list[Evidence]]],
-    ]:
-        """Compute posteriors AND the NLI-label-driven evidence buckets.
-
-        Returns ``(posteriors, buckets)`` where ``buckets[claim_id]`` is
-        the pair ``(supporting_evidence, refuting_evidence)`` — evidence
-        items classified as ``label="support"`` go in the first list,
-        ``label="refute"`` in the second, and ``label="neutral"`` (plus
-        any terminal-failure sentinels) are dropped from both. Assembly
-        consumes these buckets directly instead of the pre-D1 hardcode
-        that put everything in ``supporting_evidence``.
+        *,
+        rigor: RigorTier = "balanced",
+    ) -> _PosteriorsResult:
+        """Compute posteriors + buckets + (optionally) PCG observability.
 
         Three code paths, in precedence order:
 
-        1. **Phase 2 LLM-NLI path** (``self._nli_adapter is not None``):
-           Fan out ``NliAdapter.classify`` over every (claim, evidence)
-           pair under an ``asyncio.Semaphore`` bound by
-           :data:`_NLI_MAX_CONCURRENCY`, fold each successful
-           ``supporting_score`` / ``refuting_score`` into a per-claim
-           Beta(α, β) update, and return ``α / (α + β)``. Sentinel
-           ``nli_unavailable`` results are *skipped* (no signal) rather
-           than folded as neutral — a flaky LLM must not silently bias
-           the posterior toward zero. Buckets reflect the per-pair NLI
-           ``label``.
+        1. **Wave 3 PCG path** (``self._pcg is not None AND
+           self._nli_adapter is not None``): Fan out claim-evidence NLI
+           under ``Semaphore(_NLI_MAX_CONCURRENCY)``, run the cc-NLI
+           dispatcher (primary → fallback) for claim-claim pairs that
+           pass the entity-overlap short-circuit, build the factor
+           graph, run TRW-BP / damped LBP / Gibbs sanity, and return
+           PCG marginals as ``PosteriorBelief``. Populates
+           :class:`PCGObservability` per claim with algorithm, iteration
+           counts, edge counts, log_partition_bound, gibbs_mismatch,
+           and cc_nli_fallback_fired_count. Evidence buckets are the
+           same label-driven split as the Beta path (Hebel A + Fix 1+3).
 
-        2. **Future cross-encoder + PCG path** (``self._nli is not None
-           and self._pcg is not None``): raises ``NotImplementedError``
-           until Task 2.8 wires the real joint-inference flow.
+        2. **Phase-2 Beta-posterior path** (``self._nli_adapter is not
+           None`` but no PCG): Beta(α, β) fold over claim-evidence NLI
+           only. Kept for local dev + degraded-mode fallback when PCG
+           isn't wired. Buckets: label-driven. No PCG observability.
 
-        3. **Phase 1 placeholder path** (everything else): posterior =
-           mean evidence similarity score. Keeps the pipeline end-to-
-           end functional so /verify returns valid ``DocumentVerdict``
-           objects even before any NLI is injected. Buckets fall back
-           to the pre-NLI convention: all evidence in supporting, none
-           in refuting (no NLI to discriminate).
+        3. **Phase-1 placeholder** (no NLI adapter at all): posterior
+           = mean evidence similarity. Keeps /verify end-to-end for
+           tests that don't want to stub an NLI adapter.
         """
         del assignments  # Domain routing feeds L5 conformal, not L3/L4 here.
+
+        if self._pcg is not None and self._nli_adapter is not None:
+            return await self._compute_posteriors_via_pcg(
+                claims, evidence_per_claim, rigor=rigor
+            )
 
         if self._nli_adapter is not None:
             return await self._compute_posteriors_via_nli_adapter(
                 claims, evidence_per_claim
-            )
-
-        if self._nli is not None and self._pcg is not None:
-            # Full cross-encoder + TRW-BP path will land in Task 2.8.
-            logger.debug("Running NLI + PCG joint inference")
-            raise NotImplementedError(
-                "NLI + PCG wiring lands in Task 2.8; currently only "
-                "the Phase 1 placeholder posterior is active."
             )
 
         # Placeholder path: no NLI adapter, so no per-evidence label
@@ -340,10 +386,11 @@ class Pipeline:
         # in supporting) so older deploys without D1+ wired still render.
         out: dict[UUID, PosteriorBelief] = {}
         buckets: dict[UUID, tuple[list[Evidence], list[Evidence]]] = {}
+        observability: dict[UUID, PCGObservability | None] = {}
+        pcg_edges: dict[UUID, list[ClaimEdge]] = {}
         for claim in claims:
             evidence = evidence_per_claim[claim.id]
             if not evidence:
-                # No evidence → prior of 0.5 (maximum uncertainty)
                 p_true = 0.5
             else:
                 similarities = [
@@ -359,16 +406,20 @@ class Pipeline:
                 edge_count=0,
             )
             buckets[claim.id] = (list(evidence), [])
-        return out, buckets
+            observability[claim.id] = None
+            pcg_edges[claim.id] = []
+        return _PosteriorsResult(
+            posteriors=out,
+            buckets=buckets,
+            pcg_observability=observability,
+            pcg_edges=pcg_edges,
+        )
 
     async def _compute_posteriors_via_nli_adapter(
         self,
         claims: list[Claim],
         evidence_per_claim: dict[UUID, list[Evidence]],
-    ) -> tuple[
-        dict[UUID, PosteriorBelief],
-        dict[UUID, tuple[list[Evidence], list[Evidence]]],
-    ]:
+    ) -> _PosteriorsResult:
         """Beta-posterior fold over LLM-classified NLI results, plus
         label-driven evidence buckets.
 
@@ -455,7 +506,161 @@ class Pipeline:
                 iterations=folded,
                 edge_count=0,
             )
-        return out, buckets
+        # Beta path produces no PCG observability or neighbour edges.
+        observability: dict[UUID, PCGObservability | None] = {c.id: None for c in claims}
+        pcg_edges: dict[UUID, list[ClaimEdge]] = {c.id: [] for c in claims}
+        return _PosteriorsResult(
+            posteriors=out,
+            buckets=buckets,
+            pcg_observability=observability,
+            pcg_edges=pcg_edges,
+        )
+
+    async def _compute_posteriors_via_pcg(
+        self,
+        claims: list[Claim],
+        evidence_per_claim: dict[UUID, list[Evidence]],
+        *,
+        rigor: RigorTier = "balanced",
+    ) -> _PosteriorsResult:
+        """Full Wave 3 PCG path.
+
+        Pipeline:
+          1. Fan out claim-evidence NLI (same Semaphore + label-driven
+             bucket logic as the Beta path).
+          2. Convert claim-evidence ``NliResult`` → ``NLIDistribution``.
+          3. Run the cc-NLI dispatcher over claim pairs that survive the
+             entity-overlap short-circuit + hard cap.
+          4. Build the factor graph.
+          5. Run PCG ``infer`` (TRW-BP primary, LBP fallback, Gibbs
+             sanity).
+          6. Wrap marginals + graph edges + dispatcher metrics into
+             ``PosteriorBelief`` + ``PCGObservability`` + per-claim
+             ``ClaimEdge`` lists.
+        """
+        assert self._pcg is not None
+        assert self._nli_adapter is not None
+
+        # --- Step 1: claim-evidence NLI fan-out ------------------------
+        semaphore = asyncio.Semaphore(_NLI_MAX_CONCURRENCY)
+
+        async def _classify_pair(
+            claim_id: UUID,
+            evidence: Evidence,
+            claim_text: str,
+            evidence_text: str,
+        ) -> tuple[UUID, Evidence, "NliResult"]:
+            async with semaphore:
+                result = await self._nli_adapter.classify(claim_text, evidence_text)
+            return claim_id, evidence, result
+
+        tasks = [
+            _classify_pair(claim.id, ev, claim.text, ev.content)
+            for claim in claims
+            for ev in evidence_per_claim.get(claim.id, [])
+        ]
+        classified: list[tuple[UUID, Evidence, "NliResult"]] = (
+            list(await asyncio.gather(*tasks)) if tasks else []
+        )
+
+        # Partition NLI results + build display buckets (same label-driven
+        # rule as the Beta path).
+        results_by_claim: dict[UUID, list["NliResult"]] = {c.id: [] for c in claims}
+        buckets: dict[UUID, tuple[list[Evidence], list[Evidence]]] = {
+            c.id: ([], []) for c in claims
+        }
+        for claim_id, evidence, nli_result in classified:
+            results_by_claim[claim_id].append(nli_result)
+            if nli_result.reasoning == "nli_unavailable":
+                continue
+            if nli_result.label == "support":
+                buckets[claim_id][0].append(evidence)
+            elif nli_result.label == "refute":
+                buckets[claim_id][1].append(evidence)
+
+        # --- Step 2: convert to NLIDistribution for the PCG layer ------
+        # Import locally to avoid circular import at module load time.
+        from adapters.nli_claim_claim import _nli_result_to_distribution  # noqa: PLC0415
+
+        nli_claim_evidence: dict[UUID, list[NLIDistribution]] = {}
+        for claim in claims:
+            nli_claim_evidence[claim.id] = [
+                _nli_result_to_distribution(r, nli_model_id="nli-claim-evidence")
+                for r in results_by_claim[claim.id]
+                if r.reasoning != "nli_unavailable"
+            ]
+
+        # --- Step 3: claim-claim NLI dispatch --------------------------
+        nli_claim_claim: dict[tuple[UUID, UUID], NLIDistribution] = {}
+        fallback_fired_count = 0
+        if self._cc_nli_dispatcher is not None and len(claims) >= 2:
+            dispatch = await self._cc_nli_dispatcher.classify_pairs(claims)
+            nli_claim_claim = dispatch.distributions
+            fallback_fired_count = dispatch.fallback_fired_count
+
+        # --- Step 4+5: PCG inference -----------------------------------
+        # adapter_per_claim is reserved for per-domain TRW-BP weights —
+        # empty dict for now (all general domain, Wave 3 scope).
+        adapter_per_claim: dict[UUID, object] = {}  # DomainAdapter typing — unused until Wave 4
+        try:
+            posteriors = await self._pcg.infer(
+                claims=claims,
+                evidence_per_claim=evidence_per_claim,
+                nli_claim_evidence=nli_claim_evidence,
+                nli_claim_claim=nli_claim_claim,
+                adapter_per_claim=adapter_per_claim,  # type: ignore[arg-type]
+                rigor=rigor,
+            )
+        except Exception as exc:
+            logger.error(
+                "PCG infer failed: %s — falling back to Phase-2 Beta posterior",
+                exc,
+            )
+            return await self._compute_posteriors_via_nli_adapter(claims, evidence_per_claim)
+
+        # --- Step 6: assemble per-claim observability + edges ----------
+        observability: dict[UUID, PCGObservability | None] = {}
+        pcg_edges: dict[UUID, list[ClaimEdge]] = {c.id: [] for c in claims}
+
+        # Per-claim PCG observability block.
+        gibbs_mismatch = getattr(self._pcg, "last_gibbs_mismatch", None)
+        for claim in claims:
+            belief = posteriors[claim.id]
+            observability[claim.id] = PCGObservability(
+                algorithm=belief.algorithm,
+                converged=belief.converged,
+                iterations=belief.iterations,
+                edge_count=belief.edge_count,
+                log_partition_bound=belief.log_partition_bound,
+                gibbs_mismatch=gibbs_mismatch,
+                cc_nli_fallback_fired_count=fallback_fired_count,
+            )
+
+        # Build pcg_neighbors from the cc-NLI pairs. Each pair produces
+        # one ClaimEdge on each endpoint.
+        for (id_a, id_b), dist in nli_claim_claim.items():
+            # Pick edge type from the dominant NLI mass.
+            if dist.entail >= dist.contradict:
+                edge_type = EdgeType.ENTAIL
+                strength = max(0.0, min(1.0, dist.entail - dist.neutral))
+            else:
+                edge_type = EdgeType.CONTRADICT
+                strength = max(0.0, min(1.0, dist.contradict - dist.neutral))
+            if id_a in pcg_edges:
+                pcg_edges[id_a].append(
+                    ClaimEdge(neighbor_claim_id=id_b, edge_type=edge_type, edge_strength=strength)
+                )
+            if id_b in pcg_edges:
+                pcg_edges[id_b].append(
+                    ClaimEdge(neighbor_claim_id=id_a, edge_type=edge_type, edge_strength=strength)
+                )
+
+        return _PosteriorsResult(
+            posteriors=posteriors,
+            buckets=buckets,
+            pcg_observability=observability,
+            pcg_edges=pcg_edges,
+        )
 
     @staticmethod
     def _compute_decomp_coverage(text: str, claims: list[Claim]) -> float:
@@ -470,17 +675,19 @@ class Pipeline:
         return float(min(1.0, ratio))
 
     def _model_versions(self) -> dict[str, str]:
-        """Collect model version strings from the layers. Phase 1 stubs
-        return placeholder tags; real versions come through in later
-        phases as each layer is wired."""
+        """Collect model version strings from the layers. Wave 3
+        adds ``pcg`` tag for the TRW-BP / LBP / Gibbs stack and
+        ``cc_nli`` tag for the claim-claim dispatcher (primary + fallback)."""
+        if self._pcg is not None and self._nli_adapter is not None:
+            pcg_tag = "wave3-trw-bp-lbp-gibbs-cc-openai-v1"
+        elif self._nli_adapter is not None:
+            pcg_tag = "phase2-beta-posterior-from-nli"
+        else:
+            pcg_tag = "phase1-placeholder-mean-similarity"
         versions: dict[str, str] = {
             "decomposer": getattr(self._decomposer, "model_id", "phase1-default"),
             "domain_router": "phase1-placeholder-general",
-            "pcg": (
-                "phase2-beta-posterior-from-nli"
-                if self._nli_adapter is not None
-                else "phase1-placeholder-mean-similarity"
-            ),
+            "pcg": pcg_tag,
             "conformal": "phase1-split-conformal-stub",
         }
         if self._nli is not None:
@@ -489,6 +696,11 @@ class Pipeline:
             # NliAdapter doesn't expose a model_id (it composes over an
             # LLMProvider); best we can do is surface the adapter class.
             versions["nli_adapter"] = type(self._nli_adapter).__name__
+        if self._cc_nli_dispatcher is not None:
+            versions["cc_nli"] = type(self._cc_nli_dispatcher).__name__
+            primary = getattr(self._cc_nli_dispatcher, "_primary", None)
+            if primary is not None:
+                versions["cc_nli_primary"] = type(primary).__name__
         return versions
 
 

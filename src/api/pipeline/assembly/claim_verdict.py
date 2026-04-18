@@ -9,6 +9,7 @@ from models.results import ClaimEdge, ClaimVerdict
 if TYPE_CHECKING:
     from models.entities import Claim, Evidence
     from models.results import FallbackUsed
+    from models.verdict_extensions import PCGObservability
 
 
 def assemble_claim_verdict(
@@ -22,6 +23,7 @@ def assemble_claim_verdict(
     supporting_evidence: list[Evidence],
     refuting_evidence: list[Evidence],
     pcg_neighbors: list[ClaimEdge],
+    pcg: "PCGObservability | None" = None,
     nli_self_consistency_variance: float,
     bp_validated: bool | None,
     information_gain: float,
@@ -50,6 +52,7 @@ def assemble_claim_verdict(
         supporting_evidence=supporting_evidence,
         refuting_evidence=refuting_evidence,
         pcg_neighbors=pcg_neighbors,
+        pcg=pcg,
         nli_self_consistency_variance=nli_self_consistency_variance,
         bp_validated=bp_validated,
         information_gain=information_gain,

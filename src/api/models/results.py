@@ -17,6 +17,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_validator
 
 from models.entities import Claim, Evidence
+from models.verdict_extensions import PCGObservability
 
 # ---------------------------------------------------------------------------
 # Edge types in the Probabilistic Claim Graph (Phase 2 fills these in;
@@ -59,6 +60,12 @@ class ClaimVerdict(BaseModel):
     supporting_evidence: list[Evidence] = Field(default_factory=list)
     refuting_evidence: list[Evidence] = Field(default_factory=list)
     pcg_neighbors: list[ClaimEdge] = Field(default_factory=list)
+    # Wave 3 Stream P: PCG provenance (algorithm, convergence, edge count,
+    # log_partition_bound, gibbs_mismatch, cc_nli_fallback_fired_count).
+    # None only when the pipeline runs the pre-PCG Phase-2 posterior path
+    # (e.g. when no PCG adapter is wired in dependencies.py). Populated
+    # unconditionally on v2.0 prod.
+    pcg: PCGObservability | None = None
     nli_self_consistency_variance: float = Field(..., ge=0.0)
     bp_validated: bool | None = None  # None when Gibbs skipped (benign graph)
 

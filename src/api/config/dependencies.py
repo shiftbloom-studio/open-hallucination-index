@@ -29,8 +29,11 @@ from adapters.gemini import GeminiLLMAdapter
 from adapters.mcp_ohi import OHIMCPAdapter, TargetedOHISource
 from adapters.mcp_sources.mediawiki import MediaWikiAdapter
 from adapters.neo4j import Neo4jGraphAdapter
+from adapters.nli_claim_claim import ClaimClaimNliDispatcher
 from adapters.nli_gemini import NliGeminiAdapter
+from adapters.nli_openai_gpt54 import NliOpenAIGpt54Adapter
 from adapters.openai import OpenAILLMAdapter
+from adapters.pcg_belief_propagation import PCGBeliefPropagationAdapter
 from adapters.qdrant import QdrantVectorAdapter
 from adapters.redis_trace import RedisTraceAdapter
 from adapters.verdict_store_memory import InMemoryVerdictStore
@@ -62,6 +65,8 @@ logger = logging.getLogger(__name__)
 
 _llm_provider: LLMProvider | None = None
 _nli_adapter: NliAdapter | None = None
+_cc_nli_dispatcher: ClaimClaimNliDispatcher | None = None
+_pcg_adapter: PCGBeliefPropagationAdapter | None = None
 _embedding_adapter: LocalEmbeddingAdapter | None = None
 _graph_store: GraphKnowledgeStore | None = None
 _vector_store: VectorKnowledgeStore | None = None
@@ -129,7 +134,8 @@ def _configure_logging() -> None:
 
 async def _initialize_adapters() -> None:
     """Wire infrastructure adapters to ports."""
-    global _llm_provider, _nli_adapter, _embedding_adapter, _graph_store, _vector_store
+    global _llm_provider, _nli_adapter, _cc_nli_dispatcher, _pcg_adapter
+    global _embedding_adapter, _graph_store, _vector_store
     global _trace_store, _claim_decomposer, _mcp_sources
     global _evidence_collector, _mcp_selector, _mesh_builder
     global _pipeline, _verdict_store
@@ -253,23 +259,91 @@ async def _initialize_adapters() -> None:
         vector_store=_vector_store,
     )
 
-    # v2 Pipeline orchestrator — Phase 1 placeholder layers for L2/L3/L4/L6
-    # are active; concrete adapters swap in during Phase 2/3 without a
-    # signature change.
+    # Wave 3 Stream P — Claim-claim NLI dispatcher (OpenAI GPT-5.4 xhigh
+    # primary + Gemini fallback). Decision H. Primary is optional-on-config:
+    # if the openai_api_key secret is empty OR cc_nli.llm_provider=='gemini',
+    # we wire the Gemini fallback as BOTH primary and fallback (degrades
+    # gracefully without blowing up cold-start).
+    cc_openai_key = settings.cc_nli.openai_api_key.get_secret_value().strip()
+    want_openai_primary = (
+        settings.cc_nli.llm_provider == "openai" and bool(cc_openai_key)
+    )
+
+    # Fallback Gemini cc-NLI uses a dedicated LLM instance tuned to
+    # settings.cc_nli.llm_fallback_model — keeps claim-evidence and
+    # claim-claim Gemini pulls independent if models diverge.
+    _cc_fallback_llm_settings = settings.llm.model_copy(
+        update={"model": settings.cc_nli.llm_fallback_model}
+    )
+    _cc_fallback_llm = GeminiLLMAdapter(_cc_fallback_llm_settings)
+    _cc_fallback_adapter = NliGeminiAdapter(
+        llm=_cc_fallback_llm,
+        self_consistency_k=1,
+        max_retries=2,
+    )
+
+    if want_openai_primary:
+        _cc_primary_adapter: NliAdapter = NliOpenAIGpt54Adapter(
+            api_key=cc_openai_key,
+            model_with_effort=settings.cc_nli.llm_model,
+            max_retries=settings.cc_nli.openai_max_retries,
+        )
+        logger.info(
+            "cc-NLI primary: OpenAI Responses (%s), fallback: Gemini (%s)",
+            settings.cc_nli.llm_model,
+            settings.cc_nli.llm_fallback_model,
+        )
+    else:
+        # Degraded: use Gemini as primary AND fallback. Still functional,
+        # just no OpenAI signal. Logged as a warning so health-check
+        # monitors can flag the configuration.
+        _cc_primary_adapter = _cc_fallback_adapter
+        logger.warning(
+            "cc-NLI primary=Gemini (OpenAI disabled or key empty); "
+            "fallback also Gemini — no true fallback layer active"
+        )
+
+    _cc_nli_dispatcher = ClaimClaimNliDispatcher(
+        primary=_cc_primary_adapter,
+        fallback=_cc_fallback_adapter,
+        entity_overlap_threshold=settings.pcg.entity_overlap_threshold,
+        claim_claim_max_pairs=settings.pcg.claim_claim_max_pairs,
+    )
+
+    # Wave 3 Stream P — PCG inference adapter (TRW-BP + LBP + Gibbs).
+    _pcg_adapter = PCGBeliefPropagationAdapter(
+        max_iters=settings.pcg.max_iters,
+        convergence_tol=settings.pcg.convergence_tol,
+        damping_factor=settings.pcg.damping_factor,
+        rigor_default=settings.pcg.rigor_default,
+        entity_overlap_threshold=settings.pcg.entity_overlap_threshold,
+        gibbs_burn_in=settings.pcg.gibbs_burn_in,
+        gibbs_samples=settings.pcg.gibbs_samples,
+        gibbs_tolerance=settings.pcg.gibbs_tolerance,
+        claim_claim_max_pairs=settings.pcg.claim_claim_max_pairs,
+    )
+    logger.info(
+        "PCG adapter: TRW-BP/LBP/Gibbs (max_iters=%d, rigor=%s)",
+        settings.pcg.max_iters,
+        settings.pcg.rigor_default,
+    )
+
+    # v2 Pipeline orchestrator — Wave 3 PCG path live.
     _verdict_store = InMemoryVerdictStore()
     conformal_calibrator = SplitConformalCalibrator(InMemoryCalibrationStore())
     _pipeline = Pipeline(
         decomposer=_claim_decomposer,
         retrieval=_evidence_collector,
         conformal=conformal_calibrator,
-        domain_router=None,  # Phase 3 Task 3.2
+        domain_router=None,  # Wave 4 Phase 3
         nli=None,  # NLIService (cross-encoder) — reserved for future path
-        nli_adapter=_nli_adapter,  # Phase 2 Task 2.1 (LLM-based NLI, live)
-        pcg=None,  # Phase 2 Task 2.5
-        domain_adapters=None,  # Phase 3 Task 3.1
+        nli_adapter=_nli_adapter,  # D1: claim-evidence Gemini NLI
+        pcg=_pcg_adapter,  # Wave 3 Stream P: TRW-BP/LBP/Gibbs live
+        cc_nli_dispatcher=_cc_nli_dispatcher,  # Wave 3 Stream P: OpenAI+Gemini cc-NLI
+        domain_adapters=None,  # Wave 4 Phase 3
     )
 
-    logger.info("DI container initialized — v2 pipeline live with Phase 1 placeholders")
+    logger.info("DI container initialized — Wave 3 pipeline live (PCG + cc-NLI wired)")
 
 
 def _build_mcp_sources(settings: Any) -> list[MCPKnowledgeSource]:
