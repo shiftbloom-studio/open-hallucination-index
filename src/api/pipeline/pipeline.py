@@ -174,7 +174,9 @@ class Pipeline:
 
         # L3 / L4 — NLI + PCG joint inference (placeholder: naive posterior)
         await _safe_fire(phase_callback, "classifying")
-        posteriors = await self._compute_posteriors(claims, evidence_per_claim, assignments)
+        posteriors, nli_buckets = await self._compute_posteriors(
+            claims, evidence_per_claim, assignments
+        )
 
         # L5 — conformal calibration per claim
         await _safe_fire(phase_callback, "calibrating")
@@ -192,6 +194,8 @@ class Pipeline:
             information_gain = 0.0
             queued_for_review = False
 
+            supporting_bucket, refuting_bucket = nli_buckets[claim.id]
+
             cv = assemble_claim_verdict(
                 claim=claim,
                 p_true=cal.p_true,
@@ -199,8 +203,8 @@ class Pipeline:
                 coverage_target=cal.coverage_target,
                 domain=primary,
                 domain_assignment_weights={d: w for d, w in assignment.weights.items()},
-                supporting_evidence=evidence_per_claim[claim.id],
-                refuting_evidence=[],  # Phase 2: classified by NLI
+                supporting_evidence=supporting_bucket,
+                refuting_evidence=refuting_bucket,
                 pcg_neighbors=[],  # Phase 2: populated from PCG
                 nli_self_consistency_variance=0.0,
                 bp_validated=None,
@@ -278,8 +282,19 @@ class Pipeline:
         claims: list[Claim],
         evidence_per_claim: dict[UUID, list[Evidence]],
         assignments: dict[UUID, DomainAssignment],
-    ) -> dict[UUID, PosteriorBelief]:
-        """Compute one :class:`PosteriorBelief` per claim.
+    ) -> tuple[
+        dict[UUID, PosteriorBelief],
+        dict[UUID, tuple[list[Evidence], list[Evidence]]],
+    ]:
+        """Compute posteriors AND the NLI-label-driven evidence buckets.
+
+        Returns ``(posteriors, buckets)`` where ``buckets[claim_id]`` is
+        the pair ``(supporting_evidence, refuting_evidence)`` — evidence
+        items classified as ``label="support"`` go in the first list,
+        ``label="refute"`` in the second, and ``label="neutral"`` (plus
+        any terminal-failure sentinels) are dropped from both. Assembly
+        consumes these buckets directly instead of the pre-D1 hardcode
+        that put everything in ``supporting_evidence``.
 
         Three code paths, in precedence order:
 
@@ -291,7 +306,8 @@ class Pipeline:
            Beta(α, β) update, and return ``α / (α + β)``. Sentinel
            ``nli_unavailable`` results are *skipped* (no signal) rather
            than folded as neutral — a flaky LLM must not silently bias
-           the posterior toward zero.
+           the posterior toward zero. Buckets reflect the per-pair NLI
+           ``label``.
 
         2. **Future cross-encoder + PCG path** (``self._nli is not None
            and self._pcg is not None``): raises ``NotImplementedError``
@@ -300,7 +316,9 @@ class Pipeline:
         3. **Phase 1 placeholder path** (everything else): posterior =
            mean evidence similarity score. Keeps the pipeline end-to-
            end functional so /verify returns valid ``DocumentVerdict``
-           objects even before any NLI is injected.
+           objects even before any NLI is injected. Buckets fall back
+           to the pre-NLI convention: all evidence in supporting, none
+           in refuting (no NLI to discriminate).
         """
         del assignments  # Domain routing feeds L5 conformal, not L3/L4 here.
 
@@ -317,7 +335,11 @@ class Pipeline:
                 "the Phase 1 placeholder posterior is active."
             )
 
+        # Placeholder path: no NLI adapter, so no per-evidence label
+        # signal. Buckets default to the pre-NLI convention (everything
+        # in supporting) so older deploys without D1+ wired still render.
         out: dict[UUID, PosteriorBelief] = {}
+        buckets: dict[UUID, tuple[list[Evidence], list[Evidence]]] = {}
         for claim in claims:
             evidence = evidence_per_claim[claim.id]
             if not evidence:
@@ -336,45 +358,78 @@ class Pipeline:
                 iterations=0,
                 edge_count=0,
             )
-        return out
+            buckets[claim.id] = (list(evidence), [])
+        return out, buckets
 
     async def _compute_posteriors_via_nli_adapter(
         self,
         claims: list[Claim],
         evidence_per_claim: dict[UUID, list[Evidence]],
-    ) -> dict[UUID, PosteriorBelief]:
-        """Beta-posterior fold over LLM-classified NLI results.
+    ) -> tuple[
+        dict[UUID, PosteriorBelief],
+        dict[UUID, tuple[list[Evidence], list[Evidence]]],
+    ]:
+        """Beta-posterior fold over LLM-classified NLI results, plus
+        label-driven evidence buckets.
 
         One ``classify`` call per (claim, evidence) pair, bounded by
-        :data:`_NLI_MAX_CONCURRENCY`. Results come back tagged with
-        their originating ``claim_id`` so a single ``asyncio.gather``
-        handles the full document fan-out.
+        :data:`_NLI_MAX_CONCURRENCY`. Each task returns the original
+        ``Evidence`` alongside its ``NliResult`` so assembly can
+        partition evidence by ``label`` without re-classifying:
+
+        * ``label == "support"`` → ``supporting_evidence``
+        * ``label == "refute"``  → ``refuting_evidence``
+        * ``label == "neutral"`` → dropped from both buckets (treated as
+          off-topic for the claim — neither confirms nor contradicts)
+        * ``reasoning == "nli_unavailable"`` (terminal-failure sentinel)
+          → dropped from both buckets (no signal to file under)
+
+        The Beta update still folds support / refute *scores* (not just
+        the label), so a passage with ``label="support"`` but
+        ``refuting_score=0.2`` contributes 0.2 to β — the label only
+        governs bucketing, not the posterior math.
         """
         assert self._nli_adapter is not None
 
         semaphore = asyncio.Semaphore(_NLI_MAX_CONCURRENCY)
 
         async def _classify_pair(
-            claim_id: UUID, claim_text: str, evidence_text: str
-        ) -> tuple[UUID, "NliResult"]:
+            claim_id: UUID,
+            evidence: Evidence,
+            claim_text: str,
+            evidence_text: str,
+        ) -> tuple[UUID, Evidence, "NliResult"]:
             async with semaphore:
                 result = await self._nli_adapter.classify(claim_text, evidence_text)
-            return claim_id, result
+            return claim_id, evidence, result
 
         tasks = [
-            _classify_pair(claim.id, claim.text, ev.content)
+            _classify_pair(claim.id, ev, claim.text, ev.content)
             for claim in claims
             for ev in evidence_per_claim.get(claim.id, [])
         ]
-        classified: list[tuple[UUID, "NliResult"]] = (
+        classified: list[tuple[UUID, Evidence, "NliResult"]] = (
             list(await asyncio.gather(*tasks)) if tasks else []
         )
 
-        # Bucket NLI results back onto their claims so the Beta update
-        # can run once per claim.
+        # Partition by claim_id once; feeds both the Beta update and
+        # the bucket split in one pass (no second walk over tasks).
         results_by_claim: dict[UUID, list["NliResult"]] = {c.id: [] for c in claims}
-        for claim_id, nli_result in classified:
+        buckets: dict[UUID, tuple[list[Evidence], list[Evidence]]] = {
+            c.id: ([], []) for c in claims
+        }
+        for claim_id, evidence, nli_result in classified:
             results_by_claim[claim_id].append(nli_result)
+            # Terminal-failure sentinels carry no signal → drop from
+            # both buckets (matches their exclusion from the Beta fold).
+            if nli_result.reasoning == "nli_unavailable":
+                continue
+            if nli_result.label == "support":
+                buckets[claim_id][0].append(evidence)
+            elif nli_result.label == "refute":
+                buckets[claim_id][1].append(evidence)
+            # label == "neutral": drop from both buckets (off-topic
+            # passage — neither confirms nor contradicts the claim).
 
         out: dict[UUID, PosteriorBelief] = {}
         for claim in claims:
@@ -391,7 +446,7 @@ class Pipeline:
                 iterations=folded,
                 edge_count=0,
             )
-        return out
+        return out, buckets
 
     @staticmethod
     def _compute_decomp_coverage(text: str, claims: list[Claim]) -> float:

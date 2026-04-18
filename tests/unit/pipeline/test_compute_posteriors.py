@@ -242,7 +242,7 @@ async def test_supporting_evidence_pushes_p_true_above_uniform_prior() -> None:
     stub = _StubNli(_support_result())
     pipeline = _build_pipeline(nli_adapter=stub)
 
-    posteriors = await pipeline._compute_posteriors(
+    posteriors, buckets = await pipeline._compute_posteriors(
         [claim],
         {claim.id: evidence},
         {claim.id: _DEFAULT_ASSIGNMENT},
@@ -257,6 +257,12 @@ async def test_supporting_evidence_pushes_p_true_above_uniform_prior() -> None:
     assert belief.p_false == pytest.approx(1.0 - belief.p_true)
     # All three evidence classifications observed.
     assert len(stub.calls) == 3
+    # All 3 classifications used _support_result() whose label is
+    # "support" — buckets[claim.id] = (supporting, refuting) must be
+    # (3 items, 0 items).
+    supporting, refuting = buckets[claim.id]
+    assert len(supporting) == 3
+    assert len(refuting) == 0
 
 
 async def test_refuting_evidence_pushes_p_true_below_uniform_prior() -> None:
@@ -267,7 +273,7 @@ async def test_refuting_evidence_pushes_p_true_below_uniform_prior() -> None:
     stub = _StubNli(_refute_result())
     pipeline = _build_pipeline(nli_adapter=stub)
 
-    posteriors = await pipeline._compute_posteriors(
+    posteriors, buckets = await pipeline._compute_posteriors(
         [claim],
         {claim.id: evidence},
         {claim.id: _DEFAULT_ASSIGNMENT},
@@ -278,6 +284,11 @@ async def test_refuting_evidence_pushes_p_true_below_uniform_prior() -> None:
     assert belief.p_true < 0.4
     assert belief.p_false == pytest.approx(1.0 - belief.p_true)
     assert len(stub.calls) == 3
+    # All 3 classifications used _refute_result() whose label is
+    # "refute" — buckets should mirror: (0 support, 3 refute).
+    supporting, refuting = buckets[claim.id]
+    assert len(supporting) == 0
+    assert len(refuting) == 3
 
 
 async def test_semaphore_caps_in_flight_nli_calls_at_ten() -> None:
@@ -291,7 +302,7 @@ async def test_semaphore_caps_in_flight_nli_calls_at_ten() -> None:
     stub = _StubNli(_support_result())
     pipeline = _build_pipeline(nli_adapter=stub)
 
-    await pipeline._compute_posteriors(
+    posteriors, _buckets = await pipeline._compute_posteriors(
         [claim],
         {claim.id: evidence},
         {claim.id: _DEFAULT_ASSIGNMENT},
@@ -299,6 +310,7 @@ async def test_semaphore_caps_in_flight_nli_calls_at_ten() -> None:
 
     # All 25 classifications eventually ran.
     assert len(stub.calls) == 25
+    assert posteriors[claim.id].iterations == 25  # all folded, none skipped
     # The Semaphore(10) cap held.
     assert stub.max_in_flight <= 10, (
         f"Semaphore should cap concurrency at 10, observed {stub.max_in_flight}"
@@ -325,7 +337,7 @@ async def test_nli_unavailable_results_are_skipped_not_folded_as_neutral() -> No
 
     stub_unavail = _StubNli(_unavailable_result())
     pipe_unavail = _build_pipeline(nli_adapter=stub_unavail)
-    post_unavail = await pipe_unavail._compute_posteriors(
+    post_unavail, buckets_unavail = await pipe_unavail._compute_posteriors(
         [claim_unavailable],
         {claim_unavailable.id: list(evidence)},
         {claim_unavailable.id: _DEFAULT_ASSIGNMENT},
@@ -333,7 +345,7 @@ async def test_nli_unavailable_results_are_skipped_not_folded_as_neutral() -> No
 
     stub_neutral = _StubNli(_asymmetric_neutral_result())
     pipe_neutral = _build_pipeline(nli_adapter=stub_neutral)
-    post_neutral = await pipe_neutral._compute_posteriors(
+    post_neutral, buckets_neutral = await pipe_neutral._compute_posteriors(
         [claim_neutral],
         {claim_neutral.id: list(evidence)},
         {claim_neutral.id: _DEFAULT_ASSIGNMENT},
@@ -344,12 +356,23 @@ async def test_nli_unavailable_results_are_skipped_not_folded_as_neutral() -> No
     # leaving the Beta posterior at the uniform prior.
     assert len(stub_unavail.calls) == 3
     assert post_unavail[claim_unavailable.id].p_true == pytest.approx(0.5)
+    # Terminal-failure sentinels are ALSO dropped from bucket split —
+    # no information to file under supporting OR refuting.
+    supp_unavail, refute_unavail = buckets_unavail[claim_unavailable.id]
+    assert len(supp_unavail) == 0
+    assert len(refute_unavail) == 0
 
     # The asymmetric-neutral case DID fold in (s=0.4, r=0.1 per call),
     # so p_true shifts off 0.5 by a measurable margin (α=1+3*0.4=2.2,
     # β=1+3*0.1=1.3 → p_true ≈ 0.629).
     assert len(stub_neutral.calls) == 3
     assert abs(post_neutral[claim_neutral.id].p_true - 0.5) > 0.05
+    # Label is "neutral" for this stub — all 3 pieces dropped from
+    # both buckets (off-topic passages don't belong in either display
+    # bucket even though their scores nudge the posterior).
+    supp_neutral, refute_neutral = buckets_neutral[claim_neutral.id]
+    assert len(supp_neutral) == 0
+    assert len(refute_neutral) == 0
 
 
 # ---------------------------------------------------------------------------
