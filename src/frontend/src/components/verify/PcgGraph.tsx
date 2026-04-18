@@ -32,16 +32,19 @@ interface GraphLink {
   strength: number;
 }
 
+// Saturated brand accents for 3D viewport (three.js lighting tends to wash
+// out soft colours — 600-weight values keep the node bands distinguishable
+// over the ambient light).
 function bandColor(pTrue: number): string {
-  if (pTrue >= 0.8) return "#34d399"; // emerald-400
-  if (pTrue >= 0.5) return "#fbbf24"; // amber-400
-  return "#f87171"; // rose-400
+  if (pTrue >= 0.8) return "#059669"; // brand-success
+  if (pTrue >= 0.5) return "#d97706"; // brand-warning
+  return "#e63946"; // brand-danger
 }
 
 function edgeColor(type: EdgeType): string {
-  if (type === "entail") return "rgba(52,211,153,0.55)";
-  if (type === "contradict") return "rgba(244,63,94,0.7)";
-  return "rgba(148,163,184,0.35)";
+  if (type === "entail") return "rgba(5,150,105,0.7)";
+  if (type === "contradict") return "rgba(230,57,70,0.8)";
+  return "rgba(107,114,128,0.45)";
 }
 
 export function buildGraphData(claims: ClaimVerdict[], hideNeutral: boolean) {
@@ -57,7 +60,6 @@ export function buildGraphData(claims: ClaimVerdict[], hideNeutral: boolean) {
   for (const c of claims) {
     for (const n of c.pcg_neighbors) {
       if (hideNeutral && n.edge_type === "neutral") continue;
-      // undirected dedupe
       const [a, b] = [c.claim.id, n.neighbor_claim_id].sort();
       const k = `${a}|${b}|${n.edge_type}`;
       if (linkSet.has(k)) continue;
@@ -85,7 +87,7 @@ export interface PcgGraphProps {
 
 function PcgGraphSkeleton() {
   return (
-    <div className="flex h-full min-h-[240px] w-full items-center justify-center rounded-lg border border-white/10 bg-slate-950/40 text-xs text-slate-500">
+    <div className="flex h-full min-h-[240px] w-full items-center justify-center rounded-lg border border-[color:var(--border-subtle)] bg-[color:var(--surface-soft)]/40 text-xs text-brand-subtle">
       Loading 3D graph…
     </div>
   );
@@ -107,7 +109,6 @@ export const PcgGraph = forwardRef<PcgGraphHandle, PcgGraphProps>(function PcgGr
       if (!node) return;
       const g = graphRef.current;
       if (!g) return;
-      // cameraPosition(lookAt?, duration) — available on the 3D variant
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (g as any).cameraPosition?.({}, node, 800);
@@ -121,7 +122,7 @@ export const PcgGraph = forwardRef<PcgGraphHandle, PcgGraphProps>(function PcgGr
     return (
       <div
         className={cn(
-          "flex items-center justify-center rounded-lg border border-dashed border-white/10 text-xs text-slate-500",
+          "flex items-center justify-center rounded-lg border border-dashed border-[color:var(--border-default)] bg-surface-elevated text-xs text-brand-subtle",
           className,
         )}
         style={{ height }}
@@ -133,22 +134,26 @@ export const PcgGraph = forwardRef<PcgGraphHandle, PcgGraphProps>(function PcgGr
 
   return (
     <div
-      className={cn("relative overflow-hidden rounded-lg border border-white/10 bg-slate-950/40", className)}
+      className={cn(
+        "relative overflow-hidden rounded-lg border border-[color:var(--border-subtle)] bg-[color:var(--surface-soft)]",
+        className,
+      )}
       style={{ height }}
       data-testid="pcg-graph"
       data-node-count={data.nodes.length}
       data-link-count={data.links.length}
     >
-      <div className="absolute left-2 top-2 z-10 flex items-center gap-2 rounded-md bg-black/40 px-2 py-1 text-[10px] text-slate-300 backdrop-blur-sm">
+      <div className="absolute left-2 top-2 z-10 flex items-center gap-2 rounded-md border border-[color:var(--border-subtle)] bg-surface-elevated/90 px-2 py-1 text-[10px] text-brand-ink backdrop-blur-sm">
         <label className="flex cursor-pointer items-center gap-1">
           <input
             type="checkbox"
             checked={hideNeutral}
             onChange={(e) => setHideNeutral(e.target.checked)}
+            className="accent-[color:var(--brand-indigo)]"
           />
           <span>Hide neutral edges</span>
         </label>
-        <span className="font-mono text-slate-500">
+        <span className="num-mono text-brand-subtle">
           {data.nodes.length} nodes · {data.links.length} edges
         </span>
       </div>
@@ -160,8 +165,8 @@ export const PcgGraph = forwardRef<PcgGraphHandle, PcgGraphProps>(function PcgGr
         nodeVal={(n: GraphNode) => Math.max(1, n.informationGain * 40)}
         linkColor={(l: GraphLink) => edgeColor(l.edgeType)}
         linkWidth={(l: GraphLink) => Math.abs(l.strength) * 2}
-        linkOpacity={0.8}
-        backgroundColor="rgba(2,6,23,0)"
+        linkOpacity={0.85}
+        backgroundColor="rgba(248,247,245,0)"
         showNavInfo={false}
         width={undefined}
         height={height}

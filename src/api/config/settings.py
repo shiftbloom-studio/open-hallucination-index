@@ -278,6 +278,45 @@ class MCPSettings(BaseSettings):
         super().__init__(**kwargs)
 
 
+class NLISettings(BaseSettings):
+    """Configuration for the Phase 2 LLM-based NLI classifier layer.
+
+    Injected into :class:`adapters.nli_gemini.NliGeminiAdapter` via
+    :func:`config.dependencies._initialize_adapters`. The adapter runs
+    against a dedicated :class:`adapters.gemini.GeminiLLMAdapter` whose
+    model is taken from :attr:`llm_model` (not the decomposer's model),
+    so L1 decomposition and L3 NLI can evolve their model choices
+    independently.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="NLI_")
+
+    llm_model: str = Field(
+        default="gemini-3-pro-preview",
+        description=(
+            "Gemini model id for NLI classification. Default gemini-3-pro-preview;"
+            " fallback to gemini-2.5-pro GA via NLI_LLM_MODEL if preview is flaky."
+        ),
+    )
+    thinking_level: str = Field(
+        default="HIGH",
+        description=(
+            "Gemini 3 thinking budget for NLI. Plumbed for future tuning;"
+            " GeminiLLMAdapter intrinsically sets thinkingLevel=HIGH for any"
+            " gemini-3* model, so this value is not consumed by the adapter today."
+        ),
+    )
+    self_consistency_k: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Majority-vote samples per (claim, evidence) classification."
+            " K=1 disables self-consistency. Flipping to K>1 multiplies Gemini"
+            " spend by K — plan §6.2 G6 gate required."
+        ),
+    )
+
+
 class EmbeddingSettings(BaseSettings):
     """Configuration for local embedding generation."""
 
@@ -319,6 +358,7 @@ class Settings(BaseSettings):
     api: APISettings = Field(default_factory=APISettings)
     verification: VerificationSettings = Field(default_factory=VerificationSettings)
     mcp: MCPSettings = Field(default_factory=MCPSettings)
+    nli: NLISettings = Field(default_factory=NLISettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
 
     # Environment

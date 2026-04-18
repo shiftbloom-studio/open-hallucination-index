@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Inter, Space_Grotesk, JetBrains_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "sonner";
-import { ParticlesBackground } from "@/components/ui/particles-background";
 import { Navbar } from "@/components/layout/navbar";
 import { CookieConsent } from "@/components/layout/cookie-consent";
 import { ConsentAwareAnalytics } from "@/components/analytics/consent-aware-analytics";
@@ -27,6 +26,14 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains",
   display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
+  display: "swap",
+  style: ["normal", "italic"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const siteUrl =
@@ -176,16 +183,15 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} ${fraunces.variable}`}
     >
-      <body className="font-sans antialiased flex min-h-screen flex-col">
+      <body className="font-sans antialiased flex min-h-screen flex-col bg-surface-base text-brand-ink">
         <Script
           id="structured-data"
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: jsonLd }}
         />
         <Providers>
-          <ParticlesBackground />
           <Navbar />
           <main className="flex-1">{children}</main>
           <Footer />

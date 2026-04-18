@@ -21,7 +21,7 @@ from interfaces.mcp import (
     reset_mcp_call_cache,
     set_mcp_call_cache,
 )
-from interfaces.nli import NLIService
+from interfaces.nli import NliAdapter, NliLabel, NliResult, NLIService
 from interfaces.pcg import PCGInferenceService
 from interfaces.stores import (
     GraphKnowledgeStore,
@@ -40,6 +40,10 @@ __all__ = [
     "DomainRouter",
     # L3 NLI
     "NLIService",
+    # L3 NLI (LLM-based — Phase 2 Task 2.1)
+    "NliAdapter",
+    "NliResult",
+    "NliLabel",
     # L4 PCG
     "PCGInferenceService",
     # L5 Conformal

@@ -27,7 +27,9 @@ if TYPE_CHECKING:
 from adapters.embeddings import LocalEmbeddingAdapter
 from adapters.gemini import GeminiLLMAdapter
 from adapters.mcp_ohi import OHIMCPAdapter, TargetedOHISource
+from adapters.mcp_sources.mediawiki import MediaWikiAdapter
 from adapters.neo4j import Neo4jGraphAdapter
+from adapters.nli_gemini import NliGeminiAdapter
 from adapters.openai import OpenAILLMAdapter
 from adapters.qdrant import QdrantVectorAdapter
 from adapters.redis_trace import RedisTraceAdapter
@@ -36,6 +38,7 @@ from config.settings import get_settings
 from interfaces.decomposition import ClaimDecomposer
 from interfaces.llm import LLMProvider
 from interfaces.mcp import MCPKnowledgeSource
+from interfaces.nli import NliAdapter
 from interfaces.stores import (
     GraphKnowledgeStore,
     VectorKnowledgeStore,
@@ -58,6 +61,7 @@ logger = logging.getLogger(__name__)
 # -----------------------------------------------------------------------------
 
 _llm_provider: LLMProvider | None = None
+_nli_adapter: NliAdapter | None = None
 _embedding_adapter: LocalEmbeddingAdapter | None = None
 _graph_store: GraphKnowledgeStore | None = None
 _vector_store: VectorKnowledgeStore | None = None
@@ -125,7 +129,7 @@ def _configure_logging() -> None:
 
 async def _initialize_adapters() -> None:
     """Wire infrastructure adapters to ports."""
-    global _llm_provider, _embedding_adapter, _graph_store, _vector_store
+    global _llm_provider, _nli_adapter, _embedding_adapter, _graph_store, _vector_store
     global _trace_store, _claim_decomposer, _mcp_sources
     global _evidence_collector, _mcp_selector, _mesh_builder
     global _pipeline, _verdict_store
@@ -181,14 +185,64 @@ async def _initialize_adapters() -> None:
     # L1 decomposer
     _claim_decomposer = LLMClaimDecomposer(llm_provider=_llm_provider)
 
+    # L3 NLI — Phase 2 LLM-based 3-way classifier (Stream B port, wired by
+    # Stream D1). Always the native Gemini adapter regardless of LLM_BACKEND
+    # because NLI depends on safetySettings=BLOCK_NONE + thinkingLevel=HIGH,
+    # which the OpenAI-compat shim strips. We use model_copy to reuse the
+    # decomposer's LLMSettings (same api_key, timeout, etc.) while swapping
+    # the model id to settings.nli.llm_model — this lets L1 and L3 evolve
+    # their model choices independently without duplicating all the other
+    # LLM_* env vars.
+    _nli_llm_settings = settings.llm.model_copy(
+        update={"model": settings.nli.llm_model}
+    )
+    _nli_llm_provider = GeminiLLMAdapter(_nli_llm_settings)
+    _nli_adapter = NliGeminiAdapter(
+        llm=_nli_llm_provider,
+        self_consistency_k=settings.nli.self_consistency_k,
+        max_retries=3,
+    )
+    logger.info(
+        "NLI adapter: %s (self_consistency_k=%d)",
+        settings.nli.llm_model,
+        settings.nli.self_consistency_k,
+    )
+
     # MCP sources (dynamic; settings drives which ones)
     _mcp_sources = _build_mcp_sources(settings)
+    # Per-source try/except: one bad endpoint must not abort lifespan. The
+    # collector's `if source.is_available` gate skips any source whose
+    # connect() raised, so failures here are tolerable and logged.
+    for _src in _mcp_sources:
+        try:
+            await _src.connect()
+            logger.info(
+                f"MCP source connected: {_src.source_name} "
+                f"(available={_src.is_available})"
+            )
+        except Exception as e:
+            logger.warning(
+                f"MCP source {getattr(_src, 'source_name', type(_src).__name__)} "
+                f"connect failed — skipping: {e}"
+            )
     _mcp_selector = SmartMCPSelector(_mcp_sources) if _mcp_sources else None
 
-    # Adaptive collector (reused by v2 L1 retrieval layer)
+    # Adaptive collector (reused by v2 L1 retrieval layer).
+    # Stream F fix: plumb _mcp_selector so Tier 2 (external MCP sources)
+    # actually runs — without it `_collect_mcp` hits the "No sources and
+    # no selector" branch and returns []. Also plumb the verification
+    # timeouts; the collector's hard-coded defaults (local=50ms,
+    # mcp=500ms, total=2000ms) are tighter than MediaWiki's ~600-800ms
+    # round-trip, so requests were cancelled even if the selector were
+    # wired. settings.verification.*_timeout_ms is the single source of
+    # truth for these.
     _evidence_collector = AdaptiveEvidenceCollector(
         graph_store=_graph_store,
         vector_store=_vector_store,
+        mcp_selector=_mcp_selector,
+        local_timeout_ms=settings.verification.local_timeout_ms,
+        mcp_timeout_ms=settings.verification.mcp_timeout_ms,
+        total_timeout_ms=settings.verification.total_timeout_ms,
     )
 
     # Knowledge mesh builder (used by L1 retrieval). trace_store is optional
@@ -209,7 +263,8 @@ async def _initialize_adapters() -> None:
         retrieval=_evidence_collector,
         conformal=conformal_calibrator,
         domain_router=None,  # Phase 3 Task 3.2
-        nli=None,  # Phase 2 Task 2.1
+        nli=None,  # NLIService (cross-encoder) — reserved for future path
+        nli_adapter=_nli_adapter,  # Phase 2 Task 2.1 (LLM-based NLI, live)
         pcg=None,  # Phase 2 Task 2.5
         domain_adapters=None,  # Phase 3 Task 3.1
     )
@@ -225,13 +280,28 @@ def _build_mcp_sources(settings: Any) -> list[MCPKnowledgeSource]:
     except AttributeError:
         return sources
 
-    # Exact wiring preserved from v1 — the sources themselves are reusable.
-    if getattr(mcp_cfg, "ohi_enabled", False):
-        ohi_adapter = OHIMCPAdapter(mcp_cfg)
-        # Note: TargetedOHISource requires (settings, search_type, source_name);
-        # here we're wiring the unified OHI adapter which internally uses
-        # search_type="all". Use the base adapter directly.
-        sources.append(ohi_adapter)
+    # Skip MCP wiring in tests so unit tests never hit live external APIs
+    # even if MCP_*_ENABLED defaults are left at their pydantic values.
+    in_test_env = getattr(settings, "environment", "development") == "test"
+
+    # MediaWiki (live Wikipedia Action API) — Phase 2 Wave 1 cheap-evidence
+    # source. Default ON via MCPSettings.wikipedia_enabled.
+    if getattr(mcp_cfg, "wikipedia_enabled", True) and not in_test_env:
+        sources.append(MediaWikiAdapter())
+
+    # OHI unified MCP server. Default URL http://ohi-mcp-server:8080 is
+    # unresolvable in prod; require explicit MCP_OHI_ENABLED=true at the
+    # process env so pydantic's default-True cannot accidentally enable
+    # the dead adapter at Lambda cold-start. Import retained for local-
+    # compose/dev use.
+    _ohi_env = os.environ.get("MCP_OHI_ENABLED")
+    if (
+        _ohi_env is not None
+        and _ohi_env.lower() == "true"
+        and getattr(mcp_cfg, "ohi_enabled", False)
+    ):
+        sources.append(OHIMCPAdapter(mcp_cfg))
+
     return sources
 
 
@@ -252,6 +322,14 @@ async def _cleanup_adapters() -> None:
             await _trace_store.close()
         except Exception as e:
             logger.warning(f"Trace store close failed: {e}")
+    for _src in _mcp_sources:
+        try:
+            await _src.disconnect()
+        except Exception as e:
+            logger.warning(
+                f"MCP source {getattr(_src, 'source_name', type(_src).__name__)} "
+                f"disconnect failed: {e}"
+            )
     logger.info("DI container cleanup complete")
 
 
@@ -264,6 +342,12 @@ def get_llm_provider() -> LLMProvider:
     if _llm_provider is None:
         raise RuntimeError("LLM provider not initialized (lifespan not started?)")
     return _llm_provider
+
+
+def get_nli_adapter() -> NliAdapter:
+    if _nli_adapter is None:
+        raise RuntimeError("NLI adapter not initialized (lifespan not started?)")
+    return _nli_adapter
 
 
 def get_graph_store() -> GraphKnowledgeStore:

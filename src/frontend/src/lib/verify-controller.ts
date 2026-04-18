@@ -1,13 +1,30 @@
 import { useCallback, useReducer, useRef } from "react";
 import { OhiError, ohi } from "./ohi-client";
-import { streamVerify } from "./sse";
+import type { JobStatus } from "./ohi-client";
 import type {
   ClaimVerdict,
   Domain,
   DocumentVerdict,
-  SseEvent,
   VerifyRequest,
 } from "./ohi-types";
+
+/**
+ * Stream D2: SSE was blocked on a free-tier Cloudflare + API Gateway
+ * host-header quirk and a 30 s hard cap. The controller is now a
+ * polling loop against ``GET /api/v2/verify/status/{job_id}``. The
+ * public state shape is preserved so ``VerifyPage`` and ``SseProgress``
+ * (naming-legacy-only) continue to work — status values that SSE
+ * populated are now driven from phase transitions in the polled
+ * record.
+ *
+ * Polling mechanics, calibrated with E1's observed latency (~5 s for a
+ * 2-claim doc) and the 180 s Lambda timeout:
+ * - 1 s interval by default (phases typically change every 2–10 s).
+ * - Exponential backoff to 5 s on transient network errors.
+ * - Hard 3 min absolute cap — well past the 180 s Lambda timeout so
+ *   hung Lambdas surface as a terminal error in the UI rather than a
+ *   perpetual spinner.
+ */
 
 export type VerifyStatus =
   | "idle"
@@ -18,8 +35,27 @@ export type VerifyStatus =
   | "error";
 
 export interface ProgressBag {
+  /**
+   * The canonical progress signal under D2: the current phase string
+   * from the polled record (one of the five pipeline boundary phases,
+   * plus ``queued`` before the async handler picks up). SseProgress
+   * does not yet consume this field; it is here for future UI work.
+   */
+  currentPhase?: string;
+  /** Every phase seen so far, in arrival order. Useful for debug. */
+  phasesSeen?: string[];
+
+  // ── Legacy ProgressBag fields (SSE era) ──────────────────────────
+  // SseProgress reads these to render the step list. They are now
+  // populated *opportunistically* on phase transitions: we stamp each
+  // legacy field the moment its logical phase finishes, so the UI
+  // still ticks through steps even though we no longer receive the
+  // per-event telemetry SSE provided. Exact counts (claim_count, nli
+  // pair count, pcg iterations) are placeholder zeros until the final
+  // document_verdict arrives, at which point we backfill from the
+  // verdict itself.
   decomposition?: { claim_count: number; estimated_total_ms: number };
-  routed: string[]; // claim_ids, use array for stable render (JSON.stringify-safe)
+  routed: string[];
   nli?: { claim_evidence_pairs_scored: number; claim_pair_pairs_scored: number };
   pcg?: {
     iterations: number;
@@ -38,6 +74,7 @@ export interface VerifyState {
   verdict: DocumentVerdict | null;
   error: OhiError | Error | null;
   startedAt: number | null;
+  jobId: string | null;
 }
 
 export const initialState: VerifyState = {
@@ -47,15 +84,67 @@ export const initialState: VerifyState = {
   verdict: null,
   error: null,
   startedAt: null,
+  jobId: null,
 };
 
 export type VerifyAction =
   | { type: "START"; at: number }
-  | { type: "SSE_EVENT"; event: SseEvent }
-  | { type: "COMPLETE_SYNC"; verdict: DocumentVerdict }
-  | { type: "SWITCH_SYNC_FALLBACK" }
+  | { type: "JOB_ACCEPTED"; jobId: string }
+  | { type: "POLL_UPDATE"; status: JobStatus }
+  | { type: "COMPLETE"; verdict: DocumentVerdict }
   | { type: "ERROR"; error: OhiError | Error }
   | { type: "RESET" };
+
+function applyPhaseToProgress(progress: ProgressBag, phase: string): ProgressBag {
+  const phasesSeen = [...(progress.phasesSeen ?? [])];
+  if (phasesSeen[phasesSeen.length - 1] !== phase) {
+    phasesSeen.push(phase);
+  }
+  const next: ProgressBag = { ...progress, currentPhase: phase, phasesSeen };
+
+  // Opportunistic population of legacy SseProgress fields. Each phase
+  // marks *its predecessor* as done — so "retrieving_evidence" arrives
+  // the moment the pipeline finished decomposing, and so on. Counts
+  // are placeholders until the verdict arrives; the goal is just to
+  // drive the step-state machine in SseProgress.
+  if (
+    phase === "retrieving_evidence" ||
+    phase === "classifying" ||
+    phase === "calibrating" ||
+    phase === "assembling"
+  ) {
+    if (!next.decomposition) {
+      next.decomposition = { claim_count: 0, estimated_total_ms: 0 };
+    }
+  }
+  if (phase === "classifying" || phase === "calibrating" || phase === "assembling") {
+    // No real claim-routing phase exists in pipeline.py — domain routing
+    // is a trivial dict lookup so it never gets its own boundary. We
+    // fake a single-entry routed[] so SseProgress shows the routing
+    // step as active, then done, at the right moment.
+    if (next.routed.length === 0) next.routed = ["__placeholder__"];
+  }
+  if (phase === "calibrating" || phase === "assembling") {
+    if (!next.nli) {
+      next.nli = { claim_evidence_pairs_scored: 0, claim_pair_pairs_scored: 0 };
+    }
+  }
+  if (phase === "assembling") {
+    if (!next.pcg) {
+      next.pcg = {
+        iterations: 0,
+        converged: true,
+        algorithm: "beta-posterior-from-nli",
+        internal_consistency: 1.0,
+        gibbs_validated: null,
+      };
+    }
+    if (!next.refinement) {
+      next.refinement = { pass: 0, claims_re_retrieved: 0, marginal_max_change: 0 };
+    }
+  }
+  return next;
+}
 
 export function verifyReducer(state: VerifyState, action: VerifyAction): VerifyState {
   switch (action.type) {
@@ -69,83 +158,44 @@ export function verifyReducer(state: VerifyState, action: VerifyAction): VerifyS
         startedAt: action.at,
       };
 
-    case "SWITCH_SYNC_FALLBACK":
-      return { ...state, status: "sync_fallback" };
+    case "JOB_ACCEPTED":
+      return { ...state, jobId: action.jobId };
 
-    case "ERROR":
-      return { ...state, status: "error", error: action.error };
+    case "POLL_UPDATE": {
+      const js = action.status;
+      if (js.status === "error") {
+        const asErr = new OhiError(503, { detail: js.error ?? "async pipeline error" });
+        return { ...state, status: "error", error: asErr };
+      }
+      return {
+        ...state,
+        status: js.status === "done" ? "complete" : "streaming",
+        progress: applyPhaseToProgress(state.progress, js.phase),
+      };
+    }
 
-    case "COMPLETE_SYNC":
+    case "COMPLETE": {
+      const v = action.verdict;
+      // Backfill progress.decomposition.claim_count + routed[] from the
+      // real verdict so the step telemetry shows accurate counts at
+      // completion time.
+      const progress: ProgressBag = {
+        ...state.progress,
+        currentPhase: "assembling",
+        decomposition: { claim_count: v.claims.length, estimated_total_ms: v.processing_time_ms },
+        routed: v.claims.map((c) => c.claim.id),
+      };
       return {
         ...state,
         status: "complete",
-        verdict: action.verdict,
-        claims: action.verdict.claims,
+        verdict: v,
+        claims: v.claims,
+        progress,
       };
-
-    case "SSE_EVENT": {
-      const { event } = action;
-      switch (event.event) {
-        case "decomposition_complete":
-          return {
-            ...state,
-            status: "streaming",
-            progress: { ...state.progress, decomposition: event.data },
-          };
-
-        case "claim_routed": {
-          if (state.progress.routed.includes(event.data.claim_id)) return state;
-          return {
-            ...state,
-            progress: {
-              ...state.progress,
-              routed: [...state.progress.routed, event.data.claim_id],
-            },
-          };
-        }
-
-        case "nli_complete":
-          return { ...state, progress: { ...state.progress, nli: event.data } };
-
-        case "pcg_propagation_complete":
-          return { ...state, progress: { ...state.progress, pcg: event.data } };
-
-        case "refinement_pass_complete":
-          return {
-            ...state,
-            progress: { ...state.progress, refinement: event.data },
-          };
-
-        case "claim_verdict": {
-          // De-dupe by claim.id for reconnect safety
-          if (state.claims.some((c) => c.claim.id === event.data.claim.id)) {
-            return state;
-          }
-          return {
-            ...state,
-            status: "partial",
-            claims: [...state.claims, event.data],
-          };
-        }
-
-        case "document_verdict":
-          return {
-            ...state,
-            status: "complete",
-            verdict: event.data,
-            // Backend's final document_verdict event has an empty claims array
-            // (spec §10 example); keep the accumulated per-claim list.
-            claims: event.data.claims.length > 0 ? event.data.claims : state.claims,
-          };
-
-        case "error": {
-          const body = event.data;
-          const asErr = new OhiError(503, body as never);
-          return { ...state, status: "error", error: asErr };
-        }
-      }
-      return state;
     }
+
+    case "ERROR":
+      return { ...state, status: "error", error: action.error };
   }
 }
 
@@ -153,25 +203,44 @@ export interface UseVerifyControllerApi {
   state: VerifyState;
   submit: (req: VerifyRequest) => Promise<void>;
   /**
-   * Skip SSE entirely and go straight to the synchronous /verify endpoint.
-   * Used by the "Retry with sync fallback" button in the error panel when
-   * the stream endpoint is unavailable (e.g. 404 during Phase 1 when
-   * /verify/stream isn't implemented yet).
+   * Alias for ``submit`` — kept for back-compat with VerifyPage's
+   * "Retry with sync fallback" button. Pre-D2 this bypassed SSE and
+   * hit /verify directly; under D2 there is no SSE path at all, so
+   * both entry points drive the same polling flow.
    */
   submitSync: (req: VerifyRequest) => Promise<void>;
   cancel: () => void;
   reset: () => void;
 }
 
-/**
- * React hook owning the AbortController + reducer for a /verify session.
- * Implementation note: SYNC fallback (post /verify blocking) triggers when
- * no SSE bytes arrive within 8s (corporate proxy / broken streaming).
- */
+const POLL_INTERVAL_MS = 1000;
+const POLL_MAX_INTERVAL_MS = 5000;
+const POLL_HARD_CAP_MS = 3 * 60 * 1000;
+
+async function _sleep(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return;
+  await new Promise<void>((resolve) => {
+    const onAbort = () => {
+      clearTimeout(handle);
+      resolve();
+    };
+    const handle = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export function useVerifyController(options?: {
   domains?: Domain[]; // reserved for future hints
-  firstByteTimeoutMs?: number;
+  firstByteTimeoutMs?: number; // kept for API compat; no longer used
 }): UseVerifyControllerApi {
+  // options.firstByteTimeoutMs is intentionally unused under D2 polling.
+  // Kept in the props signature so VerifyPage and existing callers that
+  // pass it do not need to change when they upgrade.
+  void options?.firstByteTimeoutMs;
+
   const [state, dispatch] = useReducer(verifyReducer, initialState);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -185,77 +254,91 @@ export function useVerifyController(options?: {
     dispatch({ type: "RESET" });
   }, [cancel]);
 
-  const submit = useCallback(
-    async (req: VerifyRequest) => {
-      cancel();
-      const controller = new AbortController();
-      abortRef.current = controller;
+  const runFlow = useCallback(async (req: VerifyRequest) => {
+    cancel();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const signal = controller.signal;
+    const startedAt = Date.now();
 
-      dispatch({ type: "START", at: Date.now() });
+    dispatch({ type: "START", at: startedAt });
 
-      let sawAnyByte = false;
-      const timeoutMs = options?.firstByteTimeoutMs ?? 8000;
-      const timeoutId = setTimeout(() => {
-        if (!sawAnyByte) {
-          dispatch({ type: "SWITCH_SYNC_FALLBACK" });
-          // Fire sync fallback concurrently; the stream will still be aborted below.
-          controller.abort();
-          ohi
-            .verify(req, { signal: new AbortController().signal })
-            .then((v) => dispatch({ type: "COMPLETE_SYNC", verdict: v }))
-            .catch((err) =>
-              dispatch({ type: "ERROR", error: err instanceof Error ? err : new Error(String(err)) }),
-            );
-        }
-      }, timeoutMs);
+    let jobId: string;
+    try {
+      const accepted = await ohi.verify(req, { signal });
+      jobId = accepted.job_id;
+      dispatch({ type: "JOB_ACCEPTED", jobId });
+    } catch (err) {
+      if (signal.aborted) return;
+      dispatch({
+        type: "ERROR",
+        error: err instanceof Error ? err : new Error(String(err)),
+      });
+      return;
+    }
 
-      await streamVerify(
-        req,
-        {
-          onEvent: (evt) => {
-            sawAnyByte = true;
-            dispatch({ type: "SSE_EVENT", event: evt });
-          },
-          onError: (err) => {
-            clearTimeout(timeoutId);
-            if (controller.signal.aborted) return; // swallowed by cancel or fallback
-            dispatch({
-              type: "ERROR",
-              error: err instanceof Error ? err : new Error(String(err)),
-            });
-          },
-          onComplete: () => {
-            clearTimeout(timeoutId);
-          },
-        },
-        controller.signal,
-      );
-    },
-    [cancel, options?.firstByteTimeoutMs],
-  );
+    let currentInterval = POLL_INTERVAL_MS;
 
-  const submitSync = useCallback(
-    async (req: VerifyRequest) => {
-      cancel();
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      dispatch({ type: "START", at: Date.now() });
-      dispatch({ type: "SWITCH_SYNC_FALLBACK" });
-
-      try {
-        const verdict = await ohi.verify(req, { signal: controller.signal });
-        dispatch({ type: "COMPLETE_SYNC", verdict });
-      } catch (err) {
-        if (controller.signal.aborted) return;
+    while (!signal.aborted) {
+      if (Date.now() - startedAt > POLL_HARD_CAP_MS) {
         dispatch({
           type: "ERROR",
-          error: err instanceof Error ? err : new Error(String(err)),
+          error: new Error(
+            "Verification timed out after 3 minutes. The backend may still be " +
+              "processing; check the poll endpoint directly if you need the result.",
+          ),
         });
+        return;
       }
-    },
-    [cancel],
+
+      let js: JobStatus;
+      try {
+        js = await ohi.verifyStatus(jobId, { signal });
+        // Success resets the backoff clock.
+        currentInterval = POLL_INTERVAL_MS;
+      } catch (err) {
+        if (signal.aborted) return;
+        if (err instanceof OhiError && err.status === 404) {
+          // Job disappeared — either TTL reaped it (shouldn't happen
+          // within 3 min) or a producer bug. Surface.
+          dispatch({ type: "ERROR", error: err });
+          return;
+        }
+        // Transient: exponential backoff capped at 5 s.
+        currentInterval = Math.min(currentInterval * 2, POLL_MAX_INTERVAL_MS);
+        await _sleep(currentInterval, signal);
+        continue;
+      }
+
+      dispatch({ type: "POLL_UPDATE", status: js });
+
+      if (js.status === "done") {
+        if (js.result) {
+          dispatch({ type: "COMPLETE", verdict: js.result });
+        } else {
+          dispatch({
+            type: "ERROR",
+            error: new Error("Backend reported done but returned no verdict payload."),
+          });
+        }
+        return;
+      }
+      if (js.status === "error") {
+        // POLL_UPDATE already dispatched the error; stop the loop.
+        return;
+      }
+
+      await _sleep(currentInterval, signal);
+    }
+  }, [cancel]);
+
+  const submit = useCallback(
+    async (req: VerifyRequest) => runFlow(req),
+    [runFlow],
   );
+
+  // Retry button still calls submitSync; under polling it is just submit.
+  const submitSync = submit;
 
   return { state, submit, submitSync, cancel, reset };
 }

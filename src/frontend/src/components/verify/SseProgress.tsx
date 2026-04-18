@@ -32,11 +32,12 @@ function computeSteps(
     {
       key: "routing",
       label: "Domain routing",
-      state: p.decomposition && p.routed.length >= p.decomposition.claim_count
-        ? "done"
-        : p.decomposition
-          ? "active"
-          : "pending",
+      state:
+        p.decomposition && p.routed.length >= p.decomposition.claim_count
+          ? "done"
+          : p.decomposition
+            ? "active"
+            : "pending",
       detail: p.decomposition ? `${p.routed.length}/${p.decomposition.claim_count}` : undefined,
     },
     {
@@ -66,8 +67,7 @@ function computeSteps(
     {
       key: "verdicts",
       label: "Claim verdicts",
-      state:
-        status === "complete" ? "done" : claimsCount > 0 ? "active" : "pending",
+      state: status === "complete" ? "done" : claimsCount > 0 ? "active" : "pending",
       detail:
         p.decomposition && claimsCount > 0
           ? `${claimsCount}/${p.decomposition.claim_count}`
@@ -80,17 +80,29 @@ function computeSteps(
     },
   ];
 
-  if (status === "error" || status === "sync_fallback") {
-    // Freeze currently active step as-is.
-    return steps;
-  }
   return steps;
 }
 
-function dotClass(state: StepState): string {
-  if (state === "done") return "bg-emerald-400";
-  if (state === "active") return "bg-amber-400 shadow-[0_0_8px_theme(colors.amber.300)]";
-  return "bg-white/15";
+function dotStyle(state: StepState): { className: string; style: React.CSSProperties } {
+  if (state === "done") {
+    return {
+      className: "",
+      style: { background: "var(--brand-success)" },
+    };
+  }
+  if (state === "active") {
+    return {
+      className: "",
+      style: {
+        background: "var(--brand-indigo)",
+        boxShadow: "0 0 8px rgba(99,102,241,0.55)",
+      },
+    };
+  }
+  return {
+    className: "bg-[color:var(--border-default)]",
+    style: {},
+  };
 }
 
 export function SseProgress({ status, progress, claimsRenderedCount, className }: SseProgressProps) {
@@ -98,37 +110,41 @@ export function SseProgress({ status, progress, claimsRenderedCount, className }
 
   return (
     <section
-      className={cn("rounded-xl border border-white/10 bg-white/[0.03] p-4", className)}
+      className={cn(
+        "rounded-xl border border-[color:var(--border-subtle)] bg-surface-elevated p-4 shadow-sm",
+        className,
+      )}
       aria-label="Pipeline progress"
       data-testid="sse-progress"
       data-status={status}
     >
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-        Pipeline progress
-      </div>
+      <div className="label-mono mb-2">Pipeline progress</div>
       <ol className="space-y-1.5">
-        {steps.map((s) => (
-          <li
-            key={s.key}
-            className="flex items-center gap-2.5 text-[11px]"
-            data-step={s.key}
-            data-state={s.state}
-          >
-            <span className={cn("h-2 w-2 flex-none rounded-full", dotClass(s.state))} />
-            <span
-              className={cn(
-                s.state === "done" && "text-slate-200",
-                s.state === "active" && "text-amber-200",
-                s.state === "pending" && "text-slate-500",
-              )}
+        {steps.map((s) => {
+          const d = dotStyle(s.state);
+          return (
+            <li
+              key={s.key}
+              className="flex items-center gap-2.5 text-[11px]"
+              data-step={s.key}
+              data-state={s.state}
             >
-              {s.label}
-            </span>
-            {s.detail && (
-              <span className="ml-auto font-mono text-[10px] text-slate-500">{s.detail}</span>
-            )}
-          </li>
-        ))}
+              <span className={cn("h-2 w-2 flex-none rounded-full", d.className)} style={d.style} />
+              <span
+                className={cn(
+                  s.state === "done" && "text-brand-ink",
+                  s.state === "active" && "text-[color:var(--brand-indigo-strong)] font-medium",
+                  s.state === "pending" && "text-brand-subtle",
+                )}
+              >
+                {s.label}
+              </span>
+              {s.detail && (
+                <span className="num-mono ml-auto text-[10px] text-brand-subtle">{s.detail}</span>
+              )}
+            </li>
+          );
+        })}
       </ol>
     </section>
   );

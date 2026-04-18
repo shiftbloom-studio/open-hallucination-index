@@ -5,6 +5,8 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Points, PointMaterial } from "@react-three/drei";
 import * as THREE from "three";
 
+// Light-mode variant: indigo particles at low opacity sit quietly behind the hero.
+// The cloud rotates slowly + parallaxes with the mouse; purely decorative.
 function KnowledgeGraphPoints() {
   const ref = useRef<THREE.Points>(null);
 
@@ -38,12 +40,12 @@ function KnowledgeGraphPoints() {
     ref.current.rotation.x = THREE.MathUtils.lerp(
       ref.current.rotation.x,
       targetX,
-      1 - Math.pow(0.001, delta)
+      1 - Math.pow(0.001, delta),
     );
     ref.current.rotation.y = THREE.MathUtils.lerp(
       ref.current.rotation.y,
       targetY,
-      1 - Math.pow(0.001, delta)
+      1 - Math.pow(0.001, delta),
     );
 
     ref.current.rotation.z += delta * 0.035;
@@ -54,11 +56,11 @@ function KnowledgeGraphPoints() {
       <Points ref={ref} positions={positions} stride={3} frustumCulled={false}>
         <PointMaterial
           transparent
-          color="white"
-          size={0.018}
+          color="#6366f1"
+          size={0.016}
           sizeAttenuation
           depthWrite={false}
-          opacity={0.55}
+          opacity={0.45}
         />
       </Points>
     </group>
@@ -67,7 +69,7 @@ function KnowledgeGraphPoints() {
 
 export default function KnowledgeGraphCanvas() {
   return (
-    <div className="pointer-events-none absolute inset-0 z-0 opacity-70">
+    <div className="pointer-events-none absolute inset-0 z-0 opacity-65">
       <Canvas camera={{ position: [0, 0, 1.2] }} dpr={[1, 2]}>
         <ambientLight intensity={0.7} />
         <KnowledgeGraphPoints />

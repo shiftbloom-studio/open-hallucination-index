@@ -82,6 +82,25 @@ resource "aws_lambda_function" "api" {
       LLM_API_KEY  = data.aws_secretsmanager_secret_version.gemini.secret_string
       LLM_MODEL    = var.gemini_model
 
+      # Phase 2 LLM-based NLI (D1 wire). A dedicated NliGeminiAdapter runs on
+      # a second GeminiLLMAdapter instance with this model, reusing LLM_API_KEY
+      # via pydantic-settings in dependencies.py (model_copy with model override).
+      # Self-consistency is off by default (K=1) — G6 gate before flipping to 3.
+      NLI_LLM_MODEL          = var.nli_llm_model
+      NLI_THINKING_LEVEL     = var.nli_thinking_level
+      NLI_SELF_CONSISTENCY_K = tostring(var.nli_self_consistency_k)
+
+      # Stream D2 — async polling pattern. POST /api/v2/verify writes a
+      # pending record here, self-async-invokes, returns 202. The async
+      # handler reads JOBS_TABLE_NAME from this env var; the Lambda's own
+      # function name comes from AWS_LAMBDA_FUNCTION_NAME which the runtime
+      # sets automatically. OHI_ASYNC_VERIFY_TTL_SECONDS bounds how long a
+      # job record survives after creation (DynamoDB reaps via TTL within
+      # ~48h of this value) — 3600 covers the ~3min frontend polling cap
+      # plus a 1h margin for post-mortem debugging.
+      JOBS_TABLE_NAME              = local.jobs_table_name
+      OHI_ASYNC_VERIFY_TTL_SECONDS = tostring(var.async_verify_ttl_seconds)
+
       # Secret ARNs (values fetched at runtime via SecretsLoader)
       OHI_GEMINI_KEY_SECRET_ARN               = local.secret_arns["gemini_api_key"]
       OHI_INTERNAL_BEARER_SECRET_ARN          = local.secret_arns["internal_bearer_token"]
@@ -103,7 +122,11 @@ resource "aws_lambda_function" "api" {
     aws_iam_role_policy_attachment.lambda_basic,
     aws_iam_role_policy.lambda_secrets,
     aws_iam_role_policy.lambda_artifacts,
+    aws_iam_role_policy.lambda_jobs,
     aws_cloudwatch_log_group.api,
+    # lambda_self_invoke is intentionally omitted from depends_on — it
+    # references aws_lambda_function.api.arn, which would form a dependency
+    # cycle. See iam.tf comment.
   ]
 }
 

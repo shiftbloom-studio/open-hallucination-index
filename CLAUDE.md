@@ -35,6 +35,22 @@ gives you the hard-won operational knowledge the current owner
   `aws logs tail` / `filter-log-events` with a UnicodeEncodeError mid-
   stream. Use **boto3** via Python when fetching logs, and wrap every
   printed string in `.encode('ascii', errors='backslashreplace').decode()`.
+  Same class of trap applies to **Python stdout on Windows** — prefix
+  smoke scripts that print Unicode with `PYTHONIOENCODING=utf-8`.
+- **Git-Bash `/tmp/...` paths are not resolvable from Windows-native
+  Python stdlib `open()`.** If a smoke script needs to read a `/tmp/`
+  file, pipe via `cat /tmp/foo.json | python -c "import sys, json; d =
+  json.loads(sys.stdin.read()); ..."` instead of `open('/tmp/foo.json')`.
+- **Canonical pytest runline:** `pytest -q tests -m "not infra"` (NOT
+  `pytest -q src/api/tests tests -m "not infra"` — `src/api/tests/`
+  doesn't exist; tests live under `tests/`). `pytest.ini` declares
+  `testpaths = tests` so the arg is redundant but harmless.
+- **Cross-worktree sys.modules purge** is handled session-scoped by
+  `tests/unit/conftest.py` (landed at commit `dfd2fe6` as a D1 follow-up).
+  New test files should NOT copy a per-test purge snippet — trust the
+  conftest. If extending the conftest's purge set, guard on
+  `sys.modules["interfaces"].__file__` (not `server`) to avoid breaking
+  module-identity checks in other tests.
 
 ## Forbidden files (user WIP — do NOT edit without explicit approval)
 
@@ -139,30 +155,62 @@ Every one of these has bitten us. Watch for them.
     `recovery_window_in_days=0`.** `put-secret-value` REPLACES with no
     recovery. Always save the old value to a password manager before
     rotating.
+12. **`aws lambda get-function-configuration --query ImageUri` returns
+    literal `"None"` for image-backed Lambdas** (Stream E1 discovery).
+    Use `aws lambda get-function --query 'Code.ImageUri'` instead —
+    that always returns the resolved-digest URI (`...@sha256:...`) of
+    the currently running image. Pin the immutable digest form, not a
+    mutable tag like `:prod`, when saving rollback anchors.
+13. **Response field is `document_score`, NOT `doc_score`** (E1
+    discovery). Any smoke parser that uses `d.get('doc_score')`
+    silently returns `None`. Use `d.get('document_score')`.
+14. **ECR `:prod` tag drifts after a rollback** (E1 trap). Rolling
+    Lambda back via `update-function-code --image-uri <prev-digest>`
+    updates Lambda but leaves `:prod` pointing at the failed image in
+    ECR. Always re-tag `:prod` to the rollback digest via
+    `aws ecr put-image --image-tag prod --image-manifest "$MANIFEST"`
+    so next-deploy agents don't reason incorrectly about what's in prod.
+15. **Autonomous deploy protocol** — Fabian disabled manual G3/G8 gates
+    on deploys after Wave 1 pacing pain. Deploy agents follow the
+    protocol in `docs/superpowers/plans/2026-04-18-phase2-orchestration.md`
+    §5.3: pre-deploy checkpoint → TF-plan safety audit → image build +
+    deploy → two-tier smoke (per-deploy + optional end-of-phase) →
+    auto-rollback on smoke fail → handoff with status. **One deploy
+    attempt per session, one rollback attempt, no retry loops.**
 
 ## Git workflow
 
 - Branch: `feat/ohi-v2-foundation` is the active dev branch. `main` is
   protected (no force-push) and auto-deploys Vercel.
-- Merge pattern: squash/fast-forward locally when possible, otherwise
-  `--no-ff` with a `Merge feat: ...` message. Push feat and main
-  separately after each logical unit of work.
+- **Feat-branch and per-stream branch pushes are fine without a gate.**
+  (Per-stream branches: `stream-a/...`, `d1/...`, `f/...`, etc. off feat.)
+- **Push/merge to `main` requires Fabian's explicit approval (Gate G2)**,
+  once per session. Subsequent pushes in the same session are fine
+  after G2 opens.
+- **Merge pattern**: per-stream → feat uses `--no-ff` with `Merge feat:
+  <stream summary>` prefix for audit. **feat → main uses fast-forward**
+  (Wave 3 decision; not `--no-ff`).
 - Commit messages: Conventional Commits. Heavy on the *why*, files
   involved, and "end state verified by" lines with concrete test
   evidence. No emoji. Commit-body length is fine — the git log is the
   audit trail for a public-facing open-source project.
-- **Never** push without the user's explicit approval the first time in
-  a session. Subsequent pushes within the same session are fine if the
-  user has already greenlit the pattern.
+- Current feat tip at time of this doc update: `474bf0f` (D2 merge,
+  post-F post-D1-conftest-followup). Update on next major milestone.
 
 ## User communication
 
 - Be brief. End-of-turn summary: one or two sentences. What changed
   and what's next.
 - Don't pad with apologies or meta-commentary.
-- Be honest about scope. Several times this project we've hit "this
-  isn't 15 minutes, it's days" and the user wants to hear it early.
-  Phase 2 work (NLI, PCG, corpus ingestion, calibration data) is days.
+- Be honest about scope — but **do not give time estimates in hours /
+  days / weeks for OHI work**. Fabian reads those as hallucinated
+  under-estimates. Frame scope in **code-surface metrics** (files
+  touched, LOC, module count, stream count) instead. See memory
+  `feedback_no_time_scales.md`.
+- **Do not conflate RAM vs storage vs vector-index carve-out** when
+  citing GB numbers for any cloud service (Aura, DynamoDB, OpenSearch,
+  etc.). Always explicit: `<RAM>GB RAM / <disk>GB disk`. See memory
+  `feedback_gb_ram_vs_storage.md`.
 - When you hit 2-3 consecutive fixes that reveal new symptoms, **stop**
   and present architectural alternatives. Fabian's exact feedback:
   "den Wald vor lauter Bäumen nicht sehen."
@@ -182,7 +230,37 @@ Every one of these has bitten us. Watch for them.
 
 ## Useful references
 
-- Spec + plan + checkpoints: `docs/superpowers/` (gitignored, local)
-- Live traffic path diagram: latest checkpoint, §1
-- Secret locations: latest checkpoint, §5
-- Phase 2 backlog and priorities: latest checkpoint, §7
+- Spec + plan + checkpoints + handoffs: `docs/superpowers/` (gitignored,
+  local). Four subdirs: `specs/`, `plans/`, `checkpoints/`, `handoffs/`.
+- Active plan: `docs/superpowers/plans/2026-04-18-phase2-orchestration.md`
+  — Wave 2+3 orchestration, autonomous deploy protocol (§5.3), gates
+  table (§6.1), rollback recipe (§6.3).
+- Live traffic path diagram: latest checkpoint, §1.
+- Secret locations: latest checkpoint, §5.
+- Phase 2 backlog and priorities: latest checkpoint, §7.
+- Stream handoffs (sequential dev state record): `docs/superpowers/handoffs/`
+  — stream-a → stream-b → stream-d1 → stream-e1 → stream-d2 → stream-e2.
+
+## Current v2 state (2026-04-18)
+
+Wave 1 + Wave 2 code-side essentially done on `feat/ohi-v2-foundation`
+at `474bf0f`:
+- Stream A: MediaWiki MCP source wired into pipeline.
+- Stream B: Gemini 3 Pro NLI adapter (claim-evidence NLI).
+- Stream D1: NLI wired into pipeline with `asyncio.gather +
+  Semaphore(10)`, Lambda `timeout_s` 60→180, `NLI_*` env vars,
+  `tests/unit/conftest.py` session-scoped sys.modules purge.
+- Stream F: evidence-retrieval gap in Lambda runtime fixed +
+  deployed.
+- Stream D2: async `/verify` polling (202 + `job_id`), DynamoDB
+  `ohi-verify-jobs` table, Lambda self-async-invoke, frontend
+  polling rewrite (sse.ts deleted).
+- Stream E2 (in flight at time of doc update): deploys D2 to prod.
+
+Wave 3 (designed, specs in `docs/superpowers/specs/2026-04-18-wave3-*.md`,
+not yet implemented): PCG with TRW-BP + LBP fallback + Gibbs sanity +
+claim-claim NLI (OpenAI GPT 5.4 xhigh primary, Gemini 3 Pro fallback),
+full enwiki + Wikidata corpus ingestion into Neo4j Aura (vector-
+optimized for entity embeddings) + Qdrant (passages, stripped to
+vector-only index per Decision K — no duplicated text), automated
+merge-to-main gate with post-deploy auto-rollback.
