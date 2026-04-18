@@ -26,7 +26,7 @@ from fastapi.responses import ORJSONResponse
 from config.dependencies import lifespan_manager
 from config.settings import get_settings
 from server.middleware import RetentionMiddleware
-from server.routes import health_router, verify_router
+from server.routes import async_verify_router, health_router, verify_router
 
 
 def create_app() -> FastAPI:
@@ -88,7 +88,14 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/health", tags=["health"])
     app.include_router(verify_router, prefix="/api/v2", tags=["verify"])
 
-    # TODO(Task 1.9): app.include_router(stream_router, prefix="/api/v2", tags=["stream"])
+    # Stream D2 internal polling route. Mounted at root (no prefix) because
+    # the synthetic APIGW v2 event that jobs.async_invoke_verify produces
+    # targets /_internal/async-verify. EdgeSecretMiddleware still gates
+    # this route against the public CF surface; the per-job invoke_ticket
+    # is the second layer that distinguishes legitimate self-invokes from
+    # any traffic that does slip past the edge secret.
+    app.include_router(async_verify_router)
+
     # TODO(Task 4.2): app.include_router(feedback_router, prefix="/api/v2", tags=["feedback"])
     # TODO(Task 4.8): app.include_router(calibration_router, prefix="/api/v2", tags=["calibration"])
 
