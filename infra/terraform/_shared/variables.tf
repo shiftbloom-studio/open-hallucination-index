@@ -2,8 +2,8 @@ variable "layer" {
   description = "Name of the layer consuming this shared module (for the Layer tag)."
   type        = string
   validation {
-    condition     = contains(["bootstrap", "storage", "secrets", "compute", "cloudflare", "vercel", "observability"], var.layer)
-    error_message = "layer must be one of bootstrap, storage, secrets, compute, cloudflare, vercel, observability."
+    condition     = contains(["bootstrap", "storage", "secrets", "compute", "cloudflare", "vercel", "observability", "jobs"], var.layer)
+    error_message = "layer must be one of bootstrap, storage, secrets, compute, cloudflare, vercel, observability, jobs."
   }
 }
 
