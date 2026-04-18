@@ -1,6 +1,7 @@
 locals {
   secret_names = {
     gemini_api_key           = "ohi/gemini-api-key"
+    openai_api_key           = "ohi/openai-api-key"
     internal_bearer_token    = "ohi/internal-bearer-token"
     cloudflared_tunnel_token = "ohi/cloudflared-tunnel-token"
     cf_access_service_token  = "ohi/cf-access-service-token"
@@ -10,6 +11,19 @@ locals {
     neo4j_credentials        = "ohi/neo4j-credentials"
   }
 }
+# Wave 3 Stream P (Decision H): ``ohi/openai-api-key`` was created
+# directly via AWS CLI during the Wave 3 autonomous deploy
+# (account 349744179866, region eu-central-1, name suffix ``-Cwjs76``)
+# so the adapter could deploy without blocking on a separate TF apply.
+# To bring it under TF state, run:
+#   cd infra/terraform/secrets
+#   terraform import \
+#     'aws_secretsmanager_secret.this["openai_api_key"]' \
+#     'arn:aws:secretsmanager:eu-central-1:349744179866:secret:ohi/openai-api-key-Cwjs76'
+# after which subsequent ``terraform apply`` runs will manage the secret
+# metadata (tags, KMS) without touching the secret value. The value
+# itself stays out of TF state — rotate via ``aws secretsmanager
+# put-secret-value`` or the rotate-secret runbook.
 
 resource "aws_secretsmanager_secret" "this" {
   for_each = local.secret_names
