@@ -39,15 +39,10 @@ jobs:
       - name: Resolve direct API URL
         id: direct_api
         run: |
-          api_url=$(aws apigatewayv2 get-apis \
-            --query "Items[?Name=='ohi-api'].ApiEndpoint | [0]" \
+          api_url=$(aws lambda get-function-url-config \
+            --function-name ohi-api \
+            --query 'FunctionUrl' \
             --output text)
-          if [ -z "$api_url" ] || [ "$api_url" = "None" ]; then
-            api_url=$(aws lambda get-function-url-config \
-              --function-name ohi-api \
-              --query 'FunctionUrl' \
-              --output text)
-          fi
           api_url="${api_url%/}"
           echo "url=$api_url" >> "$GITHUB_OUTPUT"
           echo "Resolved direct API URL: $api_url"
