@@ -46,6 +46,31 @@ logger = logging.getLogger(__name__)
 
 _MAX_PASSAGE_TOKENS = int(os.environ.get("CORPUS_MAX_PASSAGE_TOKENS", "500"))
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
+_LOW_SIGNAL_SECTION_TITLES = {
+    "bibliography",
+    "citations",
+    "external links",
+    "further reading",
+    "notes",
+    "references",
+    "see also",
+    "sources",
+}
+_SKIP_WIKILINK_NAMESPACES = (
+    "category:",
+    "draft:",
+    "file:",
+    "help:",
+    "image:",
+    "media:",
+    "module:",
+    "portal:",
+    "special:",
+    "talk:",
+    "template:",
+    "user:",
+    "wikipedia:",
+)
 
 
 @dataclass(frozen=True)
@@ -58,7 +83,7 @@ class PassageChunk:
     article_qid: str
     section_title: str
     text_hash: str
-    mention_qids: list[str]  # QIDs of wikilinked mentions
+    mention_titles: list[str]  # Raw Wikipedia titles extracted from wikilinks
 
 
 _UPSERT_PASSAGE_CYPHER = """
@@ -77,6 +102,13 @@ UNWIND row.mention_qids AS mqid
 MATCH (m:Entity {qid: mqid})
 MERGE (p)-[:MENTIONS]->(m)
 RETURN count(DISTINCT p) AS n
+"""
+
+
+_RESOLVE_MENTION_TITLES_CYPHER = """
+UNWIND $titles AS title
+MATCH (e:Entity {wikipedia_title: title})
+RETURN e.wikipedia_title AS title, e.qid AS qid
 """
 
 
@@ -186,12 +218,16 @@ class Pass2PassageWriter:
         # wikitextparser's sections yields the lead + named sections.
         for section_ordinal, section in enumerate(parsed.sections):
             section_title = (section.title or "lead").strip() or "lead"
+            if self._is_low_signal_section(section_title):
+                continue
             plain = section.plain_text().strip()
             if not plain:
                 continue
-            mentions = self._extract_mention_qids(section.wikilinks)
+            mentions = self._extract_mention_titles(section.wikilinks)
             for chunk_idx, chunk in enumerate(self._split_into_chunks(plain)):
-                passage_id = _passage_id(article_qid, section_title, section_ordinal, chunk_idx)
+                passage_id = _passage_id(
+                    article_qid, section_title, section_ordinal, chunk_idx
+                )
                 text_hash = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
                 yield PassageChunk(
                     passage_id=passage_id,
@@ -200,7 +236,7 @@ class Pass2PassageWriter:
                     article_qid=article_qid,
                     section_title=section_title,
                     text_hash=text_hash,
-                    mention_qids=mentions,
+                    mention_titles=mentions,
                 )
 
     def _naive_chunk(self, page: EnwikiPage, article_qid: str) -> Iterator[PassageChunk]:
@@ -216,7 +252,7 @@ class Pass2PassageWriter:
                 article_qid=article_qid,
                 section_title="lead",
                 text_hash=hashlib.sha256(chunk.encode("utf-8")).hexdigest(),
-                mention_qids=[],
+                mention_titles=[],
             )
 
     def _split_into_chunks(self, text: str) -> Iterator[str]:
@@ -240,26 +276,109 @@ class Pass2PassageWriter:
         if buf:
             yield " ".join(buf)
 
-    def _extract_mention_qids(self, wikilinks) -> list[str]:
-        """Resolve wikilinks to QIDs via the sitelink map.
+    def _extract_mention_titles(self, wikilinks) -> list[str]:
+        """Extract normalized Wikipedia article titles from section wikilinks."""
+        titles: list[str] = []
+        seen: set[str] = set()
+        for wikilink in wikilinks or []:
+            raw_title = getattr(wikilink, "title", None)
+            if raw_title is None:
+                continue
+            title = self._normalize_wikilink_title(str(raw_title))
+            if title is None or title in seen:
+                continue
+            seen.add(title)
+            titles.append(title)
+        return titles
 
-        Cheap mode: only pull wikilinks whose target (sitelink)
-        matches a title we know. Pass-2 scope; deeper alias resolution
-        is a Wave-4 NER task.
-        """
-        # NB: since wikilinks are resolved synchronously inside the
-        # async chunk loop, we return empty here and let the caller's
-        # MENTIONS upsert skip. Full implementation plumbs a sync
-        # sitelink dict; optimisation tracked for v2.1.
-        return []
+    def _normalize_wikilink_title(self, raw_title: str) -> str | None:
+        title = raw_title.strip().replace("_", " ")
+        if not title:
+            return None
+        if title.startswith(":"):
+            title = title[1:].strip()
+        title = title.split("#", 1)[0].strip()
+        title = " ".join(title.split())
+        if not title:
+            return None
+        lowered = title.casefold()
+        if any(lowered.startswith(prefix) for prefix in _SKIP_WIKILINK_NAMESPACES):
+            return None
+        return title
+
+    def _is_low_signal_section(self, section_title: str) -> bool:
+        return section_title.strip().casefold() in _LOW_SIGNAL_SECTION_TITLES
+
+    def _embedding_text(self, chunk: PassageChunk) -> str:
+        lines = [f"Article: {chunk.article_title}"]
+        if chunk.section_title.casefold() != "lead":
+            lines.append(f"Section: {chunk.section_title}")
+        lines.append(chunk.text)
+        return "\n".join(lines)
+
+    async def _resolve_mention_title_map(
+        self, batch: list[PassageChunk]
+    ) -> dict[str, str]:
+        titles: list[str] = []
+        seen: set[str] = set()
+        for chunk in batch:
+            for title in chunk.mention_titles:
+                if title in seen:
+                    continue
+                seen.add(title)
+                titles.append(title)
+        if not titles:
+            return {}
+
+        rows = await self._graph.run_cypher(
+            _RESOLVE_MENTION_TITLES_CYPHER, {"titles": titles}
+        )
+        resolved: dict[str, str] = {}
+        for row in rows or []:
+            if isinstance(row, dict):
+                title = row.get("title")
+                qid = row.get("qid")
+            else:
+                title = row[0]
+                qid = row[1]
+            if isinstance(title, str) and isinstance(qid, str):
+                resolved.setdefault(title, qid)
+        return resolved
+
+    def _mention_qids_for_chunk(
+        self, chunk: PassageChunk, mention_title_map: dict[str, str]
+    ) -> list[str]:
+        qids: list[str] = []
+        seen: set[str] = set()
+        for title in chunk.mention_titles:
+            qid = mention_title_map.get(title)
+            if qid is None or qid == chunk.article_qid or qid in seen:
+                continue
+            seen.add(qid)
+            qids.append(qid)
+        return qids
 
     # ------------------------------------------------------------------
     # Flush: Aura + Qdrant in one batched write
     # ------------------------------------------------------------------
 
     async def _flush_batch(self, batch: list[PassageChunk]) -> None:
+        try:
+            mention_title_map = await self._resolve_mention_title_map(batch)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Pass 2 mention resolution failed: %s", exc)
+            for c in batch:
+                self._dlq.write(
+                    pass_name="pass2",
+                    record_id=c.passage_id,
+                    error_class=type(exc).__name__,
+                    error_detail=str(exc),
+                )
+            self._ckpt.increment_dlq("pass2", n=len(batch))
+            return
+
         # Embed.
-        texts = [c.text for c in batch]
+        texts = [self._embedding_text(c) for c in batch]
         try:
             vectors = await self._embed.generate_embeddings_batch(texts)
         except Exception as exc:  # noqa: BLE001
@@ -283,7 +402,7 @@ class Pass2PassageWriter:
                 "article_qid": c.article_qid,
                 "section_title": c.section_title,
                 "text_hash": c.text_hash,
-                "mention_qids": c.mention_qids,
+                "mention_qids": self._mention_qids_for_chunk(c, mention_title_map),
             }
             for c in batch
         ]

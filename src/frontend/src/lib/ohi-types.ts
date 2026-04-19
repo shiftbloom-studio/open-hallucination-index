@@ -37,12 +37,31 @@ export const ClaimSchema = z.object({
 });
 export type Claim = z.infer<typeof ClaimSchema>;
 
+export const EvidenceStructuredDataSchema = z
+  .object({
+    title: z.string().nullable().optional(),
+    snippet: z.string().nullable().optional(),
+    lead_extract: z.string().nullable().optional(),
+    matched_query: z.string().nullable().optional(),
+    nli_label: z.enum(["support", "refute", "neutral"]).optional(),
+    nli_reasoning: z.string().nullable().optional(),
+    supporting_score: z.number().optional(),
+    refuting_score: z.number().optional(),
+    neutral_score: z.number().optional(),
+    nli_confidence: z.number().optional(),
+    bucket_score: z.number().optional(),
+  })
+  .catchall(z.unknown());
+
 export const EvidenceSchema = z.object({
   id: z.string(),
   source_uri: z.string().nullable(),
   content: z.string(),
   snippet: z.string().nullable().optional(),
   source_credibility: z.number().nullable().optional(),
+  similarity_score: z.number().nullable().optional(),
+  classification_confidence: z.number().nullable().optional(),
+  structured_data: EvidenceStructuredDataSchema.nullable().optional(),
   retrieved_at: z.string(),
 });
 export type Evidence = z.infer<typeof EvidenceSchema>;

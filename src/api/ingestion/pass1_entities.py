@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import AsyncIterator, Iterable
-from typing import Any
 
 from ingestion.checkpoint_store import CheckpointStore
 from ingestion.dump_parsers import WikidataEntity, WikidataJsonDumpParser
@@ -90,6 +88,15 @@ RETURN count(r) AS n
 """
 
 
+_RECOMPUTE_INBOUND_LINK_COUNT_CYPHER = """
+MATCH (e:Entity)
+OPTIONAL MATCH (src:Entity)-[r]->(e)
+WITH e, count(r) AS inbound_link_count
+SET e.inbound_link_count = inbound_link_count
+RETURN count(e) AS n
+"""
+
+
 class Pass1EntityWriter:
     """Run Pass 1 — Wikidata → Aura entities + property edges."""
 
@@ -154,6 +161,26 @@ class Pass1EntityWriter:
             )
             self._progress.tick(len(batch))
             processed += len(batch)
+        ok = await retry_record(
+            fn=lambda: self._graph.run_cypher(
+                _RECOMPUTE_INBOUND_LINK_COUNT_CYPHER, {}
+            ),
+            record_id="pass1:recompute_inbound_link_count",
+        )
+        if not ok:
+            self._dlq.write(
+                pass_name="pass1",
+                record_id="inbound_link_count",
+                error_class="InboundLinkCountRecomputeFailed",
+                error_detail="failed after retries",
+            )
+            self._ckpt.increment_dlq("pass1")
+            self._ckpt.set_status(
+                "pass1",
+                "aborted",
+                notes="failed to recompute inbound_link_count",
+            )
+            raise RuntimeError("Pass 1 failed to recompute inbound_link_count")
         self._ckpt.set_status(
             "pass1", "complete", notes=f"{processed} entities ingested"
         )

@@ -26,8 +26,10 @@ if TYPE_CHECKING:
 
 from adapters.embeddings import LocalEmbeddingAdapter
 from adapters.gemini import GeminiLLMAdapter
-from adapters.mcp_ohi import OHIMCPAdapter, TargetedOHISource
+from adapters.mcp_ohi import OHIMCPAdapter
+from adapters.mcp_sources.dbpedia import DBpediaAdapter
 from adapters.mcp_sources.mediawiki import MediaWikiAdapter
+from adapters.mcp_sources.wikidata import WikidataAdapter
 from adapters.neo4j import Neo4jGraphAdapter
 from adapters.nli_claim_claim import ClaimClaimNliDispatcher
 from adapters.nli_gemini import NliGeminiAdapter
@@ -46,6 +48,7 @@ from interfaces.stores import (
     GraphKnowledgeStore,
     VectorKnowledgeStore,
 )
+from interfaces.verdict_store import VerdictStore
 from pipeline.conformal.calibration_store import InMemoryCalibrationStore
 from pipeline.conformal.split_conformal import SplitConformalCalibrator
 from pipeline.decomposer import LLMClaimDecomposer
@@ -165,25 +168,51 @@ async def _initialize_adapters() -> None:
         f"LLM provider: {settings.llm.model} (backend={llm_backend})"
     )
 
-    # Neo4j
+    # Neo4j — non-fatal on connect failure. A dead graph store degrades
+    # retrieval (falls back to MediaWiki MCP + Qdrant) but must not take
+    # down the whole app. /health/deep surfaces the layer state.
     _graph_store = Neo4jGraphAdapter(settings.neo4j)
-    await _graph_store.connect()
-    logger.info(f"Graph store: {settings.neo4j.uri}")
+    try:
+        await _graph_store.connect()
+        logger.info(f"Graph store: {settings.neo4j.uri}")
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "Graph store connect failed (%s); proceeding in degraded mode — "
+            "retrieval will skip Neo4j until it recovers on next request",
+            exc,
+        )
 
-    # Qdrant
+    # Qdrant — non-fatal on connect failure. Post-incident 2026-04-19:
+    # PC Docker stack outage (CF tunnel 1033) previously crashed Lambda
+    # init because connect() raised. Now the app stays up; AdaptiveEvidenceCollector
+    # already routes around a dead vector_store via its local-timeout
+    # branch, and /health/deep reports the layer as red.
     _vector_store = QdrantVectorAdapter(
         settings=settings.qdrant,
         embedding_func=_embedding_adapter.generate_embedding,
     )
-    await _vector_store.connect()
-    logger.info(f"Vector store: {settings.qdrant.host}:{settings.qdrant.port}")
+    try:
+        await _vector_store.connect()
+        logger.info(f"Vector store: {settings.qdrant.host}:{settings.qdrant.port}")
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "Vector store connect failed (%s); proceeding in degraded mode — "
+            "PC Docker stack / CF tunnel likely down. Lambda stays up; "
+            "retrieval degrades to MediaWiki MCP + graph paths until recovery.",
+            exc,
+        )
 
     # Redis trace (optional — used by knowledge-track; the v1 verdict cache
-    # is gone and the v2 cache lives elsewhere).
+    # is gone and the v2 cache lives elsewhere). Already non-fatal via the
+    # settings.redis.enabled gate.
     if settings.redis.enabled:
         _trace_store = RedisTraceAdapter(settings.redis)
-        await _trace_store.connect()
-        logger.info("Trace store connected")
+        try:
+            await _trace_store.connect()
+            logger.info("Trace store connected")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Trace store connect failed (%s); continuing without it", exc)
+            _trace_store = None
     else:
         _trace_store = None
         logger.info("Redis disabled — trace store unavailable")
@@ -362,6 +391,8 @@ def _build_mcp_sources(settings: Any) -> list[MCPKnowledgeSource]:
     # source. Default ON via MCPSettings.wikipedia_enabled.
     if getattr(mcp_cfg, "wikipedia_enabled", True) and not in_test_env:
         sources.append(MediaWikiAdapter())
+        sources.append(WikidataAdapter())
+        sources.append(DBpediaAdapter())
 
     # OHI unified MCP server. Default URL http://ohi-mcp-server:8080 is
     # unresolvable in prod; require explicit MCP_OHI_ENABLED=true at the

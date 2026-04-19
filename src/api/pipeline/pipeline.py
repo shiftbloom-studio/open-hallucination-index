@@ -41,13 +41,12 @@ from pipeline.assembly import (
 )
 
 if TYPE_CHECKING:
+    from adapters.nli_claim_claim import ClaimClaimNliDispatcher
     from interfaces.domain import DomainAdapter, DomainRouter
     from interfaces.nli import NliAdapter, NliResult, NLIService
     from interfaces.pcg import PCGInferenceService
     from models.results import DocumentVerdict
     from pipeline.retrieval import AdaptiveEvidenceCollector
-
-    from adapters.nli_claim_claim import ClaimClaimNliDispatcher
 
 
 logger = logging.getLogger(__name__)
@@ -458,7 +457,7 @@ class Pipeline:
             evidence: Evidence,
             claim_text: str,
             evidence_text: str,
-        ) -> tuple[UUID, Evidence, "NliResult"]:
+        ) -> tuple[UUID, Evidence, NliResult]:
             async with semaphore:
                 result = await self._nli_adapter.classify(claim_text, evidence_text)
             return claim_id, evidence, result
@@ -468,13 +467,13 @@ class Pipeline:
             for claim in claims
             for ev in evidence_per_claim.get(claim.id, [])
         ]
-        classified: list[tuple[UUID, Evidence, "NliResult"]] = (
+        classified: list[tuple[UUID, Evidence, NliResult]] = (
             list(await asyncio.gather(*tasks)) if tasks else []
         )
 
         # Partition by claim_id once; feeds both the Beta update and
         # the bucket split in one pass (no second walk over tasks).
-        results_by_claim: dict[UUID, list["NliResult"]] = {c.id: [] for c in claims}
+        results_by_claim: dict[UUID, list[NliResult]] = {c.id: [] for c in claims}
         buckets: dict[UUID, tuple[list[Evidence], list[Evidence]]] = {
             c.id: ([], []) for c in claims
         }
@@ -485,9 +484,9 @@ class Pipeline:
             if nli_result.reasoning == "nli_unavailable":
                 continue
             if nli_result.label == "support":
-                buckets[claim_id][0].append(evidence)
+                buckets[claim_id][0].append(_annotate_evidence_with_nli(evidence, nli_result))
             elif nli_result.label == "refute":
-                buckets[claim_id][1].append(evidence)
+                buckets[claim_id][1].append(_annotate_evidence_with_nli(evidence, nli_result))
             # label == "neutral": drop from both buckets (off-topic
             # passage — neither confirms nor contradicts the claim).
 
@@ -549,7 +548,7 @@ class Pipeline:
             evidence: Evidence,
             claim_text: str,
             evidence_text: str,
-        ) -> tuple[UUID, Evidence, "NliResult"]:
+        ) -> tuple[UUID, Evidence, NliResult]:
             async with semaphore:
                 result = await self._nli_adapter.classify(claim_text, evidence_text)
             return claim_id, evidence, result
@@ -559,13 +558,13 @@ class Pipeline:
             for claim in claims
             for ev in evidence_per_claim.get(claim.id, [])
         ]
-        classified: list[tuple[UUID, Evidence, "NliResult"]] = (
+        classified: list[tuple[UUID, Evidence, NliResult]] = (
             list(await asyncio.gather(*tasks)) if tasks else []
         )
 
         # Partition NLI results + build display buckets (same label-driven
         # rule as the Beta path).
-        results_by_claim: dict[UUID, list["NliResult"]] = {c.id: [] for c in claims}
+        results_by_claim: dict[UUID, list[NliResult]] = {c.id: [] for c in claims}
         buckets: dict[UUID, tuple[list[Evidence], list[Evidence]]] = {
             c.id: ([], []) for c in claims
         }
@@ -574,9 +573,9 @@ class Pipeline:
             if nli_result.reasoning == "nli_unavailable":
                 continue
             if nli_result.label == "support":
-                buckets[claim_id][0].append(evidence)
+                buckets[claim_id][0].append(_annotate_evidence_with_nli(evidence, nli_result))
             elif nli_result.label == "refute":
-                buckets[claim_id][1].append(evidence)
+                buckets[claim_id][1].append(_annotate_evidence_with_nli(evidence, nli_result))
 
         # --- Step 2: convert to NLIDistribution for the PCG layer ------
         # Import locally to avoid circular import at module load time.
@@ -705,7 +704,7 @@ class Pipeline:
 
 
 def _beta_update_from_nli(
-    nli_results: list["NliResult"],
+    nli_results: list[NliResult],
 ) -> tuple[float, float, int]:
     """Fold NLI classifications into a Beta(α, β) posterior.
 
@@ -751,3 +750,44 @@ def _beta_update_from_nli(
         beta += result.refuting_score
         folded += 1
     return alpha, beta, folded
+
+
+def _annotate_evidence_with_nli(
+    evidence: Evidence,
+    nli_result: NliResult,
+) -> Evidence:
+    """Attach per-evidence NLI metadata for downstream rendering.
+
+    The bucket label decides whether the evidence appears under
+    supporting or refuting evidence; this helper stamps the exact
+    classifier output onto the ``Evidence`` object so the UI can
+    explain *why* it landed there and show the score used for that
+    bucket.
+    """
+    bucket_score = (
+        nli_result.supporting_score
+        if nli_result.label == "support"
+        else nli_result.refuting_score
+    )
+    structured_data = dict(evidence.structured_data or {})
+    structured_data.update(
+        {
+            "nli_label": nli_result.label,
+            "nli_reasoning": (
+                None
+                if nli_result.reasoning == "nli_unavailable"
+                else nli_result.reasoning
+            ),
+            "supporting_score": nli_result.supporting_score,
+            "refuting_score": nli_result.refuting_score,
+            "neutral_score": nli_result.neutral_score,
+            "nli_confidence": nli_result.confidence,
+            "bucket_score": bucket_score,
+        }
+    )
+    return evidence.model_copy(
+        update={
+            "classification_confidence": bucket_score,
+            "structured_data": structured_data,
+        }
+    )

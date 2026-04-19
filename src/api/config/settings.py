@@ -11,7 +11,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -441,9 +441,20 @@ class Settings(BaseSettings):
 
     # Environment
     environment: Literal["development", "staging", "production", "test"] = Field(
-        default="development"
+        default="development",
+        validation_alias=AliasChoices("OHI_ENV", "ENVIRONMENT"),
     )
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
+        default="INFO",
+        validation_alias=AliasChoices("OHI_LOG_LEVEL", "LOG_LEVEL"),
+    )
+
+    @field_validator("environment", mode="before")
+    @classmethod
+    def _normalize_environment(cls, value: object) -> object:
+        if isinstance(value, str) and value.lower() == "prod":
+            return "production"
+        return value
 
 
 @lru_cache
