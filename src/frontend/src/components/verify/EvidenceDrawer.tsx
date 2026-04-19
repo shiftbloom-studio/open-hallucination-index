@@ -8,10 +8,33 @@ export interface EvidenceDrawerProps {
   className?: string;
 }
 
+function formatScore(value: number | null | undefined): string | null {
+  return typeof value === "number" ? value.toFixed(2) : null;
+}
+
+function hostnameFor(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
 function EvidenceItem({ e, kind }: { e: Evidence; kind: "support" | "refute" }) {
   const dotColor =
     kind === "support" ? "var(--brand-success)" : "var(--brand-danger)";
-  const cred = typeof e.source_credibility === "number" ? e.source_credibility : null;
+  const title = typeof e.structured_data?.title === "string" ? e.structured_data.title : null;
+  const reasoning =
+    typeof e.structured_data?.nli_reasoning === "string" ? e.structured_data.nli_reasoning : null;
+  const bucketScore = formatScore(
+    typeof e.structured_data?.bucket_score === "number"
+      ? e.structured_data.bucket_score
+      : e.classification_confidence,
+  );
+  const relevance = formatScore(e.similarity_score);
+  const cred = formatScore(e.source_credibility);
+  const host = hostnameFor(e.source_uri);
   return (
     <li className="group rounded-md border border-[color:var(--border-subtle)] bg-surface-base p-2 text-xs">
       <div className="flex items-start gap-2">
@@ -20,21 +43,41 @@ function EvidenceItem({ e, kind }: { e: Evidence; kind: "support" | "refute" }) 
           style={{ background: dotColor }}
         />
         <div className="min-w-0 flex-1">
-          <p className="text-brand-ink line-clamp-3">{e.content}</p>
+          {title && (
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-brand-subtle">
+              {title}
+            </p>
+          )}
+          <p className="text-brand-ink">{e.content}</p>
+          {reasoning && (
+            <p className="mt-2 text-[11px] italic text-brand-muted">
+              {reasoning}
+            </p>
+          )}
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-brand-subtle">
-            {e.source_uri && (
+            {host && e.source_uri && (
               <a
                 href={e.source_uri}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[color:var(--brand-indigo-strong)] hover:underline"
               >
-                {new URL(e.source_uri).hostname}
+                {host}
               </a>
             )}
-            {cred !== null && (
+            {bucketScore && (
+              <span className="num-mono" title={`${kind} score`}>
+                {kind} {bucketScore}
+              </span>
+            )}
+            {relevance && (
+              <span className="num-mono" title="retrieval relevance">
+                rel {relevance}
+              </span>
+            )}
+            {cred && (
               <span className="num-mono" title="source credibility">
-                cred {cred.toFixed(2)}
+                cred {cred}
               </span>
             )}
           </div>

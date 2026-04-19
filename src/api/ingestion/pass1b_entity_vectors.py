@@ -61,6 +61,15 @@ RETURN count(e) AS n
 """
 
 
+def _entity_embedding_text(label: str, description: str | None) -> str:
+    description_text = (description or "").strip()
+    if not description_text:
+        return label
+    if description_text.casefold() == label.casefold():
+        return label
+    return f"{label}\n{description_text}"
+
+
 class Pass1bEntityVectorWriter:
     """Embed top-K entities and write to Aura vector index."""
 
@@ -109,7 +118,9 @@ class Pass1bEntityVectorWriter:
             rows = list(rows or [])
             if not rows:
                 break
-            labels = [r["label"] for r in rows]
+            labels = [
+                _entity_embedding_text(r["label"], r.get("description")) for r in rows
+            ]
             try:
                 vectors = await self._embed.generate_embeddings_batch(labels)
             except Exception as exc:  # noqa: BLE001
