@@ -80,12 +80,28 @@ jobs:
           terraform apply -auto-approve \
             -var="image_tag=${{ needs.build-and-push-image.outputs.image_tag }}"
 
+      - name: Resolve direct API URL
+        id: direct_api
+        run: |
+          api_url=$(aws apigatewayv2 get-apis \
+            --query "Items[?Name=='ohi-api'].ApiEndpoint | [0]" \
+            --output text)
+          if [ -z "$api_url" ] || [ "$api_url" = "None" ]; then
+            api_url=$(aws lambda get-function-url-config \
+              --function-name ohi-api \
+              --query 'FunctionUrl' \
+              --output text)
+          fi
+          api_url="${api_url%/}"
+          echo "url=$api_url" >> "$GITHUB_OUTPUT"
+          echo "Resolved direct API URL: $api_url"
+
       - name: Health check
         run: |
           sleep 10
           code=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "X-OHI-Edge-Secret: ${{ secrets.CF_EDGE_SECRET }}" \
-            https://ohi.shiftbloom.studio/health/live)
+            ${{ steps.direct_api.outputs.url }}/health/live)
           if [[ "$code" -ne 200 && "$code" -ne 503 ]]; then
             echo "::error::Health check returned $code"
             exit 1
