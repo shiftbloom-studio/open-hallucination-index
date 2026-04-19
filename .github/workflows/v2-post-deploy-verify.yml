@@ -48,6 +48,22 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: gha-v2-postdeploy-${{ github.run_id }}
 
+      - name: Resolve direct API URL
+        id: direct_api
+        run: |
+          api_url=$(aws apigatewayv2 get-apis \
+            --query "Items[?Name=='ohi-api'].ApiEndpoint | [0]" \
+            --output text)
+          if [ -z "$api_url" ] || [ "$api_url" = "None" ]; then
+            api_url=$(aws lambda get-function-url-config \
+              --function-name ohi-api \
+              --query 'FunctionUrl' \
+              --output text)
+          fi
+          api_url="${api_url%/}"
+          echo "url=$api_url" >> "$GITHUB_OUTPUT"
+          echo "Resolved direct API URL: $api_url"
+
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
@@ -58,7 +74,7 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
           PYTHONPATH: src/api
-          OHI_API_URL: https://ohi-api.shiftbloom.studio
+          OHI_API_URL: ${{ steps.direct_api.outputs.url }}
           OHI_EDGE_SECRET: ${{ secrets.CF_EDGE_SECRET }}
         run: |
           pytest -q tests/integration -m "not infra" --no-cov || INT_RC=$?
@@ -67,14 +83,14 @@ jobs:
       - name: Golden claims (item 5 — signal)
         continue-on-error: true
         env:
-          OHI_API_URL: https://ohi-api.shiftbloom.studio
+          OHI_API_URL: ${{ steps.direct_api.outputs.url }}
           OHI_EDGE_SECRET: ${{ secrets.CF_EDGE_SECRET }}
         run: |
           pytest -q tests/benchmark/test_golden_claims.py -m "not infra" --no-cov || true
 
       - name: Synthetic probe (item 8 — 10 min quick probe)
         env:
-          OHI_API_URL: https://ohi-api.shiftbloom.studio
+          OHI_API_URL: ${{ steps.direct_api.outputs.url }}
           OHI_EDGE_SECRET: ${{ secrets.CF_EDGE_SECRET }}
         run: |
           python scripts/synthetic_probe.py --duration 600 --interval 60 || PROBE_RC=$?

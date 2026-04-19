@@ -30,12 +30,34 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-v2-postmerge-${{ github.run_id }}
+
+      - name: Resolve direct API URL
+        id: direct_api
+        run: |
+          api_url=$(aws apigatewayv2 get-apis \
+            --query "Items[?Name=='ohi-api'].ApiEndpoint | [0]" \
+            --output text)
+          if [ -z "$api_url" ] || [ "$api_url" = "None" ]; then
+            api_url=$(aws lambda get-function-url-config \
+              --function-name ohi-api \
+              --query 'FunctionUrl' \
+              --output text)
+          fi
+          api_url="${api_url%/}"
+          echo "url=$api_url" >> "$GITHUB_OUTPUT"
+          echo "Resolved direct API URL: $api_url"
+
       - name: Install deps
         run: pip install httpx
 
       - name: 30-min synthetic probe (2-min cadence)
         env:
-          OHI_API_URL: https://ohi-api.shiftbloom.studio
+          OHI_API_URL: ${{ steps.direct_api.outputs.url }}
           OHI_EDGE_SECRET: ${{ secrets.CF_EDGE_SECRET }}
         run: |
           python scripts/synthetic_probe.py --duration 1800 --interval 120

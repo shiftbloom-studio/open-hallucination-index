@@ -54,12 +54,28 @@ jobs:
           REASON="${{ github.event.client_payload.reason || inputs.reason || 'auto-rollback' }}"
           python scripts/rollback_lambda.py --function ohi-api --reason "$REASON"
 
+      - name: Resolve direct API URL
+        id: direct_api
+        run: |
+          api_url=$(aws apigatewayv2 get-apis \
+            --query "Items[?Name=='ohi-api'].ApiEndpoint | [0]" \
+            --output text)
+          if [ -z "$api_url" ] || [ "$api_url" = "None" ]; then
+            api_url=$(aws lambda get-function-url-config \
+              --function-name ohi-api \
+              --query 'FunctionUrl' \
+              --output text)
+          fi
+          api_url="${api_url%/}"
+          echo "url=$api_url" >> "$GITHUB_OUTPUT"
+          echo "Resolved direct API URL: $api_url"
+
       - name: Verify /health/deep after rollback
         run: |
           sleep 15
           code=$(curl -s -o /tmp/health.json -w "%{http_code}" \
             -H "X-OHI-Edge-Secret: ${{ secrets.CF_EDGE_SECRET }}" \
-            https://ohi-api.shiftbloom.studio/health/deep)
+            ${{ steps.direct_api.outputs.url }}/health/deep)
           cat /tmp/health.json
           if [ "$code" != "200" ]; then
             echo "::error::/health/deep after rollback returned $code"
