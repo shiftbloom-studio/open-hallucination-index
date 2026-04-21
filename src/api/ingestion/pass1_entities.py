@@ -122,8 +122,7 @@ class Pass1EntityWriter:
 
     async def run(self, dump_path: str, *, start_from: str | None = None) -> None:
         """Drain the Wikidata dump into Aura. ``start_from`` is the
-        ``last_committed_id`` from a previous checkpoint; the parser
-        skips entities lexically ≤ it (wikidata QIDs sort well)."""
+        previously committed eligible-entity count from a checkpoint."""
         self._ckpt.start_pass("pass1")
         logger.info(
             "Pass 1 starting (batch_size=%d, edge_types=%d, start_from=%s)",
@@ -131,19 +130,30 @@ class Pass1EntityWriter:
             len(self._edge_filter),
             start_from,
         )
+        resume_offset = _resume_offset(start_from, pass_name="pass1")
         parser = WikidataJsonDumpParser(dump_path)
         batch: list[WikidataEntity] = []
+        seen = 0
+        committed = resume_offset
         processed = 0
         for entity in parser:
-            if start_from and entity.qid <= start_from:
+            seen += 1
+            if seen <= resume_offset:
                 continue
             batch.append(entity)
             if len(batch) >= self._batch_size:
-                await self._flush_batch(batch)
+                if not await self._flush_batch(batch):
+                    self._ckpt.set_status(
+                        "pass1",
+                        "aborted",
+                        notes=f"batch failed before checkpoint at entity_offset={seen}",
+                    )
+                    raise RuntimeError("Pass 1 aborted after an unrecoverable batch failure")
                 processed += len(batch)
+                committed += len(batch)
                 self._ckpt.advance(
                     "pass1",
-                    last_committed_id=batch[-1].qid,
+                    last_committed_id=str(committed),
                     records_in_batch=len(batch),
                 )
                 self._progress.tick(len(batch))
@@ -153,18 +163,23 @@ class Pass1EntityWriter:
                     logger.info("Pass 1 paused at qid=%s", entity.qid)
                     return
         if batch:
-            await self._flush_batch(batch)
+            if not await self._flush_batch(batch):
+                self._ckpt.set_status(
+                    "pass1",
+                    "aborted",
+                    notes=f"final batch failed before checkpoint at entity_offset={seen}",
+                )
+                raise RuntimeError("Pass 1 aborted after an unrecoverable final-batch failure")
+            committed += len(batch)
             self._ckpt.advance(
                 "pass1",
-                last_committed_id=batch[-1].qid,
+                last_committed_id=str(committed),
                 records_in_batch=len(batch),
             )
             self._progress.tick(len(batch))
             processed += len(batch)
         ok = await retry_record(
-            fn=lambda: self._graph.run_cypher(
-                _RECOMPUTE_INBOUND_LINK_COUNT_CYPHER, {}
-            ),
+            fn=lambda: self._graph.run_cypher(_RECOMPUTE_INBOUND_LINK_COUNT_CYPHER, {}),
             record_id="pass1:recompute_inbound_link_count",
         )
         if not ok:
@@ -181,12 +196,10 @@ class Pass1EntityWriter:
                 notes="failed to recompute inbound_link_count",
             )
             raise RuntimeError("Pass 1 failed to recompute inbound_link_count")
-        self._ckpt.set_status(
-            "pass1", "complete", notes=f"{processed} entities ingested"
-        )
+        self._ckpt.set_status("pass1", "complete", notes=f"{processed} entities ingested")
         logger.info("Pass 1 complete (%d entities)", processed)
 
-    async def _flush_batch(self, batch: list[WikidataEntity]) -> None:
+    async def _flush_batch(self, batch: list[WikidataEntity]) -> bool:
         entity_rows = [
             {
                 "qid": e.qid,
@@ -197,9 +210,7 @@ class Pass1EntityWriter:
             for e in batch
         ]
         ok = await retry_record(
-            fn=lambda: self._graph.run_cypher(
-                _UPSERT_ENTITY_CYPHER, {"batch": entity_rows}
-            ),
+            fn=lambda: self._graph.run_cypher(_UPSERT_ENTITY_CYPHER, {"batch": entity_rows}),
             record_id=f"entities:{batch[0].qid}..{batch[-1].qid}",
         )
         if not ok:
@@ -211,7 +222,7 @@ class Pass1EntityWriter:
                     error_detail="entity batch failed after retries",
                 )
             self._ckpt.increment_dlq("pass1", n=len(batch))
-            return
+            return False
 
         # Edge writes — one batch per relationship type.
         by_edge_type: dict[str, list[dict[str, str]]] = {}
@@ -248,6 +259,20 @@ class Pass1EntityWriter:
                     extra={"edge_type": edge_type, "batch_len": len(rows)},
                 )
                 self._ckpt.increment_dlq("pass1")
+                return False
+
+        return True
+
+
+def _resume_offset(start_from: str | None, *, pass_name: str) -> int:
+    if start_from is None:
+        return 0
+    if start_from.isdigit():
+        return int(start_from)
+    raise ValueError(
+        f"{pass_name} resume marker must be a numeric offset; "
+        "legacy checkpoints require --force-restart"
+    )
 
 
 __all__ = [

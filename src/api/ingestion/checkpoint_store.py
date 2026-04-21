@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import tempfile
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -70,9 +71,11 @@ class CheckpointStore:
     """
 
     def __init__(self, path: str | None = None) -> None:
-        self.path = path or os.environ.get(
-            "CORPUS_CHECKPOINT_PATH", "/tmp/ohi-ingestion-state.db"
-        )
+        default_path = os.path.join(tempfile.gettempdir(), "ohi-ingestion-state.db")
+        self.path = path or os.environ.get("CORPUS_CHECKPOINT_PATH", default_path)
+        parent = os.path.dirname(os.path.abspath(self.path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
@@ -188,13 +191,10 @@ class CheckpointStore:
                 (n, _now_iso(), pass_name),
             )
 
-    def set_status(
-        self, pass_name: PassName, status: PassStatus, notes: str | None = None
-    ) -> None:
+    def set_status(self, pass_name: PassName, status: PassStatus, notes: str | None = None) -> None:
         with self._conn() as conn:
             conn.execute(
-                "UPDATE ingestion_checkpoints SET status=?, updated_at=?, notes=? "
-                "WHERE pass = ?",
+                "UPDATE ingestion_checkpoints SET status=?, updated_at=?, notes=? WHERE pass = ?",
                 (status, _now_iso(), notes, pass_name),
             )
 

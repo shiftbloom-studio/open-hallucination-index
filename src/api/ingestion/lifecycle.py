@@ -33,6 +33,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -43,8 +44,11 @@ logger = logging.getLogger(__name__)
 
 
 # Defaults (tunable via env).
-_PAUSE_FLAG_FILE = Path(os.environ.get("CORPUS_PAUSE_FLAG_FILE", "/tmp/ohi-ingestion.pause"))
-_DLQ_FILE = Path(os.environ.get("CORPUS_DLQ_PATH", "/tmp/ohi-ingestion-dlq.jsonl"))
+_TEMP_DIR = Path(tempfile.gettempdir())
+_PAUSE_FLAG_FILE = Path(
+    os.environ.get("CORPUS_PAUSE_FLAG_FILE", str(_TEMP_DIR / "ohi-ingestion.pause"))
+)
+_DLQ_FILE = Path(os.environ.get("CORPUS_DLQ_PATH", str(_TEMP_DIR / "ohi-ingestion-dlq.jsonl")))
 _MAX_RECORD_RETRIES = int(os.environ.get("CORPUS_MAX_RECORD_RETRIES", "5"))
 _PROGRESS_EVERY = int(os.environ.get("CORPUS_PROGRESS_EVERY", "10000"))
 
