@@ -176,6 +176,11 @@ export function verifyReducer(state: VerifyState, action: VerifyAction): VerifyS
 
     case "COMPLETE": {
       const v = action.verdict;
+      const claimEvidencePairsScored = v.claims.reduce(
+        (total, claim) =>
+          total + claim.supporting_evidence.length + claim.refuting_evidence.length,
+        0,
+      );
       // Backfill progress.decomposition.claim_count + routed[] from the
       // real verdict so the step telemetry shows accurate counts at
       // completion time.
@@ -184,6 +189,10 @@ export function verifyReducer(state: VerifyState, action: VerifyAction): VerifyS
         currentPhase: "assembling",
         decomposition: { claim_count: v.claims.length, estimated_total_ms: v.processing_time_ms },
         routed: v.claims.map((c) => c.claim.id),
+        nli: {
+          claim_evidence_pairs_scored: claimEvidencePairsScored,
+          claim_pair_pairs_scored: 0,
+        },
       };
       return {
         ...state,
