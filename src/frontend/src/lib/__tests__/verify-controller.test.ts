@@ -3,7 +3,6 @@ import {
   initialState,
   verifyReducer,
   type VerifyState,
-  type ProgressBag,
 } from "../verify-controller";
 import type { DocumentVerdict, ClaimVerdict } from "../ohi-types";
 import type { JobStatus } from "../ohi-client";
@@ -24,6 +23,16 @@ import type { JobStatus } from "../ohi-client";
  */
 
 
+function fakeEvidence(id: string) {
+  return {
+    id,
+    source_uri: null,
+    content: `evidence ${id}`,
+    retrieved_at: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+
 function fakeClaim(id: string): ClaimVerdict {
   return {
     claim: { id, text: `claim ${id}` },
@@ -32,8 +41,8 @@ function fakeClaim(id: string): ClaimVerdict {
     coverage_target: null,
     domain: "general",
     domain_assignment_weights: { general: 1 },
-    supporting_evidence: [],
-    refuting_evidence: [],
+    supporting_evidence: [fakeEvidence(`sup-${id}`)],
+    refuting_evidence: [fakeEvidence(`ref-${id}`)],
     pcg_neighbors: [],
     nli_self_consistency_variance: 0,
     bp_validated: null,
@@ -174,5 +183,9 @@ describe("verifyReducer", () => {
     expect(state.claims).toEqual(verdict.claims);
     expect(state.progress.decomposition?.claim_count).toBe(verdict.claims.length);
     expect(state.progress.routed).toEqual(verdict.claims.map((c) => c.claim.id));
+    expect(state.progress.nli).toEqual({
+      claim_evidence_pairs_scored: 4,
+      claim_pair_pairs_scored: 0,
+    });
   });
 });

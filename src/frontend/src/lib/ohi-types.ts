@@ -168,6 +168,25 @@ export interface CalibrationReport {
   domains: Record<string, CalibrationDomain>;
 }
 
+export interface HealthStatus {
+  status: "healthy" | "degraded" | "unhealthy";
+  timestamp: string;
+  version?: string;
+  environment?: string;
+  checks?: Record<string, boolean>;
+}
+
+export interface ReadinessServiceStatus {
+  connected: boolean;
+  status: string;
+}
+
+export interface ReadinessStatus {
+  ready: boolean;
+  timestamp: string;
+  services: Record<string, ReadinessServiceStatus>;
+}
+
 // Matches the shape emitted by the backend /health/deep endpoint as of
 // 2026-04-17. The earlier spec used "up/degraded/down" + pXX latencies +
 // last_check, but the live endpoint settled on "ok/down/skipped" with a
@@ -185,8 +204,8 @@ export interface HealthLayer {
 
 export interface HealthDeep {
   // Backend emits `status`; `overall` kept as an accepted alias.
-  status?: "healthy" | "degraded" | "unhealthy";
-  overall?: "healthy" | "degraded" | "unhealthy";
+  status?: "ok" | "healthy" | "degraded" | "down" | "unhealthy";
+  overall?: "ok" | "healthy" | "degraded" | "down" | "unhealthy";
   timestamp: string;
   pipeline_version?: string;
   layers: Record<string, HealthLayer>;

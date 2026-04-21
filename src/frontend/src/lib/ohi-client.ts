@@ -4,17 +4,23 @@ import type {
   DocumentVerdict,
   FeedbackRequest,
   HealthDeep,
+  HealthStatus,
+  ReadinessStatus,
   VerifyRequest,
 } from "./ohi-types";
+
+const DEFAULT_PUBLIC_API_BASE = "https://api.ohi.shiftbloom.studio/api/v2";
 
 function apiBase(): string {
   const base = process.env.NEXT_PUBLIC_API_BASE;
   if (!base) {
-    throw new Error(
-      "NEXT_PUBLIC_API_BASE is not set. Expected e.g. https://api.ohi.shiftbloom.studio/api/v2",
-    );
+    return DEFAULT_PUBLIC_API_BASE;
   }
   return base.endsWith("/") ? base.slice(0, -1) : base;
+}
+
+function healthUrl(path: string): string {
+  return new URL(path, apiBase()).toString();
 }
 
 export class OhiError extends Error {
@@ -153,12 +159,28 @@ export const ohi = {
     // /health/* lives at the origin root, not under /api/v2 — Lambda keeps it
     // there so its own container health probes hit /health/live without the
     // /api/v2 prefix. Build a URL that drops whatever path apiBase() carries.
-    const url = new URL("/health/deep", apiBase()).toString();
+    const url = healthUrl("/health/deep");
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
       signal: opts.signal,
     });
     return asJson<HealthDeep>(res);
+  },
+
+  healthLive: async (opts: RequestOptions = {}): Promise<HealthStatus> => {
+    const res = await fetch(healthUrl("/health/live"), {
+      headers: { Accept: "application/json" },
+      signal: opts.signal,
+    });
+    return asJson<HealthStatus>(res);
+  },
+
+  healthReady: async (opts: RequestOptions = {}): Promise<ReadinessStatus> => {
+    const res = await fetch(healthUrl("/health/ready"), {
+      headers: { Accept: "application/json" },
+      signal: opts.signal,
+    });
+    return asJson<ReadinessStatus>(res);
   },
 };
 
