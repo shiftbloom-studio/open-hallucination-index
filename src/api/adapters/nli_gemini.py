@@ -71,6 +71,10 @@ Decision rules (apply in order):
    because a person is born in exactly one country. Do NOT downgrade
    such cases to NEUTRAL; providing the correct answer to a factual
    question that the claim gets wrong IS a refutation.
+   If a claim assigns a specific invention/discovery/creation to a
+   person, and the evidence establishes a clearly different core role
+   or biography for that person without support for that invention,
+   classify as REFUTE (not NEUTRAL).
 
 3. NEUTRAL — reserved ONLY for passages that do not address the claim's
    subject-predicate-object at all. Example: "Einstein won the Nobel
