@@ -61,6 +61,41 @@ resource "aws_iam_role_policy" "lambda_artifacts" {
   policy = data.aws_iam_policy_document.artifacts_rw.json
 }
 
+data "aws_iam_policy_document" "bedrock_embed_invoke" {
+  statement {
+    sid     = "InvokeConfiguredBedrockEmbeddingModel"
+    actions = ["bedrock:InvokeModel"]
+    resources = [
+      "arn:aws:bedrock:${var.bedrock_embed_region}::foundation-model/${var.bedrock_embed_model_id}",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_bedrock_embed" {
+  name   = "${local.prefix}-api-bedrock-embed"
+  role   = aws_iam_role.lambda_exec.id
+  policy = data.aws_iam_policy_document.bedrock_embed_invoke.json
+}
+
+data "aws_iam_policy_document" "bedrock_rerank_invoke" {
+  statement {
+    sid = "InvokeConfiguredBedrockReranker"
+    actions = [
+      "bedrock:Rerank",
+      "bedrock:InvokeModel",
+    ]
+    resources = [
+      "arn:aws:bedrock:${var.bedrock_rerank_region}::foundation-model/${var.bedrock_rerank_model_id}",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_bedrock_rerank" {
+  name   = "${local.prefix}-api-bedrock-rerank"
+  role   = aws_iam_role.lambda_exec.id
+  policy = data.aws_iam_policy_document.bedrock_rerank_invoke.json
+}
+
 # ---------------------------------------------------------------------------
 # Stream D2: DynamoDB jobs table R/W + Lambda self-async-invoke permission.
 #

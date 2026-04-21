@@ -70,9 +70,98 @@ variable "tunnel_hostname_embed" {
 }
 
 variable "embedding_backend" {
-  description = "'local' (in-process sentence-transformers) or 'remote' (HTTP to pc-embed)."
+  description = "'local' (in-process sentence-transformers), 'remote' (HTTP to pc-embed), or 'bedrock' (Titan Text Embeddings V2)."
   type        = string
-  default     = "remote"
+  default     = "bedrock"
+
+  validation {
+    condition     = contains(["local", "remote", "bedrock"], var.embedding_backend)
+    error_message = "embedding_backend must be one of: local, remote, bedrock."
+  }
+}
+
+variable "bedrock_embed_model_id" {
+  description = "Bedrock model id used for embedding generation when embedding_backend=bedrock."
+  type        = string
+  default     = "amazon.titan-embed-text-v2:0"
+}
+
+variable "bedrock_embed_dim" {
+  description = "Requested output vector dimension for Titan Text Embeddings V2."
+  type        = number
+  default     = 1024
+}
+
+variable "bedrock_embed_region" {
+  description = "AWS Region used for Bedrock embedding invocations."
+  type        = string
+  default     = "eu-central-1"
+}
+
+variable "bedrock_embed_normalize" {
+  description = "Whether Titan Text Embeddings V2 should return normalized vectors."
+  type        = bool
+  default     = true
+}
+
+variable "bedrock_embed_batch_concurrency" {
+  description = "Maximum in-flight Bedrock embedding requests per application batch."
+  type        = number
+  default     = 8
+}
+
+variable "bedrock_embed_timeout_s" {
+  description = "Bedrock embedding InvokeModel read timeout in seconds."
+  type        = number
+  default     = 10
+}
+
+variable "retrieval_qdrant_collection_name" {
+  description = "Qdrant collection used for passage ANN retrieval."
+  type        = string
+  default     = "ohi_passages_titan1024"
+}
+
+variable "qdrant_vector_size" {
+  description = "Expected Qdrant vector dimension for passage embeddings."
+  type        = number
+  default     = 1024
+}
+
+variable "bedrock_rerank_enabled" {
+  description = "Enable Bedrock reranker in runtime retrieval path."
+  type        = bool
+  default     = true
+}
+
+variable "bedrock_rerank_model_id" {
+  description = "Bedrock reranker model id."
+  type        = string
+  default     = "cohere.rerank-v3-5:0"
+}
+
+variable "bedrock_rerank_region" {
+  description = "AWS Region for Bedrock rerank calls."
+  type        = string
+  default     = "eu-central-1"
+}
+
+variable "bedrock_rerank_top_n" {
+  description = "Final top-N passages returned after reranking."
+  type        = number
+  default     = 12
+}
+
+variable "bedrock_rerank_candidates" {
+  description = "Candidate passage count from ANN before reranking."
+  type        = number
+  default     = 40
+}
+
+variable "bedrock_rerank_timeout_s" {
+  description = "Rerank operation timeout in seconds."
+  type        = number
+  default     = 12
 }
 
 variable "neo4j_uri" {
