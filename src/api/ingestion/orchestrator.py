@@ -118,42 +118,54 @@ async def run(argv: list[str] | None = None) -> int:
     dlq = DLQWriter()
     pause = install_pause_handler()
 
-    if args.only_integrity:
-        return await _run_pass3(args, store, dlq, pause)
+    if args.retry_dlq:
+        raise SystemExit(
+            "--retry-dlq is not wired in the Wave 3 orchestrator yet; "
+            "rerun the affected pass normally from the last checkpoint or use --force-restart"
+        )
 
     if args.dry_run:
         logger.info("--dry-run enabled; parsers will enumerate but not write")
 
     # Dependencies wired via DI later in this file — keep imports lazy.
     from config.dependencies import (  # noqa: PLC0415
+        _cleanup_adapters,
+        _initialize_adapters,
+        get_evidence_collector,  # noqa: F401 — triggers lifespan init
         get_graph_store,
         get_vector_store,
-        get_evidence_collector,  # noqa: F401 — triggers lifespan init
     )
 
-    # NB: the orchestrator is run as a standalone script but reuses the
-    # same adapters the Lambda runtime uses. The caller is expected to
-    # await config.dependencies._initialize_adapters() before running.
-    graph_store = get_graph_store()
-    vector_store = get_vector_store()
-    from config.dependencies import _embedding_adapter  # noqa: PLC0415
+    await _initialize_adapters()
+    try:
+        if args.only_integrity:
+            return await _run_pass3(args, store, dlq, pause)
 
-    if not args.skip_pass1:
-        if not args.wikidata_path:
-            raise SystemExit("--wikidata required unless --skip-pass1")
-        await _run_pass1(args, store, dlq, pause, graph_store)
+        graph_store = get_graph_store()
+        vector_store = get_vector_store()
+        from config.dependencies import _embedding_adapter  # noqa: PLC0415
 
-    if not args.skip_pass1b:
-        await _run_pass1b(args, store, dlq, pause, graph_store, _embedding_adapter)
+        if _embedding_adapter is None:
+            raise RuntimeError("Embedding adapter did not initialize")
 
-    if not args.skip_pass2:
-        if not args.enwiki_path:
-            raise SystemExit("--enwiki required unless --skip-pass2")
-        await _run_pass2(args, store, dlq, pause, graph_store, vector_store, _embedding_adapter)
+        if not args.skip_pass1:
+            if not args.wikidata_path:
+                raise SystemExit("--wikidata required unless --skip-pass1")
+            await _run_pass1(args, store, dlq, pause, graph_store)
 
-    if not args.skip_pass3:
-        await _run_pass3(args, store, dlq, pause)
-    return 0
+        if not args.skip_pass1b:
+            await _run_pass1b(args, store, dlq, pause, graph_store, _embedding_adapter)
+
+        if not args.skip_pass2:
+            if not args.enwiki_path:
+                raise SystemExit("--enwiki required unless --skip-pass2")
+            await _run_pass2(args, store, dlq, pause, graph_store, vector_store, _embedding_adapter)
+
+        if not args.skip_pass3:
+            await _run_pass3(args, store, dlq, pause)
+        return 0
+    finally:
+        await _cleanup_adapters()
 
 
 async def _run_pass1(args: RunArgs, store, dlq, pause, graph_store) -> None:
@@ -174,7 +186,19 @@ async def _run_pass1(args: RunArgs, store, dlq, pause, graph_store) -> None:
 async def _run_pass1b(args: RunArgs, store, dlq, pause, graph_store, embedding_adapter) -> None:
     from ingestion.pass1b_entity_vectors import Pass1bEntityVectorWriter  # noqa: PLC0415
 
-    progress = ProgressReporter("pass1b", total_estimate=args.top_k_entities)
+    embedding_dim = int(getattr(embedding_adapter, "embedding_dimension", 384))
+    top_k_entities = args.top_k_entities
+    if embedding_dim > 384 and args.top_k_entities >= 1_800_000:
+        # Keep the default footprint near the previous 384-dim budget.
+        top_k_entities = max(100_000, int(args.top_k_entities * (384 / embedding_dim)))
+        logger.warning(
+            "Pass1b top_k reduced for embedding dim=%d: %d -> %d",
+            embedding_dim,
+            args.top_k_entities,
+            top_k_entities,
+        )
+
+    progress = ProgressReporter("pass1b", total_estimate=top_k_entities)
     writer = Pass1bEntityVectorWriter(
         graph_store=graph_store,
         embedding_adapter=embedding_adapter,
@@ -182,7 +206,8 @@ async def _run_pass1b(args: RunArgs, store, dlq, pause, graph_store, embedding_a
         dlq=dlq,
         pause_controller=pause,
         progress=progress,
-        top_k=args.top_k_entities,
+        top_k=top_k_entities,
+        dim=embedding_dim,
     )
     start_from = args.only_range[0] or _existing_high_water(store, "pass1b")
     await writer.run(start_from=start_from)
@@ -234,9 +259,7 @@ async def _run_pass3(args: RunArgs, store, dlq, pause) -> int:
     vector_store = get_vector_store()
     from config.dependencies import _embedding_adapter  # noqa: PLC0415
 
-    resolver = EntityResolver(
-        graph_store=graph_store, embedding_adapter=_embedding_adapter
-    )
+    resolver = EntityResolver(graph_store=graph_store, embedding_adapter=_embedding_adapter)
     golden = [
         "Marie Curie won two Nobel Prizes.",
         "Albert Einstein was born in Germany.",
@@ -258,6 +281,15 @@ def _existing_high_water(store: CheckpointStore, pass_name) -> str | None:
     row = store.get(pass_name)
     if row is None:
         return None
+    if (
+        pass_name in {"pass1", "pass1b", "pass2"}
+        and row.last_committed_id
+        and not row.last_committed_id.isdigit()
+    ):
+        raise RuntimeError(
+            f"{pass_name} checkpoint uses a legacy unsafe resume marker "
+            f"({row.last_committed_id!r}); rerun with --force-restart once"
+        )
     return row.last_committed_id
 
 

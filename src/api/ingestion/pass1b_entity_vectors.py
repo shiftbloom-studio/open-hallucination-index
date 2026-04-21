@@ -45,11 +45,14 @@ RETURN name
 _SELECT_TOP_K_CYPHER = """
 MATCH (e:Entity)
 WHERE e.label IS NOT NULL
-  AND (e.embedding IS NULL)
-  AND ($start_qid IS NULL OR e.qid > $start_qid)
+WITH e
+ORDER BY coalesce(e.inbound_link_count, 0) DESC, e.qid ASC
+LIMIT $top_k
+WITH e
+WHERE e.embedding IS NULL
 RETURN e.qid AS qid, e.label AS label, e.description AS description
 ORDER BY coalesce(e.inbound_link_count, 0) DESC, e.qid ASC
-LIMIT $k
+LIMIT $batch_size
 """
 
 
@@ -107,20 +110,17 @@ class Pass1bEntityVectorWriter:
         )
         await self._ensure_index()
 
-        remaining = self._top_k
-        cursor = start_from
+        committed = int(start_from) if start_from and start_from.isdigit() else 0
         processed = 0
-        while remaining > 0:
-            limit = min(self._batch_size, remaining)
+        while True:
             rows = await self._graph.run_cypher(
-                _SELECT_TOP_K_CYPHER, {"start_qid": cursor, "k": limit}
+                _SELECT_TOP_K_CYPHER,
+                {"top_k": self._top_k, "batch_size": self._batch_size},
             )
             rows = list(rows or [])
             if not rows:
                 break
-            labels = [
-                _entity_embedding_text(r["label"], r.get("description")) for r in rows
-            ]
+            labels = [_entity_embedding_text(r["label"], r.get("description")) for r in rows]
             try:
                 vectors = await self._embed.generate_embeddings_batch(labels)
             except Exception as exc:  # noqa: BLE001
@@ -133,18 +133,19 @@ class Pass1bEntityVectorWriter:
                         error_detail=str(exc),
                     )
                 self._ckpt.increment_dlq("pass1b", n=len(rows))
-                remaining -= len(rows)
-                cursor = rows[-1]["qid"]
-                continue
+                self._ckpt.set_status(
+                    "pass1b",
+                    "aborted",
+                    notes=f"embedding batch failed at qid={rows[0]['qid']}",
+                )
+                raise RuntimeError("Pass 1b aborted after an unrecoverable embed failure") from exc
 
             payload = [
                 {"qid": r["qid"], "embedding": list(vec)}
                 for r, vec in zip(rows, vectors, strict=True)
             ]
             ok = await retry_record(
-                fn=lambda p=payload: self._graph.run_cypher(
-                    _WRITE_EMBEDDING_CYPHER, {"batch": p}
-                ),
+                fn=lambda p=payload: self._graph.run_cypher(_WRITE_EMBEDDING_CYPHER, {"batch": p}),
                 record_id=f"entvec:{payload[0]['qid']}..{payload[-1]['qid']}",
             )
             if not ok:
@@ -156,33 +157,33 @@ class Pass1bEntityVectorWriter:
                         error_detail="batch failed after retries",
                     )
                 self._ckpt.increment_dlq("pass1b", n=len(payload))
+                self._ckpt.set_status(
+                    "pass1b",
+                    "aborted",
+                    notes=f"vector write failed at qid={payload[0]['qid']}",
+                )
+                raise RuntimeError("Pass 1b aborted after an unrecoverable write failure")
             else:
                 processed += len(payload)
+                committed += len(payload)
                 self._ckpt.advance(
                     "pass1b",
-                    last_committed_id=payload[-1]["qid"],
+                    last_committed_id=str(committed),
                     records_in_batch=len(payload),
                 )
                 self._progress.tick(len(payload))
 
-            remaining -= len(rows)
-            cursor = rows[-1]["qid"]
-
             if self._pause.should_pause():
                 self._ckpt.set_status("pass1b", "paused", notes="SIGUSR1 / flag-file")
-                logger.info("Pass 1b paused at qid=%s", cursor)
+                logger.info("Pass 1b paused after %d committed vectors", committed)
                 return
 
-        self._ckpt.set_status(
-            "pass1b", "complete", notes=f"{processed} entity vectors written"
-        )
+        self._ckpt.set_status("pass1b", "complete", notes=f"{processed} entity vectors written")
         logger.info("Pass 1b complete (%d entity vectors)", processed)
 
     async def _ensure_index(self) -> None:
         try:
-            await self._graph.run_cypher(
-                _CREATE_VECTOR_INDEX_CYPHER, {"dim": self._dim}
-            )
+            await self._graph.run_cypher(_CREATE_VECTOR_INDEX_CYPHER, {"dim": self._dim})
         except Exception as exc:  # noqa: BLE001
             # Index likely already exists — log at info, keep going.
             logger.info("Aura vector index create: %s (ok if already exists)", exc)
