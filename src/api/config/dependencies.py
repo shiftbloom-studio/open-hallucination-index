@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
+from adapters.bedrock_rerank import BedrockRerankAdapter
 from adapters.embeddings import LocalEmbeddingAdapter
 from adapters.gemini import GeminiLLMAdapter
 from adapters.mcp_ohi import OHIMCPAdapter
@@ -58,6 +59,9 @@ from pipeline.retrieval import (
     KnowledgeMeshBuilder,
     SmartMCPSelector,
 )
+from pipeline.retrieval.aura_passage_fetch import AuraPassageFetch
+from pipeline.retrieval.graph_retriever import GraphRetriever
+from pipeline.retrieval.qdrant_passage_search import QdrantPassageSearch
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +266,34 @@ async def _initialize_adapters() -> None:
             )
     _mcp_selector = SmartMCPSelector(_mcp_sources) if _mcp_sources else None
 
+    graph_retriever: GraphRetriever | None = None
+    if _graph_store is not None and _vector_store is not None:
+        try:
+            qdrant_passage_search = QdrantPassageSearch(
+                vector_store=_vector_store,
+                embedding_adapter=_embedding_adapter,
+                collection_name=settings.retrieval.qdrant_passage_collection,
+                score_threshold=settings.retrieval.qdrant_score_threshold,
+            )
+            aura_passage_fetch = AuraPassageFetch(graph_store=_graph_store)
+            reranker = BedrockRerankAdapter(settings.retrieval)
+            graph_retriever = GraphRetriever(
+                qdrant=qdrant_passage_search,
+                aura=aura_passage_fetch,
+                reranker=reranker,
+                candidate_top_k=settings.retrieval.qdrant_candidate_k,
+                final_top_k=settings.retrieval.final_top_k,
+            )
+            logger.info(
+                "Graph retriever enabled: collection=%s candidates=%d final_top_k=%d rerank=%s",
+                settings.retrieval.qdrant_passage_collection,
+                settings.retrieval.qdrant_candidate_k,
+                settings.retrieval.final_top_k,
+                settings.retrieval.bedrock_rerank_enabled,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Graph retriever wiring failed; fallback to legacy vector path: %s", exc)
+
     # Adaptive collector (reused by v2 L1 retrieval layer).
     # Stream F fix: plumb _mcp_selector so Tier 2 (external MCP sources)
     # actually runs — without it `_collect_mcp` hits the "No sources and
@@ -274,6 +306,7 @@ async def _initialize_adapters() -> None:
     _evidence_collector = AdaptiveEvidenceCollector(
         graph_store=_graph_store,
         vector_store=_vector_store,
+        graph_retriever=graph_retriever,
         mcp_selector=_mcp_selector,
         local_timeout_ms=settings.verification.local_timeout_ms,
         mcp_timeout_ms=settings.verification.mcp_timeout_ms,
