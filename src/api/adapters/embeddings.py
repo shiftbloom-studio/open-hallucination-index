@@ -1,12 +1,13 @@
 """
-Embedding adapter — dual-mode (local sentence-transformers OR remote HTTP).
+Embedding adapter — tri-mode (local sentence-transformers, remote HTTP, or Bedrock).
 
 The public name `LocalEmbeddingAdapter` is kept unchanged so the DI
 container in `config/dependencies.py` doesn't need to know which mode is
 active. Mode is selected by env var at construction time:
 
-    OHI_EMBEDDING_BACKEND=local  (default) → in-process sentence-transformers
-    OHI_EMBEDDING_BACKEND=remote           → HTTP POST to OHI_EMBEDDING_REMOTE_URL
+    OHI_EMBEDDING_BACKEND=local   (default) → in-process sentence-transformers
+    OHI_EMBEDDING_BACKEND=remote            → HTTP POST to OHI_EMBEDDING_REMOTE_URL
+    OHI_EMBEDDING_BACKEND=bedrock           → Amazon Bedrock Titan Text Embeddings V2
 
 Remote mode exists so Lambda doesn't have to carry torch + a sentence
 transformer model — those live on the PC embed container, reached via the
@@ -16,6 +17,7 @@ CF tunnel (embed.ohi.shiftbloom.studio).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -188,6 +190,107 @@ class _RemoteEmbeddingAdapter:
             return False
 
 
+# --- Bedrock (used when OHI_EMBEDDING_BACKEND=bedrock) ----------------------
+
+
+class _BedrockEmbeddingAdapter:
+    """Amazon Bedrock Titan Text Embeddings V2 client."""
+
+    def __init__(self, settings: EmbeddingSettings) -> None:
+        import boto3
+        from botocore.config import Config
+
+        self._region = settings.bedrock_region
+        self._model_id = settings.bedrock_model_id
+        self._dim = settings.bedrock_dimension
+        self._normalize = settings.normalize
+        self._batch_concurrency = settings.bedrock_batch_concurrency
+
+        config = Config(
+            connect_timeout=5,
+            read_timeout=settings.bedrock_timeout_seconds,
+            retries={"max_attempts": 3, "mode": "standard"},
+        )
+        self._client = boto3.client(
+            service_name="bedrock-runtime",
+            region_name=self._region,
+            config=config,
+        )
+        logger.info(
+            "Bedrock embedding adapter configured: model=%s region=%s dim=%d normalize=%s",
+            self._model_id,
+            self._region,
+            self._dim,
+            self._normalize,
+        )
+
+    @property
+    def embedding_dimension(self) -> int:
+        return self._dim
+
+    def _embed_sync(self, text: str) -> list[float]:
+        if not text.strip():
+            raise ValueError("Bedrock embedding input must be non-empty")
+
+        request = json.dumps(
+            {
+                "inputText": text,
+                "dimensions": self._dim,
+                "normalize": self._normalize,
+                "embeddingTypes": ["float"],
+            }
+        )
+        response = self._client.invoke_model(
+            body=request,
+            modelId=self._model_id,
+            accept="application/json",
+            contentType="application/json",
+        )
+        body = response.get("body")
+        if body is None:
+            raise RuntimeError("Bedrock embedding response missing body")
+        payload = json.loads(body.read())
+        vector = payload.get("embedding")
+        if vector is None:
+            by_type = payload.get("embeddingsByType") or {}
+            vector = by_type.get("float")
+        if not isinstance(vector, list) or not vector:
+            raise RuntimeError("Bedrock embedding response missing float embedding")
+
+        out = [float(v) for v in vector]
+        if len(out) != self._dim:
+            logger.warning(
+                "Bedrock embedding dimension mismatch: expected=%d actual=%d",
+                self._dim,
+                len(out),
+            )
+        return out
+
+    async def generate_embedding(self, text: str) -> list[float]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_executor, self._embed_sync, text)
+
+    async def generate_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+
+        semaphore = asyncio.Semaphore(self._batch_concurrency)
+
+        async def _run(text: str) -> list[float]:
+            async with semaphore:
+                return await self.generate_embedding(text)
+
+        return await asyncio.gather(*(_run(text) for text in texts))
+
+    async def health_check(self) -> bool:
+        try:
+            vec = await self.generate_embedding("test")
+            return len(vec) > 0
+        except Exception as e:
+            logger.warning(f"Bedrock embedding health check failed: {e}")
+            return False
+
+
 # --- Public facade ----------------------------------------------------------
 
 
@@ -201,13 +304,22 @@ class LocalEmbeddingAdapter:
     def __init__(self, settings: EmbeddingSettings) -> None:
         backend = os.environ.get("OHI_EMBEDDING_BACKEND", "local").lower()
         if backend == "remote":
-            self._impl: _InProcessEmbeddingAdapter | _RemoteEmbeddingAdapter = (
+            self._impl: (
+                _InProcessEmbeddingAdapter
+                | _RemoteEmbeddingAdapter
+                | _BedrockEmbeddingAdapter
+            ) = (
                 _RemoteEmbeddingAdapter(settings)
             )
             logger.info("LocalEmbeddingAdapter facade → remote backend")
-        else:
+        elif backend == "bedrock":
+            self._impl = _BedrockEmbeddingAdapter(settings)
+            logger.info("LocalEmbeddingAdapter facade → bedrock backend")
+        elif backend == "local":
             self._impl = _InProcessEmbeddingAdapter(settings)
             logger.info("LocalEmbeddingAdapter facade → in-process backend")
+        else:
+            raise RuntimeError(f"Unsupported OHI_EMBEDDING_BACKEND={backend!r}")
 
     @property
     def embedding_dimension(self) -> int:
