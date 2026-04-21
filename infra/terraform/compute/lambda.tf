@@ -39,78 +39,103 @@ resource "aws_lambda_function" "api" {
   timeout     = var.timeout_s
 
   environment {
-    variables = {
-      OHI_ENV                        = "prod"
-      OHI_REGION                     = var.region
-      OHI_LOG_LEVEL                  = "INFO"
-      OHI_GEMINI_MODEL               = var.gemini_model
-      OHI_GEMINI_DAILY_CEILING_EUR   = tostring(var.gemini_daily_ceiling_eur)
-      OHI_CORS_ORIGINS               = var.cors_origins
-      OHI_CF_TUNNEL_HOSTNAME_NEO4J   = var.tunnel_hostname_neo4j
-      OHI_CF_TUNNEL_HOSTNAME_QDRANT  = var.tunnel_hostname_qdrant
-      OHI_CF_TUNNEL_HOSTNAME_PG_REST = var.tunnel_hostname_pg_rest
-      OHI_CF_TUNNEL_HOSTNAME_WEBDIS  = var.tunnel_hostname_webdis
-      OHI_CF_TUNNEL_HOSTNAME_EMBED   = var.tunnel_hostname_embed
-      OHI_EMBEDDING_BACKEND          = var.embedding_backend
-      OHI_EMBEDDING_REMOTE_URL       = "https://${var.tunnel_hostname_embed}"
-      OHI_S3_ARTIFACTS_BUCKET        = local.artifacts_bucket
+    variables = merge(
+      {
+        OHI_ENV                        = "prod"
+        OHI_REGION                     = var.region
+        OHI_LOG_LEVEL                  = "INFO"
+        OHI_GEMINI_MODEL               = var.gemini_model
+        OHI_GEMINI_DAILY_CEILING_EUR   = tostring(var.gemini_daily_ceiling_eur)
+        OHI_CORS_ORIGINS               = var.cors_origins
+        OHI_CF_TUNNEL_HOSTNAME_NEO4J   = var.tunnel_hostname_neo4j
+        OHI_CF_TUNNEL_HOSTNAME_QDRANT  = var.tunnel_hostname_qdrant
+        OHI_CF_TUNNEL_HOSTNAME_PG_REST = var.tunnel_hostname_pg_rest
+        OHI_CF_TUNNEL_HOSTNAME_WEBDIS  = var.tunnel_hostname_webdis
+        OHI_EMBEDDING_BACKEND          = var.embedding_backend
+        OHI_S3_ARTIFACTS_BUCKET        = local.artifacts_bucket
 
-      # Neo4j connection — Aura-hosted (neo4j+s://...)
-      NEO4J_URI      = var.neo4j_uri
-      NEO4J_USERNAME = jsondecode(data.aws_secretsmanager_secret_version.neo4j.secret_string)["username"]
-      NEO4J_PASSWORD = jsondecode(data.aws_secretsmanager_secret_version.neo4j.secret_string)["password"]
+        # Neo4j connection — Aura-hosted (neo4j+s://...)
+        NEO4J_URI      = var.neo4j_uri
+        NEO4J_USERNAME = jsondecode(data.aws_secretsmanager_secret_version.neo4j.secret_string)["username"]
+        NEO4J_PASSWORD = jsondecode(data.aws_secretsmanager_secret_version.neo4j.secret_string)["password"]
 
-      # Qdrant — reached via CF tunnel on HTTPS (port 443 at CF edge, routed
-      # to http://qdrant:6333 on the PC). CF Access gates the hostname with
-      # a service-token app; Lambda sends the headers below.
-      QDRANT_HOST  = var.tunnel_hostname_qdrant
-      QDRANT_PORT  = "443"
-      QDRANT_HTTPS = "true"
+        # Qdrant — reached via CF tunnel on HTTPS (port 443 at CF edge, routed
+        # to http://qdrant:6333 on the PC). CF Access gates the hostname with
+        # a service-token app; Lambda sends the headers below.
+        QDRANT_HOST            = var.tunnel_hostname_qdrant
+        QDRANT_PORT            = "443"
+        QDRANT_HTTPS           = "true"
+        QDRANT_COLLECTION_NAME = var.retrieval_qdrant_collection_name
+        QDRANT_VECTOR_SIZE     = tostring(var.qdrant_vector_size)
 
-      # CF Access service token — forwarded by tunnel-proxied adapters
-      # (adapters/qdrant.py, adapters/embeddings.py remote mode, ...).
-      OHI_CF_ACCESS_CLIENT_ID     = jsondecode(data.aws_secretsmanager_secret_version.cf_access.secret_string)["client_id"]
-      OHI_CF_ACCESS_CLIENT_SECRET = jsondecode(data.aws_secretsmanager_secret_version.cf_access.secret_string)["client_secret"]
+        # Retrieval tuning (Qdrant ANN + final cap after rerank).
+        RETRIEVAL_QDRANT_PASSAGE_COLLECTION = var.retrieval_qdrant_collection_name
+        RETRIEVAL_QDRANT_CANDIDATE_K        = tostring(var.bedrock_rerank_candidates)
+        RETRIEVAL_FINAL_TOP_K               = tostring(var.bedrock_rerank_top_n)
 
-      # Redis disabled for MVP — webdis over CF tunnel doesn't speak native
-      # Redis protocol; proper solution is managed Redis (ElastiCache/Upstash).
-      REDIS_ENABLED = "false"
+        # CF Access service token — forwarded by tunnel-proxied adapters
+        # (adapters/qdrant.py, adapters/embeddings.py remote mode, ...).
+        OHI_CF_ACCESS_CLIENT_ID     = jsondecode(data.aws_secretsmanager_secret_version.cf_access.secret_string)["client_id"]
+        OHI_CF_ACCESS_CLIENT_SECRET = jsondecode(data.aws_secretsmanager_secret_version.cf_access.secret_string)["client_secret"]
 
-      # LLM adapter points at Gemini's OpenAI-compatible endpoint. The adapter
-      # (src/api/adapters/openai.py via pydantic-settings LLM_*) reads these.
-      LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-      LLM_API_KEY  = data.aws_secretsmanager_secret_version.gemini.secret_string
-      LLM_MODEL    = var.gemini_model
+        # Redis disabled for MVP — webdis over CF tunnel doesn't speak native
+        # Redis protocol; proper solution is managed Redis (ElastiCache/Upstash).
+        REDIS_ENABLED = "false"
 
-      # Phase 2 LLM-based NLI (D1 wire). A dedicated NliGeminiAdapter runs on
-      # a second GeminiLLMAdapter instance with this model, reusing LLM_API_KEY
-      # via pydantic-settings in dependencies.py (model_copy with model override).
-      # Self-consistency is off by default (K=1) — G6 gate before flipping to 3.
-      NLI_LLM_MODEL          = var.nli_llm_model
-      NLI_THINKING_LEVEL     = var.nli_thinking_level
-      NLI_SELF_CONSISTENCY_K = tostring(var.nli_self_consistency_k)
+        # LLM adapter points at Gemini's OpenAI-compatible endpoint. The adapter
+        # (src/api/adapters/openai.py via pydantic-settings LLM_*) reads these.
+        LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        LLM_API_KEY  = data.aws_secretsmanager_secret_version.gemini.secret_string
+        LLM_MODEL    = var.gemini_model
 
-      # Stream D2 — async polling pattern. POST /api/v2/verify writes a
-      # pending record here, self-async-invokes, returns 202. The async
-      # handler reads JOBS_TABLE_NAME from this env var; the Lambda's own
-      # function name comes from AWS_LAMBDA_FUNCTION_NAME which the runtime
-      # sets automatically. OHI_ASYNC_VERIFY_TTL_SECONDS bounds how long a
-      # job record survives after creation (DynamoDB reaps via TTL within
-      # ~48h of this value) — 3600 covers the ~3min frontend polling cap
-      # plus a 1h margin for post-mortem debugging.
-      JOBS_TABLE_NAME              = local.jobs_table_name
-      OHI_ASYNC_VERIFY_TTL_SECONDS = tostring(var.async_verify_ttl_seconds)
+        # Phase 2 LLM-based NLI (D1 wire). A dedicated NliGeminiAdapter runs on
+        # a second GeminiLLMAdapter instance with this model, reusing LLM_API_KEY
+        # via pydantic-settings in dependencies.py (model_copy with model override).
+        # Self-consistency is off by default (K=1) — G6 gate before flipping to 3.
+        NLI_LLM_MODEL          = var.nli_llm_model
+        NLI_THINKING_LEVEL     = var.nli_thinking_level
+        NLI_SELF_CONSISTENCY_K = tostring(var.nli_self_consistency_k)
 
-      # Secret ARNs (values fetched at runtime via SecretsLoader)
-      OHI_GEMINI_KEY_SECRET_ARN               = local.secret_arns["gemini_api_key"]
-      OHI_INTERNAL_BEARER_SECRET_ARN          = local.secret_arns["internal_bearer_token"]
-      OHI_CF_EDGE_SECRET_ARN                  = local.secret_arns["cf_edge_secret"]
-      OHI_CF_ACCESS_SERVICE_TOKEN_SECRET_ARN  = local.secret_arns["cf_access_service_token"]
-      OHI_CLOUDFLARED_TUNNEL_TOKEN_SECRET_ARN = local.secret_arns["cloudflared_tunnel_token"]
-      OHI_LABELER_TOKENS_SECRET_ARN           = local.secret_arns["labeler_tokens"]
-      OHI_PC_ORIGIN_CREDENTIALS_SECRET_ARN    = local.secret_arns["pc_origin_credentials"]
-      OHI_NEO4J_CREDENTIALS_SECRET_ARN        = local.secret_arns["neo4j_credentials"]
-    }
+        # Stream D2 — async polling pattern. POST /api/v2/verify writes a
+        # pending record here, self-async-invokes, returns 202. The async
+        # handler reads JOBS_TABLE_NAME from this env var; the Lambda's own
+        # function name comes from AWS_LAMBDA_FUNCTION_NAME which the runtime
+        # sets automatically. OHI_ASYNC_VERIFY_TTL_SECONDS bounds how long a
+        # job record survives after creation (DynamoDB reaps via TTL within
+        # ~48h of this value) — 3600 covers the ~3min frontend polling cap
+        # plus a 1h margin for post-mortem debugging.
+        JOBS_TABLE_NAME              = local.jobs_table_name
+        OHI_ASYNC_VERIFY_TTL_SECONDS = tostring(var.async_verify_ttl_seconds)
+
+        # Secret ARNs (values fetched at runtime via SecretsLoader)
+        OHI_GEMINI_KEY_SECRET_ARN               = local.secret_arns["gemini_api_key"]
+        OHI_INTERNAL_BEARER_SECRET_ARN          = local.secret_arns["internal_bearer_token"]
+        OHI_CF_EDGE_SECRET_ARN                  = local.secret_arns["cf_edge_secret"]
+        OHI_CF_ACCESS_SERVICE_TOKEN_SECRET_ARN  = local.secret_arns["cf_access_service_token"]
+        OHI_CLOUDFLARED_TUNNEL_TOKEN_SECRET_ARN = local.secret_arns["cloudflared_tunnel_token"]
+        OHI_LABELER_TOKENS_SECRET_ARN           = local.secret_arns["labeler_tokens"]
+        OHI_PC_ORIGIN_CREDENTIALS_SECRET_ARN    = local.secret_arns["pc_origin_credentials"]
+        OHI_NEO4J_CREDENTIALS_SECRET_ARN        = local.secret_arns["neo4j_credentials"]
+      },
+      var.embedding_backend == "remote" ? {
+        OHI_CF_TUNNEL_HOSTNAME_EMBED = var.tunnel_hostname_embed
+        OHI_EMBEDDING_REMOTE_URL     = "https://${var.tunnel_hostname_embed}"
+      } : {},
+      var.embedding_backend == "bedrock" ? {
+        BEDROCK_EMBED_MODEL_ID          = var.bedrock_embed_model_id
+        BEDROCK_EMBED_DIM               = tostring(var.bedrock_embed_dim)
+        BEDROCK_EMBED_REGION            = var.bedrock_embed_region
+        BEDROCK_EMBED_NORMALIZE         = tostring(var.bedrock_embed_normalize)
+        BEDROCK_EMBED_BATCH_CONCURRENCY = tostring(var.bedrock_embed_batch_concurrency)
+        BEDROCK_EMBED_TIMEOUT_S         = tostring(var.bedrock_embed_timeout_s)
+        BEDROCK_RERANK_ENABLED          = tostring(var.bedrock_rerank_enabled)
+        BEDROCK_RERANK_MODEL_ID         = var.bedrock_rerank_model_id
+        BEDROCK_RERANK_REGION           = var.bedrock_rerank_region
+        BEDROCK_RERANK_TOP_N            = tostring(var.bedrock_rerank_top_n)
+        BEDROCK_RERANK_CANDIDATES       = tostring(var.bedrock_rerank_candidates)
+        BEDROCK_RERANK_TIMEOUT_S        = tostring(var.bedrock_rerank_timeout_s)
+      } : {},
+    )
   }
 
   logging_config {
@@ -122,6 +147,8 @@ resource "aws_lambda_function" "api" {
     aws_iam_role_policy_attachment.lambda_basic,
     aws_iam_role_policy.lambda_secrets,
     aws_iam_role_policy.lambda_artifacts,
+    aws_iam_role_policy.lambda_bedrock_embed,
+    aws_iam_role_policy.lambda_bedrock_rerank,
     aws_iam_role_policy.lambda_jobs,
     aws_cloudwatch_log_group.api,
     # lambda_self_invoke is intentionally omitted from depends_on — it

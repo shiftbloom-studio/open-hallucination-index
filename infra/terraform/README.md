@@ -2,6 +2,9 @@
 
 See the infrastructure spec at `docs/superpowers/specs/2026-04-16-ohi-v2-infrastructure-design.md`
 and the implementation plan at `docs/superpowers/plans/2026-04-16-ohi-v2-infrastructure-implementation.md`.
+For the AWS extension proposal that moves `embed` and optionally `postgrest`
+off the PC tunnel stack, see
+`docs/superpowers/specs/2026-04-20-aws-embed-postgrest-extension.md`.
 
 ## Layered structure
 
