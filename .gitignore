@@ -228,3 +228,31 @@ compute.plan
 cloudflare.plan
 vercel.plan
 observability.plan
+
+.vercel
+
+# ==============================================================================
+# Local tooling / harness (not pushed)
+# ==============================================================================
+.claude/
+.superpowers/
+.tools/
+research/
+artifacts/
+nul
+
+# ==============================================================================
+# Orphaned stubs kept locally only (no importer in src/; revive via explicit
+# commit when the NEO4J_ENABLED=false path gets wired)
+# ==============================================================================
+src/api/adapters/null_graph.py
+
+# ==============================================================================
+# Additional terraform plan artifacts not caught by the named list above
+# ==============================================================================
+cf.plan
+
+# ==============================================================================
+# Local environment files (specific variants that escape the .env.* patterns)
+# ==============================================================================
+docker/compose/.env.pc-data

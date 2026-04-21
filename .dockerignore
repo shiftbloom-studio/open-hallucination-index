@@ -17,3 +17,6 @@ node_modules
 
 # Tests/docs not needed for runtime image context
 tests
+
+# Local runtime volumes and cert material must never be part of build context.
+docker/data/
