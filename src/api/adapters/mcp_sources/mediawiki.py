@@ -32,6 +32,101 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
     via the standard MediaWiki API.
     """
 
+    _ENTITY_STOPWORDS = {
+        "A",
+        "An",
+        "Der",
+        "Die",
+        "Das",
+        "Den",
+        "Dem",
+        "Des",
+        "Ein",
+        "Eine",
+        "Einem",
+        "Einen",
+        "The",
+    }
+
+    _KEYWORD_STOPWORDS = {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "be",
+        "been",
+        "being",
+        "by",
+        "das",
+        "dem",
+        "den",
+        "der",
+        "des",
+        "die",
+        "ein",
+        "eine",
+        "einem",
+        "einen",
+        "erfunden",
+        "for",
+        "from",
+        "hat",
+        "in",
+        "is",
+        "it",
+        "mit",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "und",
+        "von",
+        "was",
+        "were",
+    }
+
+    _SUBJECT_VERB_HINTS = {
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "has",
+        "have",
+        "had",
+        "hat",
+        "haben",
+        "ist",
+        "war",
+        "wurde",
+        "invented",
+        "erfunden",
+        "founded",
+        "created",
+        "developed",
+        "discovered",
+        "won",
+        "became",
+        "built",
+    }
+
+    _LEADING_DETERMINERS = {
+        "the",
+        "a",
+        "an",
+        "der",
+        "die",
+        "das",
+        "ein",
+        "eine",
+        "einem",
+        "einen",
+    }
+
     def __init__(
         self,
         base_url: str = "https://en.wikipedia.org/w/api.php",
@@ -93,14 +188,37 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
                     )
                     search_results.append((score, result))
 
-            ranked_results = [
-                result
-                for _, result in sorted(
-                    search_results,
-                    key=lambda item: item[0],
-                    reverse=True,
-                )[:3]
-            ]
+            ranked_candidates = sorted(
+                search_results,
+                key=lambda item: item[0],
+                reverse=True,
+            )
+
+            ranked_results: list[dict[str, Any]] = []
+            selected_keys: set[str] = set()
+
+            def add_ranked_result(result: dict[str, Any]) -> bool:
+                key = str(result.get("pageid", "")) or str(result.get("title", ""))
+                if not key or key in selected_keys:
+                    return False
+                selected_keys.add(key)
+                ranked_results.append(result)
+                return True
+
+            for _, result in ranked_candidates:
+                if add_ranked_result(result):
+                    break
+
+            object_query = self._sanitize_query(claim.object)
+            if object_query:
+                for _, result in ranked_candidates:
+                    if result.get("matched_query") == object_query and add_ranked_result(result):
+                        break
+
+            for _, result in ranked_candidates:
+                if len(ranked_results) >= 3:
+                    break
+                add_ranked_result(result)
 
             for rank, result in enumerate(ranked_results):
                 title = result.get("title", "")
@@ -108,7 +226,9 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
                     continue
 
                 snippet = self._clean_snippet(result.get("snippet", ""))
-                extract = await self._get_extract(title) if not self._is_useful_text(snippet) else ""
+                extract = (
+                    await self._get_extract(title) if not self._is_useful_text(snippet) else ""
+                )
                 content = self._build_content(title, snippet, extract)
                 if not content:
                     continue
@@ -221,11 +341,25 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
         return query[:200]
 
     def _build_query_candidates(self, claim: Claim) -> list[str]:
+        keyword_query = self._sanitize_query(
+            " ".join(
+                self._extract_keywords(
+                    " ".join([claim.predicate or "", claim.object or "", claim.text])
+                )[:6]
+            )
+        )
+
         candidates = [
-            self._sanitize_query(claim.normalized_form),
-            self._sanitize_query(claim.text),
-            self._sanitize_query(" ".join(part for part in [claim.subject, claim.predicate, claim.object] if part)),
             self._sanitize_query(claim.subject),
+            *self._extract_subject_fallback(claim.text),
+            self._sanitize_query(claim.object),
+            self._sanitize_query(
+                " ".join(part for part in [claim.subject, claim.predicate, claim.object] if part)
+            ),
+            self._sanitize_query(claim.normalized_form),
+            *self._extract_entity_candidates(claim.text),
+            keyword_query,
+            self._sanitize_query(claim.text),
         ]
         seen: set[str] = set()
         ordered: list[str] = []
@@ -234,6 +368,34 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
                 seen.add(candidate)
                 ordered.append(candidate)
         return ordered or [self._sanitize_query(claim.text[:100])]
+
+    @classmethod
+    def _extract_subject_fallback(cls, text: str | None) -> list[str]:
+        if not text:
+            return []
+
+        words = re.findall(r"[a-zA-Z\u00c0-\u024f][a-zA-Z0-9\u00c0-\u024f\-]*", text)
+        if len(words) < 2:
+            return []
+
+        lower_words = [w.lower() for w in words]
+        split_idx = next(
+            (idx for idx, word in enumerate(lower_words) if word in cls._SUBJECT_VERB_HINTS),
+            -1,
+        )
+        if split_idx <= 0:
+            return []
+
+        subject_tokens = words[:split_idx]
+        while subject_tokens and subject_tokens[0].lower() in cls._LEADING_DETERMINERS:
+            subject_tokens = subject_tokens[1:]
+
+        subject_tokens = subject_tokens[:4]
+        if not subject_tokens:
+            return []
+
+        candidate = cls._sanitize_query(" ".join(subject_tokens))
+        return [candidate] if candidate else []
 
     @staticmethod
     def _clean_snippet(snippet: str) -> str:
@@ -267,6 +429,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
         query = self._normalize_text(str(result.get("matched_query", "")))
         subject = self._normalize_text(claim.subject)
         obj = self._normalize_text(claim.object)
+        object_keywords = self._extract_keywords(claim.object)
         predicate_terms = self._extract_keywords(claim.predicate)
 
         score = 0.0
@@ -292,6 +455,14 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
             elif obj in title:
                 score += 6.0
 
+        if object_keywords:
+            title_terms = set(self._extract_keywords(title))
+            snippet_terms = set(self._extract_keywords(snippet))
+            object_overlap = sum(
+                1 for keyword in object_keywords if keyword in title_terms or keyword in snippet_terms
+            )
+            score += object_overlap * 6.0
+
         for term in predicate_terms:
             if term and term in snippet:
                 score += 2.5
@@ -313,6 +484,49 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
     def _extract_keywords(text: str | None) -> list[str]:
         if not text:
             return []
-        words = re.findall(r"[a-z0-9]+", text.lower())
-        stopwords = {"was", "were", "is", "are", "be", "been", "being", "in", "of", "the"}
-        return [word for word in words if word not in stopwords]
+        words = re.findall(r"[a-z0-9\u00c0-\u024f]+", text.lower())
+        return [word for word in words if word not in MediaWikiAdapter._KEYWORD_STOPWORDS]
+
+    @classmethod
+    def _extract_entity_candidates(cls, text: str | None) -> list[str]:
+        """
+        Extract named-entity-like candidates from raw claim text.
+
+        This is critical when decomposition did not populate claim.subject
+        (common for non-English inputs), so Wikipedia still gets a strong
+        person/place/org query such as "Franz Beckenbauer".
+        """
+        if not text:
+            return []
+
+        chunks: list[str] = []
+        current: list[str] = []
+
+        for raw_word in re.split(r"\s+", text):
+            word = re.sub(r"^[^\w\u00c0-\u024f]+|[^\w\u00c0-\u024f\-]+$", "", raw_word)
+            if not word:
+                continue
+
+            if word[0].isupper() and len(word) > 1 and word not in cls._ENTITY_STOPWORDS:
+                current.append(word)
+                continue
+
+            if current:
+                chunks.append(" ".join(current))
+                current = []
+
+        if current:
+            chunks.append(" ".join(current))
+
+        # Prioritize multi-token entities; keep singletons as fallback.
+        ranked = sorted(chunks, key=lambda phrase: (len(phrase.split()), len(phrase)), reverse=True)
+        seen: set[str] = set()
+        out: list[str] = []
+        for phrase in ranked:
+            normalized = cls._sanitize_query(phrase)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                out.append(normalized)
+            if len(out) >= 4:
+                break
+        return out

@@ -88,6 +88,11 @@ class HTTPKnowledgeSource(ABC):
         """Return the base URL."""
         return self._base_url
 
+    @property
+    def timeout(self) -> float:
+        """Configured request timeout in seconds."""
+        return self._timeout
+
     async def connect(self) -> None:
         """Initialize the HTTP client."""
         if self._client is not None:
