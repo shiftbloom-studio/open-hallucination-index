@@ -20,13 +20,18 @@ class PassageFetchResult:
     article_title: str
     article_qid: str
     section_title: str
+    section_ordinal: int
+    chunk_ordinal: int
+    token_estimate: int
 
 
 _BATCH_FETCH_CYPHER = """
 UNWIND $ids AS pid
 MATCH (p:Passage {id: pid})
 RETURN p.id AS id, p.text AS text, p.article_title AS article_title,
-       p.article_qid AS article_qid, p.section_title AS section_title
+       p.article_qid AS article_qid, p.section_title AS section_title,
+       p.section_ordinal AS section_ordinal, p.chunk_ordinal AS chunk_ordinal,
+       p.token_estimate AS token_estimate
 """
 
 
@@ -56,6 +61,9 @@ class AuraPassageFetch:
                         article_title=str(r.get("article_title") or ""),
                         article_qid=str(r.get("article_qid") or ""),
                         section_title=str(r.get("section_title") or ""),
+                        section_ordinal=int(r.get("section_ordinal") or 0),
+                        chunk_ordinal=int(r.get("chunk_ordinal") or 0),
+                        token_estimate=int(r.get("token_estimate") or 0),
                     )
                 )
         # Preserve input order (Aura doesn't guarantee UNWIND ordering).

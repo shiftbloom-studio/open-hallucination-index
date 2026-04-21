@@ -279,6 +279,28 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
             logger.warning(f"Neo4j health check failed: {e}")
             return False
 
+    async def run_cypher(
+        self,
+        cypher: str,
+        params: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Run arbitrary Cypher and return rows as dictionaries.
+
+        Ingestion passes rely on this low-level primitive for batched writes
+        and integrity probes.
+        """
+        if self._driver is None:
+            raise Neo4jError("Not connected to Neo4j")
+
+        try:
+            async with self._driver.session(database=self._settings.database) as session:
+                result = await session.run(cypher, params or {})
+                rows = await result.data()
+                return list(rows)
+        except Exception as e:
+            logger.error("Neo4j run_cypher failed: %s", e)
+            raise Neo4jError(f"Cypher execution failed: {e}") from e
+
     async def query_triplet(
         self,
         subject: str | None = None,

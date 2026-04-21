@@ -327,6 +327,83 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             logger.warning(f"Qdrant health check failed: {e}")
             return False
 
+    async def upsert_passage_points(
+        self,
+        points: list[dict[str, Any]],
+        *,
+        collection_name: str | None = None,
+    ) -> None:
+        """Upsert passage vectors with minimal payload.
+
+        Expected point shape:
+        ``{"id": "<passage_id>", "vector": [..], "payload": {...}}``.
+        """
+        if self._client is None:
+            raise QdrantError("Not connected to Qdrant")
+        if not points:
+            return
+
+        target_collection = collection_name or self._settings.collection_name
+        out: list[PointStruct] = []
+        for row in points:
+            pid = row.get("id")
+            vec = row.get("vector")
+            payload = row.get("payload") or {}
+            if pid is None or vec is None:
+                continue
+            vector = {"dense": list(vec)} if self._use_named_vectors else list(vec)
+            out.append(PointStruct(id=str(pid), vector=vector, payload=payload))
+
+        if not out:
+            return
+
+        try:
+            await self._client.upsert(
+                collection_name=target_collection,
+                points=out,
+                wait=False,
+            )
+        except Exception as e:
+            logger.error("Qdrant passage upsert failed: %s", e)
+            raise QdrantError(f"Passage upsert failed: {e}") from e
+
+    async def search_passages(
+        self,
+        *,
+        vector: list[float],
+        top_k: int,
+        collection_name: str | None = None,
+        score_threshold: float = 0.0,
+    ) -> list[dict[str, Any]]:
+        """ANN search helper returning raw hit dictionaries."""
+        if self._client is None:
+            raise QdrantError("Not connected to Qdrant")
+
+        target_collection = collection_name or self._settings.collection_name
+        using_vector = "dense" if self._use_named_vectors else None
+        try:
+            result = await self._client.query_points(
+                collection_name=target_collection,
+                query=vector,
+                using=using_vector,
+                limit=top_k,
+                score_threshold=score_threshold,
+            )
+        except Exception as e:
+            logger.error("Qdrant passage search failed: %s", e)
+            raise QdrantError(f"Passage search failed: {e}") from e
+
+        hits: list[dict[str, Any]] = []
+        for point in result.points:
+            hits.append(
+                {
+                    "id": str(point.id),
+                    "score": float(point.score or 0.0),
+                    "payload": point.payload or {},
+                }
+            )
+        return hits
+
     async def search_similar(
         self,
         query: VectorQuery,

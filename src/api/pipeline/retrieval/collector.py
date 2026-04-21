@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         VectorKnowledgeStore,
     )
     from models.entities import Claim
+    from pipeline.retrieval.graph_retriever import GraphRetriever
     from pipeline.retrieval.selector import SmartMCPSelector
 
 logger = logging.getLogger(__name__)
@@ -346,6 +347,7 @@ class AdaptiveEvidenceCollector:
         self,
         graph_store: GraphKnowledgeStore | None = None,
         vector_store: VectorKnowledgeStore | None = None,
+        graph_retriever: GraphRetriever | None = None,
         mcp_selector: SmartMCPSelector | None = None,
         *,
         # Sufficiency thresholds
@@ -362,6 +364,7 @@ class AdaptiveEvidenceCollector:
         """Initialize the collector."""
         self._graph_store = graph_store
         self._vector_store = vector_store
+        self._graph_retriever = graph_retriever
         self._mcp_selector = mcp_selector
 
         # Thresholds
@@ -496,7 +499,17 @@ class AdaptiveEvidenceCollector:
             tasks.append(task)
             task_names.append("neo4j")
 
-        if self._vector_store is not None:
+        if self._graph_retriever is not None:
+            query_text = claim.normalized_form or claim.text
+            task = asyncio.create_task(
+                self._timed_query(
+                    "qdrant_aura",
+                    self._graph_retriever.retrieve(query_text),
+                )
+            )
+            tasks.append(task)
+            task_names.append("qdrant_aura")
+        elif self._vector_store is not None:
             task = asyncio.create_task(
                 self._timed_query("qdrant", self._vector_store.find_evidence_for_claim(claim))
             )
