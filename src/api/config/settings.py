@@ -81,10 +81,10 @@ class QdrantSettings(BaseSettings):
     port: int = Field(default=6333)
     grpc_port: int = Field(default=6334)
     api_key: SecretStr | None = Field(default=None)
-    collection_name: str = Field(default="wikipedia_hybrid")
+    collection_name: str = Field(default="ohi_passages_titan1024")
     vector_size: int = Field(
-        default=384,
-        description="Embedding dimension (384 for all-MiniLM-L12-v2)",
+        default=1024,
+        description="Embedding dimension used by passage vectors (Titan v2: 1024)",
     )
     use_grpc: bool = Field(default=False)
     https: bool = Field(default=False)
@@ -396,7 +396,7 @@ class CCNliSettings(BaseSettings):
 class EmbeddingSettings(BaseSettings):
     """Configuration for local embedding generation."""
 
-    model_config = SettingsConfigDict(env_prefix="EMBEDDING_")
+    model_config = SettingsConfigDict(env_prefix="EMBEDDING_", populate_by_name=True)
 
     # Model choices:
     # - all-MiniLM-L12-v2: 384 dim, fast, good quality (default)
@@ -408,7 +408,122 @@ class EmbeddingSettings(BaseSettings):
         description="Sentence-transformer model name",
     )
     batch_size: int = Field(default=32, ge=1)
-    normalize: bool = Field(default=True, description="Normalize embeddings to unit length")
+    normalize: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("EMBEDDING_NORMALIZE", "BEDROCK_EMBED_NORMALIZE"),
+        description="Normalize embeddings to unit length",
+    )
+    bedrock_model_id: str = Field(
+        default="amazon.titan-embed-text-v2:0",
+        validation_alias=AliasChoices(
+            "BEDROCK_EMBED_MODEL_ID", "EMBEDDING_BEDROCK_MODEL_ID"
+        ),
+        description="Bedrock embedding model id used when OHI_EMBEDDING_BACKEND=bedrock",
+    )
+    bedrock_dimension: int = Field(
+        default=1024,
+        ge=256,
+        validation_alias=AliasChoices("BEDROCK_EMBED_DIM", "EMBEDDING_BEDROCK_DIM"),
+        description="Requested Titan Text Embeddings V2 vector dimension",
+    )
+    bedrock_region: str = Field(
+        default="eu-central-1",
+        validation_alias=AliasChoices(
+            "BEDROCK_EMBED_REGION",
+            "EMBEDDING_BEDROCK_REGION",
+            "AWS_REGION",
+            "AWS_DEFAULT_REGION",
+            "OHI_REGION",
+        ),
+        description="AWS Region for Bedrock embedding invocations",
+    )
+    bedrock_batch_concurrency: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+        validation_alias=AliasChoices(
+            "BEDROCK_EMBED_BATCH_CONCURRENCY",
+            "EMBEDDING_BEDROCK_BATCH_CONCURRENCY",
+        ),
+        description="Max in-flight Bedrock embedding requests per batch",
+    )
+    bedrock_timeout_seconds: float = Field(
+        default=10.0,
+        ge=1.0,
+        validation_alias=AliasChoices(
+            "BEDROCK_EMBED_TIMEOUT_S", "EMBEDDING_BEDROCK_TIMEOUT_S"
+        ),
+        description="Read timeout for Bedrock embedding invocations",
+    )
+
+
+class RetrievalSettings(BaseSettings):
+    """Configuration for retrieval-specific tuning and reranking."""
+
+    model_config = SettingsConfigDict(env_prefix="RETRIEVAL_", populate_by_name=True)
+
+    qdrant_passage_collection: str = Field(
+        default="ohi_passages_titan1024",
+        validation_alias=AliasChoices(
+            "RETRIEVAL_QDRANT_PASSAGE_COLLECTION",
+            "QDRANT_COLLECTION_NAME",
+        ),
+        description="Qdrant collection used for passage ANN candidate retrieval",
+    )
+    qdrant_candidate_k: int = Field(
+        default=40,
+        ge=1,
+        le=200,
+        validation_alias=AliasChoices(
+            "RETRIEVAL_QDRANT_CANDIDATE_K", "BEDROCK_RERANK_CANDIDATES"
+        ),
+        description="Number of ANN candidates pulled from Qdrant before reranking",
+    )
+    qdrant_score_threshold: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=1.0,
+        validation_alias=AliasChoices("RETRIEVAL_QDRANT_SCORE_THRESHOLD"),
+        description="Cosine score threshold for ANN candidate inclusion",
+    )
+    final_top_k: int = Field(
+        default=12,
+        ge=1,
+        le=100,
+        validation_alias=AliasChoices("RETRIEVAL_FINAL_TOP_K", "BEDROCK_RERANK_TOP_N"),
+        description="Final number of passages returned after reranking",
+    )
+    bedrock_rerank_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("BEDROCK_RERANK_ENABLED"),
+        description="Enable Bedrock reranking on ANN candidates",
+    )
+    bedrock_rerank_model_id: str = Field(
+        default="cohere.rerank-v3-5:0",
+        validation_alias=AliasChoices("BEDROCK_RERANK_MODEL_ID"),
+        description="Bedrock reranker model id",
+    )
+    bedrock_rerank_model_arn: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("BEDROCK_RERANK_MODEL_ARN"),
+        description="Optional explicit model ARN override for Bedrock rerank",
+    )
+    bedrock_rerank_region: str = Field(
+        default="eu-central-1",
+        validation_alias=AliasChoices(
+            "BEDROCK_RERANK_REGION",
+            "AWS_REGION",
+            "AWS_DEFAULT_REGION",
+            "OHI_REGION",
+        ),
+        description="AWS Region for Bedrock reranking calls",
+    )
+    bedrock_rerank_timeout_seconds: float = Field(
+        default=12.0,
+        ge=1.0,
+        validation_alias=AliasChoices("BEDROCK_RERANK_TIMEOUT_S"),
+        description="Timeout for Bedrock reranking calls",
+    )
 
 
 class Settings(BaseSettings):
@@ -438,6 +553,7 @@ class Settings(BaseSettings):
     pcg: PCGSettings = Field(default_factory=PCGSettings)
     cc_nli: CCNliSettings = Field(default_factory=CCNliSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
+    retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
 
     # Environment
     environment: Literal["development", "staging", "production", "test"] = Field(
