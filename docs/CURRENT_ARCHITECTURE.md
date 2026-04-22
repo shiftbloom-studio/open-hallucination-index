@@ -9,15 +9,22 @@ Any architectural change MUST update this file in the same commit. See
 [CLAUDE.md](../CLAUDE.md#single-source-of-truth-for-architecture) for
 the enforcing rule.
 
-**Last verified against prod:** 2026-04-22 (post-Neo4j-migration Phase 1)
-- `main` tip: `18a91e6` (fix(adapters/neo4j): fail-fast connect…)
-- Lambda image digest (live): `sha256:98336153394b58d1f87fd4e47531324a3c033c96a4982e07fe6fb15a6ac7e52c` — ECR tags `[prod, sha-18a91e6...]`
-- Lambda `/health/deep`: **degraded** — `L1.retrieve.neo4j: down` (Aura gone, Phase 2 pending), all other layers `ok`
-- Graph-store migration status: **Phase 1 complete** — Neo4j Aura Pro
-  removed; PC-local Neo4j 5-community running on Tailscale interface
-  (`100.105.150.81:7687`). **Phase 2 pending**: Lambda-side Tailscale
-  integration (`tsnet`-based Go proxy inside Lambda container). Until
-  Phase 2 ships, Lambda runs in degraded mode (MCP-only evidence).
+**Last verified against prod:** 2026-04-22 (post-Neo4j-Tailscale migration, Phase 1+2 shipped)
+- `main` tip: `7a0ac2a` (fix(lambda): copy go.sum into tsproxy builder stage)
+- Lambda image (live): `sha-7a0ac2a...` / ECR `:prod`
+- Lambda `/health/deep`: **ok** — all layers green, including
+  `L1.retrieve.neo4j: ok (~19ms)` through the tsnet-forwarded Tailnet
+  route to PC Neo4j.
+- Graph-store migration status: **Phase 1+2 shipped.** Aura Pro
+  removed; PC-local Neo4j 5-community runs on Tailscale interface
+  (`100.105.150.81:7687`); Lambda joins the Tailnet as an ephemeral
+  node `ohi-lambda` via the in-image `tsnet` Go proxy (`/opt/tsproxy`)
+  and forwards `127.0.0.1:7687` to `tens0rfl0w:7687` over the Tailnet.
+  CloudWatch confirms cold-start tsnet bring-up in ~170 ms.
+- Evidence path: MCP (MediaWiki + Wikidata + DBpedia) serves verify
+  today; GraphRetriever cascade (Qdrant ANN → Aura/PC-Neo4j passage
+  fetch → Bedrock Cohere rerank) will activate once Wave 3 Phase E
+  corpus ingestion fills `ohi_passages_titan1024`.
 
 This document is based on the current repo state in:
 
@@ -54,7 +61,7 @@ flowchart LR
     subgraph pc["PC-side Services"]
         cfaccess["Cloudflare Tunnel + Access"]
         qdrant["Qdrant\nohi_passages_titan1024"]
-        neo4j_pc["Neo4j 5-community\nbolt://100.105.150.81:7687 (Tailnet)"]
+        neo4j_pc["Neo4j 5-community\nbolt://100.105.150.81:7687"]
         tailnet["Tailnet (tens0rfl0w)"]
     end
 
@@ -81,7 +88,7 @@ flowchart LR
     lambda -->|"HTTPS + service token"| cfaccess
     cfaccess --> qdrant
 
-    lambda -.->|"Phase 2: tsnet proxy\nnot shipped yet"| tailnet
+    lambda -->|"in-image tsnet proxy\n(ohi-lambda ephemeral node)"| tailnet
     tailnet --> neo4j_pc
 ```
 
@@ -107,10 +114,11 @@ flowchart LR
 7. **Graph**: Neo4j **5-community on PC** (`ohi-pc-data-neo4j-1`
    container) — Aura Pro was removed 2026-04-22, replaced by a local
    instance reachable on the PC's Tailscale IP
-   (`bolt://100.105.150.81:7687`). **Lambda-side Tailscale
-   connectivity is Phase 2 (pending)**: until the in-image `tsnet`
-   Go-proxy ships, Lambda cannot reach the graph store and
-   `/health/deep` reports `L1.retrieve.neo4j: down`.
+   (`bolt://100.105.150.81:7687`). Lambda joins the Tailnet as
+   ephemeral node `ohi-lambda` via the in-image `tsnet` Go proxy
+   (`/opt/tsproxy`) and connects via `NEO4J_URI=bolt://127.0.0.1:7687`
+   (the proxy's local listener). tsnet bring-up on cold start is
+   ~170 ms with a valid reusable-ephemeral auth key.
 8. **Vector**: **Qdrant on PC** via Cloudflare Tunnel holds the
    `ohi_passages_titan1024` collection (1024-dim passage embeddings).
    Lambda reaches it at `https://ohi-qdrant.shiftbloom.studio` with
@@ -213,7 +221,7 @@ flowchart LR
 | Service | Role | Status in prod | Why |
 |---|---|---|---|
 | Qdrant | Passage ANN index (`ohi_passages_titan1024`, 1024-dim) | ✅ used | Free-tier HTTP works through CF tunnel; no AWS alternative chosen yet |
-| Neo4j 5-community | Graph store | ✅ (Phase 1) | Aura removed 2026-04-22. Bolt exposed on Tailscale IP only via `docker/compose/pc-data.tailscale.yml` overlay. Lambda reaches it once Phase 2 ships (Lambda-side `tsnet` proxy in the image). |
+| Neo4j 5-community | Graph store | ✅ **live (Phase 1+2)** | Aura removed 2026-04-22. Bolt exposed on Tailscale IP only via `docker/compose/pc-data.tailscale.yml` overlay; Lambda reaches it through the in-image `tsnet` Go proxy (`docker/lambda/tsproxy/`). Auth via reusable-ephemeral Tailscale key stored in SM at `ohi/tailscale-authkey`. |
 | pc-embed | `all-MiniLM-L12-v2` HTTP embedder | ❌ legacy | Prod switched to Bedrock Titan v2 for managed availability + 1024-dim parity with the reranker candidate pool |
 | Postgres / PostgREST | Relational + REST façade | — dev-only | Never wired into Lambda's verify path |
 | Redis / Webdis | Cache + trace store | ❌ disabled | Webdis-over-tunnel doesn't speak native Redis protocol; `REDIS_ENABLED=false` in Lambda. ElastiCache / Upstash migration is backlog |
@@ -225,29 +233,25 @@ infra yet** — when implementing, update this section first and then
 the rest of the file.
 
 - **Neo4j Aura Pro → PC-local Neo4j 5-community over Tailscale —
-  IN PROGRESS.**
-  - Phase 1 (SHIPPED 2026-04-22): Aura Pro instance removed; PC
-    Neo4j container recreated with the
-    `docker/compose/pc-data.tailscale.yml` overlay binding bolt
-    (7687) and HTTP (7474) to the PC's Tailscale IP
-    (`100.105.150.81`) only — bolt never touches the local LAN or
-    the Windows firewall public zone.
-  - Phase 2 (NEXT): Lambda-side Tailscale connectivity via a
-    `tsnet` Go-proxy built into the Lambda container image
+  SHIPPED 2026-04-22.**
+  - Phase 1: Aura Pro instance removed; PC Neo4j container
+    recreated with the `docker/compose/pc-data.tailscale.yml`
+    overlay binding bolt (7687) and HTTP (7474) to the PC's
+    Tailscale IP (`100.105.150.81`) only — bolt never touches the
+    local LAN or the Windows firewall public zone.
+  - Phase 2: Lambda-side Tailscale connectivity via the `tsnet`
+    Go-proxy in the Lambda container image
     (`docker/lambda/tsproxy/`). The proxy joins the Tailnet as
-    `ohi-lambda` (ephemeral) using an auth key from Secrets
-    Manager (`ohi/tailscale-authkey`), exposes
+    `ohi-lambda` (ephemeral) using a reusable+ephemeral auth key
+    from Secrets Manager (`ohi/tailscale-authkey`), exposes
     `127.0.0.1:7687` locally, and forwards to `tens0rfl0w:7687`
-    over the Tailnet. Lambda then connects via
-    `NEO4J_URI=bolt://127.0.0.1:7687`. Requires: Tailscale auth-
-    key provisioning + Secrets Manager entry +
-    `aws_secretsmanager_secret_version` IAM grant on Lambda. The
-    dead-adapter degraded-mode behaviour (adapter fails fast →
-    dependencies.py catches → app boots) already ships (commit
-    `18a91e6`).
-  - Phase 3 (LATER): once Phase 2 is stable, swap Qdrant off CF
-    Tunnel and onto the same Tailnet route to remove CF Access
-    service-token management.
+    over the Tailnet. Lambda connects via
+    `NEO4J_URI=bolt://127.0.0.1:7687`. Fail-fast adapter (commit
+    `18a91e6`) ensures clean degraded-mode boot when the auth key
+    is missing/invalid.
+  - Phase 3 (NEXT, optional): swap Qdrant off CF Tunnel and onto
+    the same Tailnet route to remove CF Access service-token
+    management + centralise PC service auth on Tailscale.
 - **OpenAI cc-NLI primary activation.** `CC_NLI_LLM_PROVIDER=openai`
   is set, but `OHI_OPENAI_API_KEY` is currently unset / empty →
   dispatcher falls back to Gemini-as-primary. Activating requires
@@ -280,7 +284,11 @@ verified date above:
 | `BEDROCK_RERANK_MODEL_ID` | `cohere.rerank-v3-5:0` | `var.bedrock_rerank_model_id` |
 | `BEDROCK_RERANK_CANDIDATES` | `40` | `var.bedrock_rerank_candidates` |
 | `BEDROCK_RERANK_TOP_N` | `12` | `var.bedrock_rerank_top_n` |
-| `NEO4J_URI` | `neo4j+s://0193408e.databases.neo4j.io` (stale — Aura gone) | `var.neo4j_uri`; Phase 2 will flip to `bolt://127.0.0.1:7687` |
+| `NEO4J_URI` | `bolt://127.0.0.1:7687` | `var.neo4j_uri` (points at the in-image tsproxy listener) |
+| `TS_AUTHKEY` | (reusable+ephemeral, `ohi/tailscale-authkey`) | `data.aws_secretsmanager_secret_version.tailscale_authkey` |
+| `TS_HOSTNAME` | `ohi-lambda` | `var.tailscale_hostname` |
+| `TS_UPSTREAM` | `tens0rfl0w:7687` | `var.tailscale_upstream` |
+| `TS_LISTEN` | `127.0.0.1:7687` | `var.tailscale_listen` |
 | `QDRANT_HOST` | `ohi-qdrant.shiftbloom.studio` | `var.tunnel_hostname_qdrant` |
 | `QDRANT_PORT` | `443` | constant |
 | `QDRANT_HTTPS` | `true` | constant |
