@@ -4,11 +4,27 @@
 # function-handler contract that conflicts with running a web server.
 #
 # Lambda gets ORCHESTRATION dependencies only (FastAPI + HTTP clients).
-# Heavy ML (torch + sentence-transformers) lives in the PC-side pc-embed
-# container, reached via CF tunnel. See docker/pc-embed/ and
-# src/api/adapters/embeddings.py.
+# Heavy ML (embeddings + rerank) runs on AWS Bedrock (Titan v2 + Cohere
+# rerank-v3-5); see src/api/adapters/embeddings.py and bedrock_rerank.py.
+#
+# Phase 2 of the Neo4j migration adds a tiny tsnet-based Go sidecar
+# (docker/lambda/tsproxy/) that joins the Tailnet at cold start and
+# forwards bolt:7687 from 127.0.0.1 to the PC-hosted Neo4j over the
+# Tailnet. See docker/lambda/entrypoint.sh for the startup choreography.
 
-# --- Stage 1: dependency install -------------------------------------------
+# --- Stage 0: build tsnet proxy (Go) ---------------------------------------
+FROM public.ecr.aws/docker/library/golang:1.23-alpine AS tsproxy-builder
+
+WORKDIR /src
+COPY docker/lambda/tsproxy/go.mod ./
+RUN go mod download
+COPY docker/lambda/tsproxy/main.go ./
+# CGO_ENABLED=0 to keep the binary static and copy-able into the slim
+# Python runtime without also pulling in glibc. -s -w strips debug info
+# to shave a few MB off the image (tsnet pulls in a lot of Go code).
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/tsproxy .
+
+# --- Stage 1: Python dependency install ------------------------------------
 FROM public.ecr.aws/docker/library/python:3.12-slim AS builder
 
 WORKDIR /build
@@ -38,6 +54,18 @@ FROM public.ecr.aws/docker/library/python:3.12-slim
 # Placed at /opt/extensions/ so Lambda auto-loads it as an extension.
 COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
 
+# tsnet-based bolt forwarder for the PC-local Neo4j (Phase 2 of the
+# Aura -> PC-Tailscale migration). Inactive (exits 0) if TS_AUTHKEY or
+# TS_UPSTREAM is unset, so the image is safe to run even before
+# Tailscale is provisioned.
+COPY --from=tsproxy-builder /out/tsproxy /opt/tsproxy
+
+# Entrypoint choreography: start tsproxy in the background, then exec
+# uvicorn. See docker/lambda/entrypoint.sh for the details + the
+# Lambda-init-budget rationale.
+COPY docker/lambda/entrypoint.sh /opt/entrypoint.sh
+RUN chmod +x /opt/entrypoint.sh /opt/tsproxy
+
 ENV PORT=8080
 ENV READINESS_CHECK_PATH=/health/ready
 ENV PYTHONUNBUFFERED=1
@@ -58,7 +86,7 @@ RUN rm -f /var/task/pyproject.toml /var/task/README.md && rm -rf /var/task/tests
 # Make app code importable.
 ENV PYTHONPATH=/var/task
 
-# Use `python -m uvicorn` so we don't depend on pip's bin/ being on PATH
-# (with --target installs, the bin/ directory isn't searched by default).
-# Bare imports: `server.app:app`, NOT `api.server.app:app`.
-CMD ["python", "-m", "uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+# /opt/entrypoint.sh handles tsproxy boot + hands off to uvicorn via exec.
+# Using the script (not a CMD array) means Lambda signals still reach
+# uvicorn because of the final `exec` in the script.
+ENTRYPOINT ["/opt/entrypoint.sh"]

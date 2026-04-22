@@ -28,6 +28,15 @@ data "aws_secretsmanager_secret_version" "gemini" {
   secret_id = local.secret_arns["gemini_api_key"]
 }
 
+# Tailscale reusable + ephemeral auth key, consumed by docker/lambda/
+# tsproxy at cold start to join the Tailnet and forward bolt to the
+# PC-hosted Neo4j. Populated out-of-band via `aws secretsmanager
+# put-secret-value`; if empty, tsproxy exits cleanly and the app boots
+# in Neo4j-degraded mode.
+data "aws_secretsmanager_secret_version" "tailscale_authkey" {
+  secret_id = local.secret_arns["tailscale_authkey"]
+}
+
 resource "aws_lambda_function" "api" {
   function_name = "${local.prefix}-api"
   role          = aws_iam_role.lambda_exec.arn
@@ -106,6 +115,15 @@ resource "aws_lambda_function" "api" {
         # plus a 1h margin for post-mortem debugging.
         JOBS_TABLE_NAME              = local.jobs_table_name
         OHI_ASYNC_VERIFY_TTL_SECONDS = tostring(var.async_verify_ttl_seconds)
+
+        # Phase 2 of Neo4j Aura -> PC-Tailscale: tsproxy (in the Lambda
+        # image) joins the Tailnet at cold start and forwards bolt from
+        # TS_LISTEN to TS_UPSTREAM. When TS_AUTHKEY is empty the proxy
+        # exits cleanly and Lambda runs in Neo4j-degraded mode.
+        TS_AUTHKEY  = data.aws_secretsmanager_secret_version.tailscale_authkey.secret_string
+        TS_HOSTNAME = var.tailscale_hostname
+        TS_UPSTREAM = var.tailscale_upstream
+        TS_LISTEN   = var.tailscale_listen
 
         # Secret ARNs (values fetched at runtime via SecretsLoader)
         OHI_GEMINI_KEY_SECRET_ARN               = local.secret_arns["gemini_api_key"]

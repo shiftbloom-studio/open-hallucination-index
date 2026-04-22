@@ -165,9 +165,33 @@ variable "bedrock_rerank_timeout_s" {
 }
 
 variable "neo4j_uri" {
-  description = "Neo4j connection URI. Aura Pro Frankfurt instance — neo4j+s://<id>.databases.neo4j.io"
+  description = <<-EOT
+    Neo4j connection URI Lambda uses. Since Phase 2 of the Aura -> PC
+    Tailscale migration landed, this points at the in-container tsnet
+    proxy (127.0.0.1:7687) which forwards to `var.tailscale_upstream`
+    over the Tailnet. The historical Aura URI
+    (neo4j+s://0193408e.databases.neo4j.io) was retired 2026-04-22.
+  EOT
   type        = string
-  default     = "neo4j+s://0193408e.databases.neo4j.io"
+  default     = "bolt://127.0.0.1:7687"
+}
+
+variable "tailscale_hostname" {
+  description = "Hostname Lambda advertises on the Tailnet. Ephemeral node, so this string only matters for readability in the Tailscale admin UI."
+  type        = string
+  default     = "ohi-lambda"
+}
+
+variable "tailscale_upstream" {
+  description = "Tailnet host:port tsproxy forwards bolt to. Normally the PC Tailscale node running Neo4j (see docker/compose/pc-data.tailscale.yml)."
+  type        = string
+  default     = "tens0rfl0w:7687"
+}
+
+variable "tailscale_listen" {
+  description = "Local host:port tsproxy listens on inside the Lambda. Must match the NEO4J_URI host:port."
+  type        = string
+  default     = "127.0.0.1:7687"
 }
 
 variable "gemini_model" {
