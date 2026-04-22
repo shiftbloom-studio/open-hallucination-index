@@ -9,6 +9,12 @@ locals {
     labeler_tokens           = "ohi/labeler-tokens"
     pc_origin_credentials    = "ohi/pc-origin-credentials"
     neo4j_credentials        = "ohi/neo4j-credentials"
+    # Phase 2 of Neo4j Aura -> PC-Tailscale migration. Holds a reusable
+    # + ephemeral Tailscale auth key generated in the Tailscale admin
+    # UI; consumed by docker/lambda/tsproxy at Lambda cold start. The
+    # secret is created empty by TF; the value is populated out-of-band
+    # via `aws secretsmanager put-secret-value`.
+    tailscale_authkey        = "ohi/tailscale-authkey"
   }
 }
 # Wave 3 Stream P (Decision H): ``ohi/openai-api-key`` was created
