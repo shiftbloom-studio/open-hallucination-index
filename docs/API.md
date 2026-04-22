@@ -1,13 +1,18 @@
 # Open Hallucination Index — API Documentation (v2)
 
-> **Status:** v2 is under active development on `feat/ohi-v2-foundation`.
-> Some v2 features (PCG belief propagation, corpus-grounded evidence,
-> calibrated intervals) are planned for Wave 3. Today the API runs Wave 1
-> + Wave 2 code: live MediaWiki evidence retrieval, Gemini-3-Pro NLI,
-> async polling verification. This document describes the **v2 surface as
-> shipped or about to ship** (Stream E2 deploys the polling path at plan-
-> freeze time). For historical v1 surface (`/api/v1/verify`, trust_score,
-> reasoning), see the repository's v1 tag once cut.
+> **Status:** v2 is under active development on `main` (the
+> `feat/ohi-v2-foundation` branch was merged back into `main` at commit
+> `c5010cc`). Some v2 features (domain routing, per-stratum
+> calibration) are deferred to v2.1 / Wave 4. Today the API runs Wave 1
+> + Wave 2 + most of Wave 3 code: MediaWiki + Wikidata + DBpedia MCP
+> evidence, Gemini-3-Pro NLI, async polling verification, PCG belief
+> propagation (TRW-BP / LBP / Gibbs), and claim-claim NLI dispatcher.
+> Corpus-grounded passage evidence (Qdrant ANN → Bedrock rerank) is
+> wired but dormant until Wave 3 Phase E ingestion runs. For the
+> authoritative topology see
+> [docs/CURRENT_ARCHITECTURE.md](CURRENT_ARCHITECTURE.md). For
+> historical v1 surface (`/api/v1/verify`, trust_score, reasoning), see
+> the repository's v1 tag once cut.
 
 ---
 
@@ -386,7 +391,7 @@ is `null` unless the Gibbs sanity run flags a disagreement.
 
 ## Changelog
 
-- **v2.0 (in progress, feat-branch at `474bf0f`):**
+- **v2.0 (in progress on `main` at `cf77b24`):**
   - Polling verify flow replaces the original SSE design (Decision K
     from Wave-3 spec kickoff: CF free-tier Host-header limits blocked
     Function URL as origin; polling is pragmatic).

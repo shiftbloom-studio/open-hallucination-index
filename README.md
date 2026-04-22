@@ -38,11 +38,12 @@ The live service is at **<https://ohi.shiftbloom.studio>**.
 
 ## Current status
 
-OHI is mid-way through its **v2 rework** on branch
-`feat/ohi-v2-foundation`. v2 replaces the v1 "trust score" heuristic with
-a proper probabilistic pipeline: NLI-based claim verification, Bayesian
-posterior update via Probabilistic Claim Graph (PCG), and split-conformal
-calibration.
+OHI is mid-way through its **v2 rework** on `main` (the
+`feat/ohi-v2-foundation` branch was merged back into `main` in commit
+`c5010cc` — all v2 development now lands on `main` directly). v2
+replaces the v1 "trust score" heuristic with a proper probabilistic
+pipeline: NLI-based claim verification, Bayesian posterior update via
+Probabilistic Claim Graph (PCG), and split-conformal calibration.
 
 **Live today (Wave 2):**
 
@@ -150,10 +151,18 @@ AWS Lambda (container image, 180s timeout)
 - **Flat Cloudflare naming** (`ohi-api.shiftbloom.studio` not
   `api.ohi.shiftbloom.studio`) because CF free-tier Universal SSL
   covers only one level of wildcard
-- **Neo4j Aura** over PC-Neo4j — Bolt (TCP:7687) doesn't work through
-  CF's free-tier HTTPS tunnel
-- **Embeddings run on PC** (`pc-embed`, MiniLM-L12-v2, free CPU) —
-  keeps the Lambda image slim (<500 MB rather than 2.4 GB)
+- **Neo4j Aura Pro (Frankfurt)** currently hosts the graph — bolt
+  (TCP:7687) doesn't work through CF's free-tier HTTPS tunnel, so PC
+  Neo4j was ruled out on the first pass. A planned migration back to
+  PC-local Neo4j over **Tailscale** is tracked in
+  [docs/CURRENT_ARCHITECTURE.md §4](docs/CURRENT_ARCHITECTURE.md#4-planned-changes-not-yet-shipped)
+- **Embeddings run on AWS Bedrock Titan Text V2** (1024-dim). Keeps
+  the Lambda image slim (~500 MB instead of 2.4 GB) without requiring
+  the PC to be online. The `pc-embed` container is retained for local
+  dev.
+- **Reranking runs on AWS Bedrock Cohere rerank-v3-5** (top-40
+  candidates → top-12), slotted between Qdrant ANN and Aura passage
+  fetch in the `GraphRetriever` cascade
 - **Qdrant stays on PC** as vector-only index with payload
   `{passage_id, qid}` — text content lives in Aura as the single source
   of truth. v1's "redundancy pain" (text duplicated across both stores)
@@ -298,12 +307,25 @@ NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=<password>
 
 # Qdrant (vector-only index on PC via CF tunnel in prod)
-QDRANT_URL=https://ohi-qdrant.shiftbloom.studio
-QDRANT_API_KEY=<optional>
+QDRANT_HOST=ohi-qdrant.shiftbloom.studio
+QDRANT_PORT=443
+QDRANT_HTTPS=true
+QDRANT_COLLECTION_NAME=ohi_passages_titan1024
+QDRANT_VECTOR_SIZE=1024
 
-# Embedding service (PC-hosted, free CPU, MiniLM-L12-v2)
-OHI_EMBEDDING_URL=https://ohi-embed.shiftbloom.studio
-OHI_EMBEDDING_MODEL=all-MiniLM-L12-v2
+# Embeddings — Bedrock Titan v2 in prod (1024-dim).
+# Local dev: set OHI_EMBEDDING_BACKEND=local to use in-process
+# sentence-transformers, or =remote to call pc-embed over HTTP.
+OHI_EMBEDDING_BACKEND=bedrock
+BEDROCK_EMBED_MODEL_ID=amazon.titan-embed-text-v2:0
+BEDROCK_EMBED_DIM=1024
+BEDROCK_EMBED_REGION=eu-central-1
+
+# Reranking — Bedrock Cohere rerank-v3-5
+BEDROCK_RERANK_ENABLED=true
+BEDROCK_RERANK_MODEL_ID=cohere.rerank-v3-5:0
+BEDROCK_RERANK_CANDIDATES=40
+BEDROCK_RERANK_TOP_N=12
 
 # Evidence sources
 MEDIAWIKI_ENABLED=true
@@ -378,10 +400,11 @@ Contributions welcome. Please read
 conventions, and [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md).
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
+2. Create a feature branch (`git checkout -b feat/your-feature`)
 3. Commit with Conventional Commits + "end state verified by" lines
    (see CLAUDE.md §Git workflow)
-4. Open a pull request against `feat/ohi-v2-foundation` (v2 dev branch)
+4. Open a pull request against `main` (v2 development lands directly
+   on `main` since commit `c5010cc`)
 
 Security issues: see [SECURITY.md](SECURITY.md).
 
@@ -404,8 +427,8 @@ MIT — see [LICENSE](LICENSE).
 - [**MCP** (Anthropic)](https://modelcontextprotocol.io/) — Model
   Context Protocol for knowledge-source aggregation
 - **AWS** (Lambda, API Gateway, DynamoDB, Secrets Manager, CloudWatch,
-  S3), **Cloudflare** (edge + WAF + tunnel), **Vercel** (frontend
-  hosting)
+  S3, **Bedrock** — Titan Text Embeddings v2 + Cohere rerank-v3-5),
+  **Cloudflare** (edge + WAF + tunnel), **Vercel** (frontend hosting)
 
 ---
 
