@@ -7,16 +7,44 @@ gives you the hard-won operational knowledge the current owner
 
 ## Before anything
 
-1. Read the most recent checkpoint in `docs/superpowers/checkpoints/`
+1. Read [`docs/CURRENT_ARCHITECTURE.md`](docs/CURRENT_ARCHITECTURE.md) —
+   the **single source of truth** for production topology, env vars, and
+   the drift note about Lambda image vs. ECR `:prod` tag. If anything in
+   THIS file (CLAUDE.md) contradicts CURRENT_ARCHITECTURE.md, trust
+   CURRENT_ARCHITECTURE.md and update CLAUDE.md.
+2. Read the most recent checkpoint in `docs/superpowers/checkpoints/`
    (sorted by date). It describes the live state of the infra and what
    is known-broken vs known-placeholder.
-2. Read the spec and plan files in `docs/superpowers/specs/` and
+3. Read the spec and plan files in `docs/superpowers/specs/` and
    `docs/superpowers/plans/` if present (gitignored, local-only — do
    not try to commit them).
-3. If the task is a product/pipeline change, read
+4. If the task is a product/pipeline change, read
    `src/api/config/dependencies.py::_initialize_adapters` and
    `src/api/pipeline/pipeline.py::verify` first to understand what's
    actually wired and what's `None`.
+
+## Single Source of Truth for architecture
+
+`docs/CURRENT_ARCHITECTURE.md` is authoritative for:
+
+- Production topology (what talks to what, which AWS services, which
+  PC services, which external APIs)
+- Live Lambda env-var reference
+- Planned-but-unshipped changes
+- Last-verified-against-prod anchor (date + `main` tip + Lambda digest)
+
+**Rule:** any architectural change (new service, moved service,
+changed env var, changed backend, changed external API dependency)
+MUST update CURRENT_ARCHITECTURE.md in the **same commit** as the code
+or TF change. Reviewers should reject PRs that change architecture
+without updating the SSoT.
+
+Other docs (`README.md`, `docker/README.md`, `docs/API.md`,
+`docs/FRONTEND.md`) may summarize or reference architecture but should
+NOT duplicate the authoritative details — link back to
+CURRENT_ARCHITECTURE.md instead. Runbooks describe procedures, not
+topology; if a runbook needs to state a topology fact, it should cite
+CURRENT_ARCHITECTURE.md.
 
 ## Anti-hallucination protocol (mandatory for every agent)
 
@@ -172,15 +200,32 @@ only after asking.
    the PC neo4j. Switched because bolt (TCP:7687) doesn't work through
    CF's free-tier HTTPS tunnel. Aura instance id `0193408e`, URI in
    compute TF's `var.neo4j_uri`, password in SM `ohi/neo4j-credentials`.
-5. **Embedding service runs on PC** (`docker/pc-embed/`), Lambda calls
-   it via CF tunnel — NOT bundled into the Lambda image. Includes
-   torch + sentence-transformers + pre-baked `all-MiniLM-L12-v2`
-   model. Lambda stays slim (~500 MB instead of 2.4 GB).
-6. **Redis is currently disabled** (`REDIS_ENABLED=false` in compute TF
+5. **Embedding service runs on AWS Bedrock** (Titan Text Embeddings V2,
+   1024-dim). `OHI_EMBEDDING_BACKEND=bedrock` in Lambda env, consumed by
+   the tri-mode facade in `src/api/adapters/embeddings.py`
+   (`local` = in-process sentence-transformers for dev,
+   `remote` = HTTP to `pc-embed` container for legacy,
+   `bedrock` = prod). Historic note: embeddings ran on PC
+   (`docker/pc-embed/`, MiniLM-L12-v2) until 2026-04-21 — the
+   container is retained for local-dev use.
+6. **Reranking runs on AWS Bedrock** (Cohere `rerank-v3-5`).
+   `BEDROCK_RERANK_ENABLED=true`. `GraphRetriever` cascade is
+   Qdrant ANN (40 candidates) → Aura passage fetch → Cohere rerank
+   (top-12). Both collections are empty until Wave 3 Phase E ingestion
+   runs, so today the active evidence path is MCP sources (MediaWiki +
+   Wikidata + DBpedia).
+7. **Redis is currently disabled** (`REDIS_ENABLED=false` in compute TF
    env). The PC webdis-over-CF-tunnel path is too lossy (webdis speaks
    HTTP, `redis-py` speaks native Redis TCP). Planned migration:
    ElastiCache for Valkey on `cache.t4g.micro` in a new VPC with fck-nat
    for Lambda egress (~$15-20/mo total) once AWS Activate credits land.
+8. **Neo4j Aura Pro → PC-local Neo4j over Tailscale (planned).** The
+   Aura 64 GB RAM limit + managed-service cost are incompatible with
+   full biomed ingestion (PubMed + OpenAlex + enwiki + Wikidata) and
+   the non-profit / intermittent-availability use-case. Tailscale
+   solves the CF-free-tier bolt/TCP:7687 exposure problem that
+   originally forced the move TO Aura. Migration is not shipped yet —
+   track in `docs/CURRENT_ARCHITECTURE.md §4`.
 
 ## Critical operational traps
 
@@ -255,25 +300,36 @@ Every one of these has bitten us. Watch for them.
     deploy → two-tier smoke (per-deploy + optional end-of-phase) →
     auto-rollback on smoke fail → handoff with status. **One deploy
     attempt per session, one rollback attempt, no retry loops.**
+16. **Lambda digest ≠ ECR `:prod` tag after a rollback.** Verify BOTH
+    before claiming prod state. As of 2026-04-22 the Lambda runs
+    `sha256:0e3676a2...` (hotfix-20260421-nli-refute) while ECR `:prod`
+    points at `sha256:7578dd4b...` (post-Bedrock deploy of `cf77b24`).
+    Always run `aws lambda get-function --query 'Code.ImageUri'` for
+    the live digest and `aws ecr describe-images --image-ids
+    imageTag=prod` for the tag pointer, and compare. See trap #14 for
+    the retag recipe.
 
 ## Git workflow
 
-- Branch: `feat/ohi-v2-foundation` is the active dev branch. `main` is
-  protected (no force-push) and auto-deploys Vercel.
-- **Feat-branch and per-stream branch pushes are fine without a gate.**
-  (Per-stream branches: `stream-a/...`, `d1/...`, `f/...`, etc. off feat.)
-- **Push/merge to `main` requires Fabian's explicit approval (Gate G2)**,
-  once per session. Subsequent pushes in the same session are fine
-  after G2 opens.
-- **Merge pattern**: per-stream → feat uses `--no-ff` with `Merge feat:
-  <stream summary>` prefix for audit. **feat → main uses fast-forward**
-  (Wave 3 decision; not `--no-ff`).
+- **Active branch is `main`.** The `feat/ohi-v2-foundation` branch was
+  merged into `main` at commit `c5010cc` ("v2.0 Wave 2 cutover — main
+  retired, feat is content"). All v2 development since then has landed
+  directly on `main`, and `main` auto-deploys Lambda via the
+  `.github/workflows/v2-main-deploy.yml` workflow (build → ECR → Lambda
+  update → health check → auto-rollback).
+- **Push to `main` still requires Fabian's explicit approval (Gate
+  G2)**, once per session. Subsequent pushes in the same session are
+  fine after G2 opens.
+- **Per-feature branches**: `f/<name>`, `fix/<name>`, `feat/<name>` off
+  main. These can be pushed freely to remote for PRs / draft state —
+  only the merge into `main` is gated.
 - Commit messages: Conventional Commits. Heavy on the *why*, files
   involved, and "end state verified by" lines with concrete test
   evidence. No emoji. Commit-body length is fine — the git log is the
   audit trail for a public-facing open-source project.
-- Current feat tip at time of this doc update: `474bf0f` (D2 merge,
-  post-F post-D1-conftest-followup). Update on next major milestone.
+- Current `main` tip at time of this doc update: `cf77b24` (docs: add
+  CURRENT_ARCHITECTURE + OHI_onepager.pdf). Update on next major
+  milestone.
 
 ## User communication
 
@@ -313,32 +369,46 @@ Every one of these has bitten us. Watch for them.
 - Active plan: `docs/superpowers/plans/2026-04-18-phase2-orchestration.md`
   — Wave 2+3 orchestration, autonomous deploy protocol (§5.3), gates
   table (§6.1), rollback recipe (§6.3).
-- Live traffic path diagram: latest checkpoint, §1.
+- Live traffic path diagram: `docs/CURRENT_ARCHITECTURE.md` §1 (SSoT).
 - Secret locations: latest checkpoint, §5.
 - Phase 2 backlog and priorities: latest checkpoint, §7.
 - Stream handoffs (sequential dev state record): `docs/superpowers/handoffs/`
   — stream-a → stream-b → stream-d1 → stream-e1 → stream-d2 → stream-e2.
 
-## Current v2 state (2026-04-18)
+## Current v2 state (2026-04-22)
 
-Wave 1 + Wave 2 code-side essentially done on `feat/ohi-v2-foundation`
-at `474bf0f`:
-- Stream A: MediaWiki MCP source wired into pipeline.
-- Stream B: Gemini 3 Pro NLI adapter (claim-evidence NLI).
-- Stream D1: NLI wired into pipeline with `asyncio.gather +
-  Semaphore(10)`, Lambda `timeout_s` 60→180, `NLI_*` env vars,
-  `tests/unit/conftest.py` session-scoped sys.modules purge.
-- Stream F: evidence-retrieval gap in Lambda runtime fixed +
-  deployed.
-- Stream D2: async `/verify` polling (202 + `job_id`), DynamoDB
-  `ohi-verify-jobs` table, Lambda self-async-invoke, frontend
-  polling rewrite (sse.ts deleted).
-- Stream E2 (in flight at time of doc update): deploys D2 to prod.
+`main` tip `cf77b24`. Wave 1 + Wave 2 shipped; Wave 3 code-side
+largely landed (PCG + cc-NLI live; corpus ingestion pipeline in
+place, collections empty pending Phase E full run):
 
-Wave 3 (designed, specs in `docs/superpowers/specs/2026-04-18-wave3-*.md`,
-not yet implemented): PCG with TRW-BP + LBP fallback + Gibbs sanity +
-claim-claim NLI (OpenAI GPT 5.4 xhigh primary, Gemini 3 Pro fallback),
-full enwiki + Wikidata corpus ingestion into Neo4j Aura (vector-
-optimized for entity embeddings) + Qdrant (passages, stripped to
-vector-only index per Decision K — no duplicated text), automated
-merge-to-main gate with post-deploy auto-rollback.
+- **Wave 1–2 (Streams A / B / D1 / F / D2)**: MediaWiki MCP,
+  Gemini 3 Pro claim-evidence NLI, NLI wired into the pipeline with
+  `asyncio.gather + Semaphore(10)`, Lambda `timeout_s=180`, async
+  `/verify` polling (202 + `job_id`, DynamoDB `ohi-verify-jobs`,
+  self-async-invoke, frontend poll loop).
+- **Wave 2.5 — Bedrock migration (commits `65b9818` → `d2b617a`)**:
+  embeddings moved PC → Bedrock Titan v2 (1024-dim); Bedrock Cohere
+  rerank-v3-5 added as a new `GraphRetriever` stage;
+  `EmbeddingSettings` + `RetrievalSettings` Bedrock fields + DI
+  wiring; Lambda IAM for `bedrock:InvokeModel` + `bedrock:Rerank`.
+- **Wave 3 — PCG + corpus ingestion**: `pcg_belief_propagation`
+  adapter (TRW-BP + LBP fallback + Gibbs MCMC sanity);
+  `ClaimClaimNliDispatcher` (OpenAI GPT-5.4 primary + Gemini
+  fallback — primary inactive today because `OHI_OPENAI_API_KEY` is
+  unset); offset-based checkpoint recovery for all ingestion passes;
+  `ohi-ingest` console script; `EndToEndHealth` dashboard +
+  `/health/live` + `/health/ready`.
+- **Post-deploy drift**: Lambda is currently on the pre-Bedrock-merge
+  hotfix digest (`sha256:0e3676a2...`, `hotfix-20260421-nli-refute`)
+  after a silent rollback on 2026-04-21 21:29 UTC. ECR `:prod` points
+  at `sha256:7578dd4b...` (`cf77b24` content). Env vars are
+  Bedrock-configured and the hotfix image is recent enough to support
+  the Bedrock backend selector. Running prod is functional but not on
+  the content of `main` tip — next deploy will roll forward.
+
+**Next planned change: Neo4j Aura → PC-local over Tailscale.** Driver:
+Aura 64 GB RAM limit + cost vs. full biomed ingestion + non-profit
+use-case. Requires Lambda networking adjustment (Tailscale extension
+/ sidecar), `NEO4J_URI` env change, and clean 503 behaviour when the
+Tailnet peer is offline. Full detail in
+[docs/CURRENT_ARCHITECTURE.md §4](docs/CURRENT_ARCHITECTURE.md#4-planned-changes-not-yet-shipped).
