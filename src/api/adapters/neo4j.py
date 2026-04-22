@@ -233,10 +233,15 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                 max_connection_pool_size=self._settings.max_connection_pool_size,
             )
 
-            # Neo4j can take a while to accept Bolt connections after container start.
-            # With large Wikipedia imports, startup can take several minutes.
-            max_attempts = 60  # Increased for large databases
-            retry_interval = 30.0  # Fixed 30-second interval for less log spam
+            # Neo4j boot-wait: must fail fast enough that Lambda's 10s init
+            # timeout doesn't fire. If the graph store is unreachable at
+            # cold-start we propagate ServiceUnavailable so dependencies.py's
+            # `except` lets the app come up in degraded mode (MCP-only
+            # evidence path). Long boot-waits (e.g. ingestion cold starts
+            # on a fresh PC Neo4j) should be handled at the container-
+            # orchestration layer, not here.
+            max_attempts = 2
+            retry_interval = 2.0
             for attempt in range(1, max_attempts + 1):
                 try:
                     await self._driver.verify_connectivity()
@@ -245,14 +250,12 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                 except ServiceUnavailable:
                     if attempt >= max_attempts:
                         raise
-                    # Only log every 2 attempts to reduce noise
-                    if attempt == 1 or attempt % 2 == 0:
-                        logger.info(
-                            "Neo4j not ready yet (attempt %s/%s). Retrying in %.0fs...",
-                            attempt,
-                            max_attempts,
-                            retry_interval,
-                        )
+                    logger.info(
+                        "Neo4j not ready yet (attempt %s/%s). Retrying in %.0fs...",
+                        attempt,
+                        max_attempts,
+                        retry_interval,
+                    )
                     await asyncio.sleep(retry_interval)
         except AuthError as e:
             logger.error(f"Neo4j authentication failed: {e}")
