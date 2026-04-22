@@ -16,7 +16,9 @@
 FROM public.ecr.aws/docker/library/golang:1.23-alpine AS tsproxy-builder
 
 WORKDIR /src
-COPY docker/lambda/tsproxy/go.mod ./
+# Copy go.mod + go.sum together so `go mod download` uses the pinned
+# hashes from go.sum and `go build` can verify without re-resolving.
+COPY docker/lambda/tsproxy/go.mod docker/lambda/tsproxy/go.sum ./
 RUN go mod download
 COPY docker/lambda/tsproxy/main.go ./
 # CGO_ENABLED=0 to keep the binary static and copy-able into the slim
