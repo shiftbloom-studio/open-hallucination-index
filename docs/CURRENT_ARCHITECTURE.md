@@ -9,17 +9,15 @@ Any architectural change MUST update this file in the same commit. See
 [CLAUDE.md](../CLAUDE.md#single-source-of-truth-for-architecture) for
 the enforcing rule.
 
-**Last verified against prod:** 2026-04-22
-- `main` tip: `cf77b24` (docs: add CURRENT_ARCHITECTURE + OHI_onepager.pdf)
-- Lambda image digest (live): `sha256:0e3676a2ac41123fecd6b7e0434f0a0a8142a6cb1b26de9438927276c75b4113` — ECR tag `hotfix-20260421-nli-refute`
-- ECR `:prod` tag: `sha256:7578dd4b89bbf5c5145a534f475581baf0efc8a1b4c6e44cd78581f32c995682` — tags `[prod, sha-cf77b247...]`
-- Lambda `LastModified`: `2026-04-21T21:29:54Z`
-- Drift note: a silent rollback on 2026-04-21 put Lambda on the hotfix
-  image while `:prod` still points at the subsequent post-Bedrock
-  image. Env vars are Bedrock-configured
-  (`OHI_EMBEDDING_BACKEND=bedrock`) and the hotfix image supports the
-  Bedrock backend selector, so prod is functional — but redeploying
-  `:prod` will roll forward to `cf77b24`-content. See [runbooks/rollback-deploy.md](runbooks/rollback-deploy.md).
+**Last verified against prod:** 2026-04-22 (post-Neo4j-migration Phase 1)
+- `main` tip: `18a91e6` (fix(adapters/neo4j): fail-fast connect…)
+- Lambda image digest (live): `sha256:98336153394b58d1f87fd4e47531324a3c033c96a4982e07fe6fb15a6ac7e52c` — ECR tags `[prod, sha-18a91e6...]`
+- Lambda `/health/deep`: **degraded** — `L1.retrieve.neo4j: down` (Aura gone, Phase 2 pending), all other layers `ok`
+- Graph-store migration status: **Phase 1 complete** — Neo4j Aura Pro
+  removed; PC-local Neo4j 5-community running on Tailscale interface
+  (`100.105.150.81:7687`). **Phase 2 pending**: Lambda-side Tailscale
+  integration (`tsnet`-based Go proxy inside Lambda container). Until
+  Phase 2 ships, Lambda runs in degraded mode (MCP-only evidence).
 
 This document is based on the current repo state in:
 
@@ -53,12 +51,13 @@ flowchart LR
         br_rerank["Bedrock Runtime\nCohere rerank-v3-5"]
     end
 
-    subgraph pc["PC-side Services via Cloudflare Tunnel"]
+    subgraph pc["PC-side Services"]
         cfaccess["Cloudflare Tunnel + Access"]
         qdrant["Qdrant\nohi_passages_titan1024"]
+        neo4j_pc["Neo4j 5-community\nbolt://100.105.150.81:7687 (Tailnet)"]
+        tailnet["Tailnet (tens0rfl0w)"]
     end
 
-    aura["Neo4j Aura Pro\nFrankfurt — neo4j+s://0193408e"]
     wiki["MediaWiki + Wikidata + DBpedia"]
     gemini["Gemini API\nL1 decomposer + L3 claim-evidence NLI"]
     openai["OpenAI API\nWave 3 claim-claim NLI (optional)"]
@@ -75,13 +74,15 @@ flowchart LR
     lambda --> br_embed
     lambda --> br_rerank
 
-    lambda --> aura
     lambda --> wiki
     lambda --> gemini
     lambda -.-> openai
 
     lambda -->|"HTTPS + service token"| cfaccess
     cfaccess --> qdrant
+
+    lambda -.->|"Phase 2: tsnet proxy\nnot shipped yet"| tailnet
+    tailnet --> neo4j_pc
 ```
 
 ### Production flow summary
@@ -103,8 +104,13 @@ flowchart LR
 6. **Reranking**: **AWS Bedrock Cohere rerank-v3-5** on the top-40
    Qdrant ANN candidates, returning top-12 passages. Env:
    `BEDROCK_RERANK_ENABLED=true`.
-7. **Graph**: Neo4j **Aura Pro** (Frankfurt) holds entities +
-   passage-level text. Connected via `neo4j+s://` (bolt over TLS).
+7. **Graph**: Neo4j **5-community on PC** (`ohi-pc-data-neo4j-1`
+   container) — Aura Pro was removed 2026-04-22, replaced by a local
+   instance reachable on the PC's Tailscale IP
+   (`bolt://100.105.150.81:7687`). **Lambda-side Tailscale
+   connectivity is Phase 2 (pending)**: until the in-image `tsnet`
+   Go-proxy ships, Lambda cannot reach the graph store and
+   `/health/deep` reports `L1.retrieve.neo4j: down`.
 8. **Vector**: **Qdrant on PC** via Cloudflare Tunnel holds the
    `ohi_passages_titan1024` collection (1024-dim passage embeddings).
    Lambda reaches it at `https://ohi-qdrant.shiftbloom.studio` with
@@ -207,7 +213,7 @@ flowchart LR
 | Service | Role | Status in prod | Why |
 |---|---|---|---|
 | Qdrant | Passage ANN index (`ohi_passages_titan1024`, 1024-dim) | ✅ used | Free-tier HTTP works through CF tunnel; no AWS alternative chosen yet |
-| Neo4j 5-community | Graph store | ❌ legacy | Prod uses Aura because bolt (TCP:7687) doesn't go through CF free-tier HTTPS tunnel — planned migration back to PC over **Tailscale** (see §4) |
+| Neo4j 5-community | Graph store | ✅ (Phase 1) | Aura removed 2026-04-22. Bolt exposed on Tailscale IP only via `docker/compose/pc-data.tailscale.yml` overlay. Lambda reaches it once Phase 2 ships (Lambda-side `tsnet` proxy in the image). |
 | pc-embed | `all-MiniLM-L12-v2` HTTP embedder | ❌ legacy | Prod switched to Bedrock Titan v2 for managed availability + 1024-dim parity with the reranker candidate pool |
 | Postgres / PostgREST | Relational + REST façade | — dev-only | Never wired into Lambda's verify path |
 | Redis / Webdis | Cache + trace store | ❌ disabled | Webdis-over-tunnel doesn't speak native Redis protocol; `REDIS_ENABLED=false` in Lambda. ElastiCache / Upstash migration is backlog |
@@ -218,16 +224,30 @@ These are **decided directions that are not reflected in the code or
 infra yet** — when implementing, update this section first and then
 the rest of the file.
 
-- **Neo4j Aura Pro → PC-local Neo4j 5-community over Tailscale.**
-  Driver: Aura's 64 GB RAM limit makes full biomed ingestion
-  (PubMed + OpenAlex + enwiki + Wikidata) tight or impossible, and
-  the non-profit / intermittent-availability use-case doesn't justify
-  the cost. Tailscale solves the CF-free-tier bolt/TCP:7687 exposure
-  problem that originally forced the Aura move. `docker/compose/pc-data.yml`
-  already builds the `neo4j:5-community` container; the migration
-  touches Lambda networking (Tailscale extension / sidecar), the
-  `NEO4J_URI` env var, and the dead-adapter degraded-mode behaviour
-  (Lambda must return 503 cleanly when the Tailnet peer is offline).
+- **Neo4j Aura Pro → PC-local Neo4j 5-community over Tailscale —
+  IN PROGRESS.**
+  - Phase 1 (SHIPPED 2026-04-22): Aura Pro instance removed; PC
+    Neo4j container recreated with the
+    `docker/compose/pc-data.tailscale.yml` overlay binding bolt
+    (7687) and HTTP (7474) to the PC's Tailscale IP
+    (`100.105.150.81`) only — bolt never touches the local LAN or
+    the Windows firewall public zone.
+  - Phase 2 (NEXT): Lambda-side Tailscale connectivity via a
+    `tsnet` Go-proxy built into the Lambda container image
+    (`docker/lambda/tsproxy/`). The proxy joins the Tailnet as
+    `ohi-lambda` (ephemeral) using an auth key from Secrets
+    Manager (`ohi/tailscale-authkey`), exposes
+    `127.0.0.1:7687` locally, and forwards to `tens0rfl0w:7687`
+    over the Tailnet. Lambda then connects via
+    `NEO4J_URI=bolt://127.0.0.1:7687`. Requires: Tailscale auth-
+    key provisioning + Secrets Manager entry +
+    `aws_secretsmanager_secret_version` IAM grant on Lambda. The
+    dead-adapter degraded-mode behaviour (adapter fails fast →
+    dependencies.py catches → app boots) already ships (commit
+    `18a91e6`).
+  - Phase 3 (LATER): once Phase 2 is stable, swap Qdrant off CF
+    Tunnel and onto the same Tailnet route to remove CF Access
+    service-token management.
 - **OpenAI cc-NLI primary activation.** `CC_NLI_LLM_PROVIDER=openai`
   is set, but `OHI_OPENAI_API_KEY` is currently unset / empty →
   dispatcher falls back to Gemini-as-primary. Activating requires
@@ -260,7 +280,7 @@ verified date above:
 | `BEDROCK_RERANK_MODEL_ID` | `cohere.rerank-v3-5:0` | `var.bedrock_rerank_model_id` |
 | `BEDROCK_RERANK_CANDIDATES` | `40` | `var.bedrock_rerank_candidates` |
 | `BEDROCK_RERANK_TOP_N` | `12` | `var.bedrock_rerank_top_n` |
-| `NEO4J_URI` | `neo4j+s://0193408e.databases.neo4j.io` | `var.neo4j_uri` |
+| `NEO4J_URI` | `neo4j+s://0193408e.databases.neo4j.io` (stale — Aura gone) | `var.neo4j_uri`; Phase 2 will flip to `bolt://127.0.0.1:7687` |
 | `QDRANT_HOST` | `ohi-qdrant.shiftbloom.studio` | `var.tunnel_hostname_qdrant` |
 | `QDRANT_PORT` | `443` | constant |
 | `QDRANT_HTTPS` | `true` | constant |

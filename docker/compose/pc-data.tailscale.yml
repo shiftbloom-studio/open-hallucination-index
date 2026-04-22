@@ -1,0 +1,29 @@
+# Tailscale overlay for pc-data.yml. Binds Neo4j bolt (7687) to the PC's
+# Tailscale interface only, so only Tailnet peers can reach it. Replaces
+# the Aura Pro dependency with a locally-hosted Neo4j reachable by Lambda
+# through its Tailscale connectivity (see infra/terraform/compute/
+# lambda_tailscale.tf).
+#
+# Why bind to a specific interface and not 0.0.0.0: binding to the
+# Tailscale IP directly means we never accidentally expose the bolt port
+# to the local LAN or to the public Windows firewall zone. The Tailscale
+# IP is node-specific — if the PC's node changes (unusual), update this
+# file.
+#
+# Current Tailscale IP (tens0rfl0w): 100.105.150.81 — `tailscale ip -4`
+# to re-verify if this file stops working.
+#
+# Start (on the PC):
+#   docker compose -f docker/compose/pc-data.yml \
+#                  -f docker/compose/pc-data.tailscale.yml \
+#                  --profile pc-prod up -d neo4j
+#
+# Verify (from the PC):
+#   nc -zv 100.105.150.81 7687
+#   cypher-shell -a bolt://100.105.150.81:7687 -u neo4j -p '...' 'RETURN 1'
+
+services:
+  neo4j:
+    ports:
+      - "100.105.150.81:7687:7687"   # Tailscale-only bolt
+      - "100.105.150.81:7474:7474"   # Tailscale-only HTTP (optional)
