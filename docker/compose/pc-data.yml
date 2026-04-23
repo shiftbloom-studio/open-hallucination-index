@@ -15,8 +15,16 @@ services:
     restart: unless-stopped
     environment:
       NEO4J_AUTH: ${NEO4J_AUTH}
-      NEO4J_server_memory_heap_initial__size: 1G
-      NEO4J_server_memory_heap_max__size: 2G
+      # Neo4j is now the production graph store (Aura was replaced 2026-04-22).
+      # Memory is tuned for ingestion workloads + 1.8M+ entity graph with
+      # indexes + relationship properties. heap_max + pagecache must fit
+      # inside the Docker container memory limit (WSL2 on Windows caps
+      # at ~50% of host RAM by default; check `.wslconfig` memory=). With
+      # the JVM overhead (~1-2 GB) + OS buffers, keep total reservation
+      # at ~90% of the container limit to avoid OOM-kill during GC spikes.
+      NEO4J_server_memory_heap_initial__size: 4G
+      NEO4J_server_memory_heap_max__size: 12G
+      NEO4J_server_memory_pagecache_size: 16G
     volumes:
       - neo4j-data:/data
       - neo4j-logs:/logs
