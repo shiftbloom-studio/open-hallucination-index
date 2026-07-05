@@ -21,8 +21,9 @@
   "vars": {
     "ENVIRONMENT": "production",
     "SITE_ORIGIN": "https://ohi.shiftbloom.studio",
-    "VERIFY_MAX_CLAIMS": "8",
-    "VERIFY_RATE_LIMIT_PER_MINUTE": "12"
+    "VERIFY_MAX_CLAIMS": "13",
+    "VERIFY_RATE_LIMIT_PER_MINUTE": "12",
+    "MAXIMUM_RIGOR_COOLDOWN_SECONDS": "90"
   },
   "ai": {
     "binding": "AI"
