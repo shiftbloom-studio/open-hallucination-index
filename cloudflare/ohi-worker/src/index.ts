@@ -136,9 +136,25 @@ interface RawJobRow {
 
 const CHAT_MODEL = "@cf/google/gemma-3-12b-it";
 const NLI_CORROBORATION_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const FAST_TIER_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
 const EMBEDDING_MODEL = "@cf/baai/bge-m3";
 const RERANK_MODEL = "@cf/baai/bge-reranker-base";
 const PIPELINE_VERSION = "ohi-v2.0-cloudflare";
+
+interface RigorProfile {
+  maxClaims: number;
+  evidencePerClaim: number;
+  classifiedPerClaim: number;
+  ensemble: boolean;
+}
+
+// Sized against live Workers AI pricing (2026-07-05) to keep worst-case cost
+// per verify request under ~$0.01 (fast), ~$0.035 (balanced), ~$0.10 (maximum).
+const RIGOR_PROFILES: Record<Rigor, RigorProfile> = {
+  fast: { maxClaims: 4, evidencePerClaim: 3, classifiedPerClaim: 3, ensemble: false },
+  balanced: { maxClaims: 7, evidencePerClaim: 4, classifiedPerClaim: 4, ensemble: true },
+  maximum: { maxClaims: 13, evidencePerClaim: 6, classifiedPerClaim: 6, ensemble: true },
+};
 const MAX_BODY_BYTES = 64 * 1024;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
   "https://ohi.shiftbloom.studio",
@@ -694,17 +710,18 @@ async function runPipeline(
   const maxClaims = clamp(
     request.options?.max_claims ?? defaultMaxClaims(env, rigor),
     1,
-    defaultMaxClaims(env, "maximum"),
+    defaultMaxClaims(env, rigor),
   );
   const coverageTarget = clamp(request.options?.coverage_target ?? 0.9, 0.5, 0.99);
 
+  const profile = RIGOR_PROFILES[rigor];
   const claims = await decomposeClaims(env, request.text, maxClaims);
   await phase("retrieving_evidence");
 
   const domain = request.domain_hint ?? "general";
   const evidenceByClaim = new Map<string, Evidence[]>();
   for (const claim of claims) {
-    evidenceByClaim.set(claim.id, await retrieveEvidence(env, claim.text, domain));
+    evidenceByClaim.set(claim.id, await retrieveEvidence(env, claim.text, domain, profile.evidencePerClaim));
   }
 
   await phase("classifying");
@@ -712,7 +729,7 @@ async function runPipeline(
   for (const claim of claims) {
     const evidence = evidenceByClaim.get(claim.id) ?? [];
     const classified = await Promise.all(
-      evidence.slice(0, rigor === "maximum" ? 6 : 4).map((item) => classifyEvidence(env, claim.text, item)),
+      evidence.slice(0, profile.classifiedPerClaim).map((item) => classifyEvidence(env, claim.text, item, rigor)),
     );
     verdicts.push(buildClaimVerdict(claim, classified, domain, coverageTarget));
   }
@@ -814,7 +831,7 @@ const SOURCE_CREDIBILITY: Record<string, number> = {
   gdelt: 0.6,
 };
 
-async function retrieveEvidence(env: Env, query: string, domain: Domain = "general"): Promise<Evidence[]> {
+async function retrieveEvidence(env: Env, query: string, domain: Domain = "general", evidenceLimit = 6): Promise<Evidence[]> {
   const retrievedAt = new Date().toISOString();
   const evidence: Evidence[] = [];
 
@@ -837,8 +854,9 @@ async function retrieveEvidence(env: Env, query: string, domain: Domain = "gener
   const deduped = dedupeEvidence(evidence).slice(0, 12);
   const reranked = await rerankEvidence(env, query, deduped);
 
-  await cacheEvidence(env, reranked, retrievedAt);
-  return reranked.slice(0, 6);
+  const limited = reranked.slice(0, evidenceLimit);
+  await cacheEvidence(env, limited, retrievedAt);
+  return limited;
 }
 
 async function searchResultToEvidence(result: SearchResult): Promise<Evidence> {
@@ -1052,11 +1070,11 @@ function combineNliOpinions(
     solo.refuting_score,
     solo.neutral_score,
     solo.relevance_score * 0.9,
-    `${solo.reasoning} (single-model result; the corroboration model was unavailable)`,
+    `${solo.reasoning} (single-model classification; no second-model corroboration was run for this evidence item)`,
   );
 }
 
-async function classifyEvidence(env: Env, claim: string, evidence: Evidence): Promise<ClassifiedEvidence> {
+async function classifyEvidence(env: Env, claim: string, evidence: Evidence, rigor: Rigor = "balanced"): Promise<ClassifiedEvidence> {
   const deterministic = deterministicFactCheck(claim, evidence);
   if (deterministic) {
     return enrichEvidence(
@@ -1072,6 +1090,12 @@ async function classifyEvidence(env: Env, claim: string, evidence: Evidence): Pr
   }
 
   const fallback = lexicalClassify(claim, evidence);
+
+  if (!RIGOR_PROFILES[rigor].ensemble) {
+    const solo = await runNliModel(env, FAST_TIER_MODEL, claim, evidence, "response_format");
+    return combineNliOpinions(evidence, fallback, solo, null);
+  }
+
   const [primary, corroboration] = await Promise.all([
     runNliModel(env, CHAT_MODEL, claim, evidence, "guided_json"),
     runNliModel(env, NLI_CORROBORATION_MODEL, claim, evidence, "response_format"),
@@ -1248,6 +1272,24 @@ async function rejectIfAbusive(request: Request, env: Env, body: VerifyRequest):
     }, 429);
   }
 
+  if ((body.options?.rigor ?? "balanced") === "maximum") {
+    const cooldownSeconds = clamp(
+      Number((env as Env & { MAXIMUM_RIGOR_COOLDOWN_SECONDS?: string }).MAXIMUM_RIGOR_COOLDOWN_SECONDS ?? "90") || 90,
+      30,
+      600,
+    );
+    const cooldown = await env.RATE_LIMITER.getByName("maximum-cooldown").check(`max:${ip}`, 1, cooldownSeconds);
+    if (!cooldown.allowed) {
+      return json(request, env, {
+        detail: {
+          code: "maximum_rigor_cooldown",
+          message: `Maximum rigor is limited to one request every ${cooldownSeconds}s per client. Try again after the reset time.`,
+          ...cooldown,
+        },
+      }, 429);
+    }
+  }
+
   const secret = (env as Env & { TURNSTILE_SECRET_KEY?: string }).TURNSTILE_SECRET_KEY;
   if (!secret || await isAdminRequest(request, env)) return null;
 
@@ -1334,7 +1376,7 @@ function normalizeVerifyRequest(body: VerifyRequest, env: Env): VerifyRequest {
     options: {
       rigor,
       tier: body.options?.tier ?? "default",
-      max_claims: clamp(body.options?.max_claims ?? defaultMaxClaims(env, rigor), 1, defaultMaxClaims(env, "maximum")),
+      max_claims: clamp(body.options?.max_claims ?? defaultMaxClaims(env, rigor), 1, defaultMaxClaims(env, rigor)),
       include_pcg_neighbors: body.options?.include_pcg_neighbors ?? true,
       include_full_provenance: body.options?.include_full_provenance ?? true,
       self_consistency_k: body.options?.self_consistency_k ?? null,
@@ -1868,10 +1910,11 @@ function domainWeights(domain: Domain): Record<string, number> {
 }
 
 function defaultMaxClaims(env: Env, rigor: Rigor): number {
-  const configured = Number(env.VERIFY_MAX_CLAIMS ?? "8") || 8;
-  if (rigor === "fast") return Math.min(4, configured);
-  if (rigor === "maximum") return Math.min(12, Math.max(8, configured));
-  return Math.min(8, configured);
+  // VERIFY_MAX_CLAIMS is an optional operator-configured ceiling that can only
+  // further restrict a tier's claim count, never raise it above the tier's
+  // own cost-sized profile (see RIGOR_PROFILES).
+  const configured = Number(env.VERIFY_MAX_CLAIMS ?? "13") || 13;
+  return Math.min(RIGOR_PROFILES[rigor].maxClaims, Math.max(1, configured));
 }
 
 function internalConsistency(verdicts: ClaimVerdict[]): number {
