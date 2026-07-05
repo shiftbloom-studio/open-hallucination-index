@@ -88,7 +88,7 @@ export interface PcgGraphProps {
 function PcgGraphSkeleton() {
   return (
     <div className="flex h-full min-h-[240px] w-full items-center justify-center rounded-lg border border-[color:var(--border-subtle)] bg-[color:var(--surface-soft)]/40 text-xs text-brand-subtle">
-      Loading 3D graph…
+      Loading 3D graph...
     </div>
   );
 }
@@ -149,7 +149,7 @@ export const PcgGraph = forwardRef<PcgGraphHandle, PcgGraphProps>(function PcgGr
             type="checkbox"
             checked={hideNeutral}
             onChange={(e) => setHideNeutral(e.target.checked)}
-            className="accent-[color:var(--brand-indigo)]"
+            className="accent-[color:var(--brand-primary)]"
           />
           <span>Hide neutral edges</span>
         </label>

@@ -25,10 +25,10 @@ function evaluate(
     if (error instanceof OhiError && error.isResting) return { status: "red", label: "resting" };
     return { status: "red", label: "offline" };
   }
-  if (!data) return { status: "unknown", label: "checking…" };
+  if (!data) return { status: "unknown", label: "checking..." };
   // Backend canonical field is `status`; legacy builds emit `overall`. Accept both.
   const overall = data.status ?? data.overall;
-  if (overall === "healthy") return { status: "green", label: "healthy" };
+  if (overall === "healthy" || overall === "ok") return { status: "green", label: "healthy" };
   if (overall === "degraded") return { status: "amber", label: "degraded" };
   return { status: "red", label: "unhealthy" };
 }

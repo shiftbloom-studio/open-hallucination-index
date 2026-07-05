@@ -31,7 +31,7 @@ export function ClaimCard({ verdict, onShowInGraph, onFlag, className }: ClaimCa
   return (
     <article
       className={cn(
-        "rounded-xl border border-[color:var(--border-subtle)] bg-surface-elevated p-4 shadow-sm transition-colors hover:border-[color:var(--border-default)]",
+        "sb-panel p-4 transition-colors hover:border-[color:var(--border-default)]",
         className,
       )}
       data-testid="claim-card"
@@ -105,7 +105,7 @@ export function ClaimCard({ verdict, onShowInGraph, onFlag, className }: ClaimCa
             onClick={() => onFlag(v)}
             aria-label="Flag this claim for review"
           >
-            <span aria-hidden>🚩</span> Flag
+            Flag
           </button>
         )}
       </div>

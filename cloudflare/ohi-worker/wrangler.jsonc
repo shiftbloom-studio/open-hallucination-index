@@ -1,0 +1,122 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ohi-cloudflare",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "account_id": "c1c21fe1727603d87d5d75554b97c994",
+  "routes": [
+    {
+      "pattern": "ohi.shiftbloom.studio",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": "../../src/frontend/out",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/health*", "/mcp*"],
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "SITE_ORIGIN": "https://ohi.shiftbloom.studio",
+    "VERIFY_MAX_CLAIMS": "8",
+    "VERIFY_RATE_LIMIT_PER_MINUTE": "12"
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "d1_databases": [
+    {
+      "binding": "OHI_DB",
+      "database_name": "ohi-prod",
+      "database_id": "cf4a23b0-8bcf-4a62-b633-ac3a25da5b7a",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "OHI_CORPUS",
+      "bucket_name": "ohi-corpus-prod"
+    }
+  ],
+  "vectorize": [
+    {
+      "binding": "OHI_VECTOR",
+      "index_name": "ohi-evidence-bge-m3"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "VERIFY_QUEUE",
+        "queue": "ohi-verify"
+      },
+      {
+        "binding": "CORPUS_QUEUE",
+        "queue": "ohi-corpus-ingest"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "ohi-verify",
+        "max_batch_size": 2,
+        "max_batch_timeout": 5,
+        "max_retries": 2,
+        "dead_letter_queue": "ohi-verify-dlq",
+        "max_concurrency": 4,
+        "retry_delay": 30
+      },
+      {
+        "queue": "ohi-corpus-ingest",
+        "max_batch_size": 5,
+        "max_batch_timeout": 10,
+        "max_retries": 5,
+        "dead_letter_queue": "ohi-corpus-ingest-dlq",
+        "max_concurrency": 6,
+        "retry_delay": 60
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "name": "ohi-corpus-ingestion",
+      "binding": "CORPUS_WORKFLOW",
+      "class_name": "CorpusIngestionWorkflow",
+      "limits": {
+        "steps": 10000
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "JOBS",
+        "class_name": "JobObject"
+      },
+      {
+        "name": "MCP_OBJECT",
+        "class_name": "OhiMCP"
+      },
+      {
+        "name": "RATE_LIMITER",
+        "class_name": "RateLimitObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["JobObject", "OhiMCP"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["RateLimitObject"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

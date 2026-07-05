@@ -24,7 +24,6 @@ export function DegradedState({ degradedLayers, fallbackCount, className }: Degr
       data-testid="degraded-state"
     >
       <div className="flex items-center gap-2 text-xs" style={{ color: "#92400e" }}>
-        <span className="text-base">⚠️</span>
         <span className="font-semibold">Partial result — {parts.join(" · ")}.</span>
       </div>
       <p className="mt-1 text-[11px]" style={{ color: "#b45309" }}>

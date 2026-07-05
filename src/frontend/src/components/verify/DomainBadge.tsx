@@ -6,9 +6,9 @@ const palette: Record<
   { bg: string; fg: string; ring: string }
 > = {
   general: {
-    bg: "rgba(99,102,241,0.1)",
-    fg: "var(--brand-indigo-strong)",
-    ring: "rgba(99,102,241,0.3)",
+    bg: "rgba(240,68,77,0.1)",
+    fg: "var(--brand-accent)",
+    ring: "rgba(240,68,77,0.3)",
   },
   biomedical: {
     bg: "rgba(13,148,136,0.1)",

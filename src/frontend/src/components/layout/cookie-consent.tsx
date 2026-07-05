@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Cookie, X, Settings, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 interface CookiePreferences {
   necessary: boolean;
@@ -55,7 +56,7 @@ export function CookieConsent() {
 
   const saveConsent = (acceptAll: boolean = false) => {
     const finalPreferences = acceptAll
-      ? { necessary: true, analytics: true, functional: true }
+      ? { necessary: true, analytics: false, functional: true }
       : preferences;
 
     localStorage.setItem(COOKIE_CONSENT_KEY, "true");
@@ -94,23 +95,23 @@ export function CookieConsent() {
           transition={{ type: "spring", damping: 25, stiffness: 200 }}
           className="fixed bottom-0 left-0 right-0 z-[100] p-4 md:p-6"
         >
-          <div className="max-w-4xl mx-auto bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
+          <div className="sb-panel mx-auto max-w-4xl overflow-hidden bg-surface-elevated/95 backdrop-blur-xl">
             {!showSettings ? (
               // Main Banner
               <div className="p-6">
                 <div className="flex items-start gap-4">
-                  <div className="p-3 bg-slate-800 rounded-xl shrink-0">
-                    <Cookie className="w-6 h-6 text-amber-400" />
+                  <div className="shrink-0 rounded-lg bg-[color:var(--brand-secondary)] p-3">
+                    <Cookie className="h-6 w-6 text-[color:var(--brand-accent)]" />
                   </div>
                   <div className="flex-1 space-y-4">
                     <div>
-                      <h3 className="text-lg font-semibold text-white mb-2">
+                      <h3 className="mb-2 text-lg font-semibold text-brand-ink">
                         We Value Your Privacy
                       </h3>
-                      <p className="text-sm text-slate-300 leading-relaxed">
-                        We use cookies to enhance your browsing experience, provide personalized content, and analyze our traffic. 
-                        By clicking &quot;Accept All&quot;, you consent to our use of cookies as described in our{" "}
-                        <Link href="/datenschutz" className="text-blue-400 hover:underline">
+                      <p className="text-sm leading-relaxed text-brand-muted">
+                        We use necessary cookies for site preferences and may use optional functional cookies if you enable them. 
+                        OHI does not currently set third-party analytics cookies. Your choices are described in our{" "}
+                        <Link href="/datenschutz" className="text-[color:var(--brand-accent)] hover:underline">
                           Privacy Policy
                         </Link>
                         . You can customize your preferences or reject non-essential cookies.
@@ -120,7 +121,7 @@ export function CookieConsent() {
                     <div className="flex flex-wrap gap-3">
                       <Button
                         onClick={() => saveConsent(true)}
-                        className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-medium px-6"
+                        className="modern-btn min-h-0 px-6 py-2 text-sm"
                       >
                         <Check className="w-4 h-4 mr-2" />
                         Accept All
@@ -128,14 +129,14 @@ export function CookieConsent() {
                       <Button
                         onClick={rejectAll}
                         variant="outline"
-                        className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+                        className="tertiary-btn min-h-0 px-5 py-2 text-sm"
                       >
                         Reject All
                       </Button>
                       <Button
                         onClick={() => setShowSettings(true)}
                         variant="ghost"
-                        className="text-slate-400 hover:text-white hover:bg-slate-800"
+                        className="text-brand-muted hover:bg-[color:var(--brand-secondary)] hover:text-brand-ink"
                       >
                         <Settings className="w-4 h-4 mr-2" />
                         Customize
@@ -144,7 +145,7 @@ export function CookieConsent() {
                   </div>
                   <button
                     onClick={rejectAll}
-                    className="p-2 text-slate-500 hover:text-white transition-colors shrink-0"
+                    className="shrink-0 p-2 text-brand-muted transition-colors hover:text-brand-ink"
                     aria-label="Close cookie banner"
                   >
                     <X className="w-5 h-5" />
@@ -155,10 +156,10 @@ export function CookieConsent() {
               // Settings Panel
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-white">Cookie Preferences</h3>
+                  <h3 className="text-lg font-semibold text-brand-ink">Cookie Preferences</h3>
                   <button
                     onClick={() => setShowSettings(false)}
-                    className="p-2 text-slate-500 hover:text-white transition-colors"
+                    className="p-2 text-brand-muted transition-colors hover:text-brand-ink"
                     aria-label="Close settings"
                   >
                     <X className="w-5 h-5" />
@@ -167,32 +168,35 @@ export function CookieConsent() {
 
                 <div className="space-y-4 mb-6">
                   {/* Necessary Cookies */}
-                  <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                  <div className="rounded-lg border border-[color:var(--border-subtle)] bg-surface-base p-4">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-3">
-                        <span className="text-white font-medium">Strictly Necessary</span>
-                        <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">
+                        <span className="font-medium text-brand-ink">Strictly Necessary</span>
+                        <span className="rounded-full bg-[color:var(--brand-success-soft)] px-2 py-0.5 text-xs text-[color:var(--brand-success)]">
                           Always Active
                         </span>
                       </div>
-                      <div className="w-12 h-6 bg-emerald-500 rounded-full flex items-center justify-end px-1 cursor-not-allowed">
+                      <div className="flex h-6 w-12 cursor-not-allowed items-center justify-end rounded-full bg-[color:var(--brand-success)] px-1">
                         <div className="w-4 h-4 bg-white rounded-full shadow" />
                       </div>
                     </div>
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-brand-muted">
                       These cookies are essential for the website to function properly. They enable basic functions like page navigation, secure login, and access to secure areas. The website cannot function properly without these cookies.
                     </p>
                   </div>
 
                   {/* Analytics Cookies */}
-                  <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                  <div className="rounded-lg border border-[color:var(--border-subtle)] bg-surface-base p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-white font-medium">Analytics & Performance</span>
+                      <span className="font-medium text-brand-ink">Analytics & Performance</span>
                       <button
                         onClick={() => togglePreference("analytics")}
-                        className={`w-12 h-6 rounded-full flex items-center px-1 transition-colors ${
-                          preferences.analytics ? "bg-emerald-500 justify-end" : "bg-slate-600 justify-start"
-                        }`}
+                        className={cn(
+                          "flex h-6 w-12 items-center rounded-full px-1 transition-colors",
+                          preferences.analytics
+                            ? "justify-end bg-[color:var(--brand-success)]"
+                            : "justify-start bg-[color:var(--border-default)]",
+                        )}
                         role="switch"
                         aria-checked={preferences.analytics}
                         aria-label="Toggle analytics cookies"
@@ -200,20 +204,23 @@ export function CookieConsent() {
                         <div className="w-4 h-4 bg-white rounded-full shadow" />
                       </button>
                     </div>
-                    <p className="text-sm text-slate-400">
-                      These cookies help us understand how visitors interact with our website. We use Vercel Analytics to collect anonymous, aggregated data about page views and user behavior. This helps us improve our website and services. No personal data is collected.
+                    <p className="text-sm text-brand-muted">
+                      OHI does not currently set third-party analytics cookies. This preference is reserved for optional analytics features if they are enabled later.
                     </p>
                   </div>
 
                   {/* Functional Cookies */}
-                  <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                  <div className="rounded-lg border border-[color:var(--border-subtle)] bg-surface-base p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-white font-medium">Functional</span>
+                      <span className="font-medium text-brand-ink">Functional</span>
                       <button
                         onClick={() => togglePreference("functional")}
-                        className={`w-12 h-6 rounded-full flex items-center px-1 transition-colors ${
-                          preferences.functional ? "bg-emerald-500 justify-end" : "bg-slate-600 justify-start"
-                        }`}
+                        className={cn(
+                          "flex h-6 w-12 items-center rounded-full px-1 transition-colors",
+                          preferences.functional
+                            ? "justify-end bg-[color:var(--brand-success)]"
+                            : "justify-start bg-[color:var(--border-default)]",
+                        )}
                         role="switch"
                         aria-checked={preferences.functional}
                         aria-label="Toggle functional cookies"
@@ -221,42 +228,42 @@ export function CookieConsent() {
                         <div className="w-4 h-4 bg-white rounded-full shadow" />
                       </button>
                     </div>
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-brand-muted">
                       These cookies enable enhanced functionality and personalization, such as remembering your preferences, language settings, and providing personalized features. If you disable these, some features may not work as intended.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3 pt-4 border-t border-slate-700">
+                <div className="flex flex-wrap gap-3 border-t border-[color:var(--border-subtle)] pt-4">
                   <Button
                     onClick={() => saveConsent(false)}
-                    className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-medium px-6"
+                    className="modern-btn min-h-0 px-6 py-2 text-sm"
                   >
                     Save Preferences
                   </Button>
                   <Button
                     onClick={() => saveConsent(true)}
                     variant="outline"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
+                    className="tertiary-btn min-h-0 px-5 py-2 text-sm"
                   >
                     Accept All
                   </Button>
                   <Button
                     onClick={rejectAll}
                     variant="ghost"
-                    className="text-slate-400 hover:text-white hover:bg-slate-800"
+                    className="text-brand-muted hover:bg-[color:var(--brand-secondary)] hover:text-brand-ink"
                   >
                     Reject All
                   </Button>
                 </div>
 
-                <p className="text-xs text-slate-500 mt-4">
+                <p className="mt-4 text-xs text-brand-subtle">
                   For more information, please read our{" "}
-                  <Link href="/datenschutz" className="text-blue-400 hover:underline">
+                  <Link href="/datenschutz" className="text-[color:var(--brand-accent)] hover:underline">
                     Privacy Policy
                   </Link>
                   {" "}and{" "}
-                  <Link href="/cookies" className="text-blue-400 hover:underline">
+                  <Link href="/cookies" className="text-[color:var(--brand-accent)] hover:underline">
                     Cookie Policy
                   </Link>
                   .

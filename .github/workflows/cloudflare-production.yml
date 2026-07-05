@@ -1,0 +1,139 @@
+name: Cloudflare production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Install frontend dependencies
+        working-directory: src/frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend lint
+        working-directory: src/frontend
+        run: pnpm run lint
+
+      - name: Frontend tests
+        working-directory: src/frontend
+        run: pnpm run test:run
+
+      - name: Frontend static build
+        working-directory: src/frontend
+        run: pnpm run build
+
+      - name: Install Worker dependencies
+        working-directory: cloudflare/ohi-worker
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Worker binding types
+        working-directory: cloudflare/ohi-worker
+        run: pnpm run types
+
+      - name: Worker typecheck
+        working-directory: cloudflare/ohi-worker
+        run: pnpm run check
+
+      - name: Worker dry-run build
+        working-directory: cloudflare/ohi-worker
+        run: pnpm run build
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Install frontend dependencies
+        working-directory: src/frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build static frontend
+        working-directory: src/frontend
+        env:
+          NEXT_PUBLIC_API_BASE: https://ohi.shiftbloom.studio/api/v2
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: 0x4AAAAAADvvKi5_WG_Kkvkq
+        run: pnpm run build
+
+      - name: Install Worker dependencies
+        working-directory: cloudflare/ohi-worker
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Worker binding types
+        working-directory: cloudflare/ohi-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm run types
+
+      - name: Apply D1 migrations
+        working-directory: cloudflare/ohi-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm wrangler d1 migrations apply ohi-prod --remote
+
+      - name: Configure admin token secret
+        working-directory: cloudflare/ohi-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          OHI_ADMIN_TOKEN: ${{ secrets.OHI_ADMIN_TOKEN }}
+        run: |
+          if [ -n "${OHI_ADMIN_TOKEN:-}" ]; then
+            printf '%s' "$OHI_ADMIN_TOKEN" | pnpm wrangler secret put ADMIN_TOKEN
+          else
+            echo "OHI_ADMIN_TOKEN not configured; skipping ADMIN_TOKEN secret update."
+          fi
+
+      - name: Configure Turnstile secret
+        working-directory: cloudflare/ohi-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+        run: |
+          if [ -n "${TURNSTILE_SECRET_KEY:-}" ]; then
+            printf '%s' "$TURNSTILE_SECRET_KEY" | pnpm wrangler secret put TURNSTILE_SECRET_KEY
+          else
+            echo "TURNSTILE_SECRET_KEY not configured; skipping Turnstile secret update."
+          fi
+
+      - name: Deploy Worker and assets
+        working-directory: cloudflare/ohi-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm run deploy
+
+      - name: Production health probes
+        run: |
+          set -euo pipefail
+          curl -fsS https://ohi.shiftbloom.studio/health/live
+          curl -fsS https://ohi.shiftbloom.studio/health/ready
+          curl -fsS https://ohi.shiftbloom.studio/health/deep

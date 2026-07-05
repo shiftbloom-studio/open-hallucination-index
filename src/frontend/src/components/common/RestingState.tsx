@@ -12,14 +12,14 @@ export function RestingState({ retryAfterSec = 300, onRetry, className }: Restin
   return (
     <section
       className={cn(
-        "rounded-xl border border-[color:var(--brand-warning)]/30 bg-[color:var(--brand-warning-soft)]/40 p-6",
+        "rounded-lg border border-[color:var(--brand-warning)]/30 bg-[color:var(--brand-warning-soft)]/40 p-6",
         className,
       )}
       role="status"
       data-testid="resting-state"
     >
-      <div className="text-3xl">🌙</div>
-      <h2 className="font-heading mt-2 text-lg font-semibold text-brand-ink">
+      <p className="sb-kicker text-[color:var(--brand-warning)]">Offline window</p>
+      <h2 className="mt-2 text-lg font-semibold text-brand-ink">
         Service is resting
       </h2>
       <p className="mt-1 text-sm font-medium text-brand-ink">

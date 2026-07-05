@@ -284,7 +284,7 @@ export function EndToEndHealth({
   return (
     <section
       className={cn(
-        "mb-6 overflow-hidden rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-elevated)] p-5 shadow-sm",
+        "sb-panel mb-6 overflow-hidden p-5",
         className,
       )}
       data-testid="frontend-e2e-health"
@@ -312,7 +312,7 @@ export function EndToEndHealth({
             type="button"
             onClick={runProbe}
             disabled={runningProbe}
-            className="rounded-md border border-[color:var(--border-default)] bg-[color:var(--surface-soft)] px-3 py-1.5 text-xs font-semibold text-[color:var(--brand-ink)] transition hover:border-[color:var(--border-accent)] hover:bg-[color:var(--brand-indigo-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="tertiary-btn min-h-0 px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             data-testid="run-e2e-probe"
           >
             {runningProbe ? "Running probe..." : "Run end-to-end probe"}

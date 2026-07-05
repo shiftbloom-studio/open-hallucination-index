@@ -56,7 +56,7 @@ function KnowledgeGraphPoints() {
       <Points ref={ref} positions={positions} stride={3} frustumCulled={false}>
         <PointMaterial
           transparent
-          color="#6366f1"
+          color="#f0444d"
           size={0.016}
           sizeAttenuation
           depthWrite={false}

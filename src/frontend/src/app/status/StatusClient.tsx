@@ -11,40 +11,40 @@ export function StatusClient() {
   const { data, error, isLoading, refetch } = useHealthDeep();
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-10">
-      <header className="mb-6">
-        <p className="label-mono text-[color:var(--brand-indigo-strong)]">
-          Operations
-        </p>
-        <h1 className="mt-2 text-3xl font-bold text-[color:var(--brand-ink)]">System status</h1>
-        <p className="mt-2 max-w-2xl text-sm text-[color:var(--brand-muted)]">
-          OHI runs on volunteer infrastructure. When the PC hosting the data layer is offline, the
-          API returns{" "}
-          <code className="rounded bg-[color:var(--brand-indigo-soft)] px-1.5 py-0.5 font-mono text-[color:var(--brand-indigo-strong)]">
-            {"{\"status\":\"resting\"}"}
-          </code>{" "}
-          and this page reflects that directly. Polls every 30 s.
-        </p>
-      </header>
+    <div className="bg-surface-base pt-[168px] md:pt-[204px]">
+      <div className="sb-container max-w-5xl pb-28">
+        <header className="mb-14">
+          <p className="sb-kicker">Operations</p>
+          <h1 className="mt-6">System status.</h1>
+          <p className="mt-8 max-w-2xl text-[1.32rem] font-light leading-[1.625] text-brand-muted">
+            OHI runs on volunteer infrastructure. When the PC hosting the data layer is offline, the
+            API returns{" "}
+            <code className="rounded bg-[color:var(--brand-secondary)] px-1.5 py-0.5 font-mono text-sm text-[color:var(--brand-accent)]">
+              {"{\"status\":\"resting\"}"}
+            </code>{" "}
+            and this page reflects that directly. Polls every 30 s.
+          </p>
+        </header>
 
-      <EndToEndHealth deepData={data} deepError={error} deepLoading={isLoading} onRefreshDeep={refetch} />
+        <EndToEndHealth deepData={data} deepError={error} deepLoading={isLoading} onRefreshDeep={refetch} />
 
-      {isLoading && (
-        <div className="h-48 animate-pulse rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-elevated)]/70 shadow-sm" />
-      )}
+        {isLoading && (
+          <div className="sb-panel h-48 animate-pulse" />
+        )}
 
-      {error instanceof OhiError && error.isResting && (
-        <RestingState retryAfterSec={error.retryAfterSec ?? 300} onRetry={() => refetch()} />
-      )}
+        {error instanceof OhiError && error.isResting && (
+          <RestingState retryAfterSec={error.retryAfterSec ?? 300} onRetry={() => refetch()} />
+        )}
 
-      {error && !(error instanceof OhiError && error.isResting) && (
-        <NetworkErrorState
-          detail={error instanceof Error ? error.message : String(error)}
-          onRetrySync={() => refetch()}
-        />
-      )}
+        {error && !(error instanceof OhiError && error.isResting) && (
+          <NetworkErrorState
+            detail={error instanceof Error ? error.message : String(error)}
+            onRetrySync={() => refetch()}
+          />
+        )}
 
-      {data && <HealthMatrix data={data} />}
+        {data && <HealthMatrix data={data} />}
+      </div>
     </div>
   );
 }

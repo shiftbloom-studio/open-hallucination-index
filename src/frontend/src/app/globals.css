@@ -2,132 +2,125 @@
 
 @layer base {
   :root {
-    /* shadcn HSL tokens — mapped to the shiftbloom brand palette
-       (shiftbloom.studio :root tokens: #f8f7f5, #1a1a1a, #6366f1, #e63946, #f3f1fc, #6b7280)
-       The app is light-only. No .dark block. */
-
-    --background: 40 14% 97%;              /* #f8f7f5  page base  */
-    --foreground: 0 0% 10%;                /* #1a1a1a  ink        */
-    --card: 0 0% 100%;                     /* #ffffff  elevated   */
-    --card-foreground: 0 0% 10%;
+    --background: 0 100% 99%;
+    --foreground: 0 0% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 10%;
+    --popover-foreground: 0 0% 8%;
 
-    --primary: 239 84% 67%;                /* #6366f1  indigo     */
+    --primary: 356 84% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 251 65% 97%;              /* #f3f1fc  lavender   */
-    --secondary-foreground: 0 0% 10%;
-
-    --muted: 220 14% 96%;                  /* #f3f4f6  gray-100   */
-    --muted-foreground: 220 9% 46%;        /* #6b7280  gray-500   */
-    --accent: 251 65% 97%;                 /* #f3f1fc  lavender   */
-    --accent-foreground: 239 65% 48%;      /* #4f46e5  indigo-700 */
-
-    --destructive: 355 78% 56%;            /* #e63946  shiftbloom red */
+    --secondary: 351 100% 94%;
+    --secondary-foreground: 0 0% 8%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 38%;
+    --accent: 351 100% 94%;
+    --accent-foreground: 345 88% 47%;
+    --destructive: 356 84% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 220 13% 91%;                 /* #e5e7eb  gray-200   */
+    --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 239 84% 67%;                   /* indigo focus ring   */
+    --ring: 356 84% 60%;
 
-    --chart-1: 239 84% 67%;                /* indigo   */
-    --chart-2: 355 78% 56%;                /* red      */
-    --chart-3: 158 89% 30%;                /* emerald  */
-    --chart-4: 32 95% 44%;                 /* amber    */
-    --chart-5: 199 89% 48%;                /* sky      */
+    --chart-1: 356 84% 60%;
+    --chart-2: 158 84% 31%;
+    --chart-3: 199 89% 48%;
+    --chart-4: 36 92% 50%;
+    --chart-5: 0 0% 8%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;
 
-    /* Semantic brand tokens (direct hex — exposed to Tailwind as bg-surface-*, text-brand-*, etc.) */
-    --brand-ink: #1a1a1a;
-    --brand-muted: #6b7280;
-    --brand-subtle: #9ca3af;
-    --brand-indigo: #6366f1;
-    --brand-indigo-soft: #eef2ff;
-    --brand-indigo-strong: #4f46e5;
-    --brand-danger: #e63946;
-    --brand-danger-soft: #fee2e2;
-    --brand-success: #059669;
-    --brand-success-soft: #d1fae5;
-    --brand-warning: #d97706;
-    --brand-warning-soft: #fef3c7;
-    --brand-info: #0284c7;
-    --brand-info-soft: #e0f2fe;
+    --brand-primary: #f0444d;
+    --brand-accent: #e01040;
+    --brand-secondary: #ffe2e5;
+    --brand-bg: snow;
+    --brand-text: #151515;
+    --brand-gray: #626262;
+    --brand-light: #ffffff;
+    --brand-dark: #101010;
 
-    --surface-base: #f8f7f5;
-    --surface-elevated: #ffffff;
-    --surface-soft: #f3f1fc;               /* lavender card wash */
-    --surface-inverse: #0f0f0f;
+    --brand-ink: var(--brand-text);
+    --brand-muted: var(--brand-gray);
+    --brand-subtle: #8d8d8d;
+    --brand-indigo: var(--brand-primary);
+    --brand-indigo-soft: var(--brand-secondary);
+    --brand-indigo-strong: var(--brand-accent);
+    --brand-danger: var(--brand-primary);
+    --brand-danger-soft: var(--brand-secondary);
+    --brand-success: #0b8f63;
+    --brand-success-soft: #dff5ec;
+    --brand-warning: #b86f00;
+    --brand-warning-soft: #fff1cf;
+    --brand-info: #246b9d;
+    --brand-info-soft: #e5f2fb;
 
-    --border-subtle: #e5e7eb;
-    --border-default: #d1d5db;
-    --border-accent: rgba(99, 102, 241, 0.35);
+    --surface-base: var(--brand-bg);
+    --surface-elevated: var(--brand-light);
+    --surface-soft: var(--brand-secondary);
+    --surface-inverse: var(--brand-dark);
 
-    /* Font stacks — wired via next/font in app/layout.tsx */
-    --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-    --font-heading: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
-    --font-display: var(--font-fraunces), ui-serif, Georgia, "Times New Roman", serif;
-    --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+    --border-subtle: rgba(17, 24, 39, 0.1);
+    --border-default: rgba(17, 24, 39, 0.16);
+    --border-accent: rgba(240, 68, 77, 0.34);
+
+    --font-sans: system-ui, -apple-system, "system-ui", "Segoe UI", sans-serif;
+    --font-heading: system-ui, -apple-system, "system-ui", "Segoe UI", sans-serif;
+    --font-display: system-ui, -apple-system, "system-ui", "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   }
 
   * {
     border-color: hsl(var(--border));
   }
 
-  html,
-  body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
+  html {
+    background: var(--brand-bg);
+    scroll-behavior: smooth;
   }
 
   body {
+    min-height: 100vh;
+    background: var(--brand-bg);
+    color: var(--brand-text);
     font-family: var(--font-sans);
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-feature-settings: normal;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
 
-  /* Display — hero h1/h2 — serif, editorial (Fraunces) */
   h1,
-  h2 {
-    font-family: var(--font-display);
-    font-weight: 600;
-    letter-spacing: -0.025em;
-    line-height: 1.05;
-    color: var(--brand-ink);
-  }
-
-  h1 {
-    font-size: clamp(2.5rem, 5vw, 4.5rem);
-    letter-spacing: -0.035em;
-  }
-
-  h2 {
-    font-size: clamp(2rem, 4vw, 3.25rem);
-    letter-spacing: -0.03em;
-  }
-
-  /* Section — h3+ — geometric sans (Space Grotesk) */
+  h2,
   h3,
   h4,
   h5,
   h6 {
-    font-family: var(--font-heading);
+    color: var(--brand-text);
+    font-family: var(--font-sans);
     font-weight: 600;
-    letter-spacing: -0.015em;
-    line-height: 1.2;
-    color: var(--brand-ink);
+    letter-spacing: 0;
+  }
+
+  h1 {
+    font-size: clamp(3.75rem, 9vw, 6.7rem);
+    line-height: 0.94;
+  }
+
+  h2 {
+    font-size: clamp(3rem, 6.4vw, 4.75rem);
+    line-height: 1.03;
   }
 
   h3 {
-    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-size: clamp(1.7rem, 3vw, 2.25rem);
+    line-height: 1.15;
   }
 
   p {
-    line-height: 1.65;
-    letter-spacing: 0.005em;
-    color: var(--brand-ink);
+    color: var(--brand-gray);
+    line-height: 1.625;
+    letter-spacing: 0;
   }
 
   code,
@@ -138,40 +131,198 @@
   }
 
   ::selection {
-    background-color: rgba(99, 102, 241, 0.22);
-    color: inherit;
+    background: rgba(240, 68, 77, 0.2);
+    color: var(--brand-text);
   }
 
   :focus-visible {
-    outline: 2px solid hsl(var(--ring));
-    outline-offset: 2px;
-    border-radius: 2px;
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 3px;
+    border-radius: 3px;
   }
 }
 
 @layer utilities {
-  /* Display italic for hero accent word (matches shiftbloom.studio / reference image) */
-  .display-accent {
-    font-family: var(--font-display);
-    font-style: italic;
-    font-weight: 600;
-    color: var(--brand-danger);
+  .sb-container {
+    width: 100%;
+    max-width: 80rem;
+    margin-inline: auto;
+    padding-inline: 1.5rem;
   }
 
-  /* Tracked uppercase metadata/caption label */
+  @media (min-width: 768px) {
+    .sb-container {
+      padding-inline: 4rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .sb-container {
+      padding-inline: 0;
+    }
+  }
+
+  .sb-section {
+    padding-block: 7rem;
+  }
+
+  @media (min-width: 768px) {
+    .sb-section {
+      padding-block: 9rem;
+    }
+  }
+
+  .sb-kicker,
   .label-mono {
+    color: var(--brand-gray);
     font-family: var(--font-mono);
-    font-size: 0.6875rem;        /* 11px */
+    font-size: 0.75rem;
     font-weight: 500;
     letter-spacing: 0.14em;
+    line-height: 1.4;
     text-transform: uppercase;
-    color: var(--brand-muted);
   }
 
-  /* Tabular numerics — scores, intervals */
+  .sb-display {
+    color: var(--brand-text);
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 0.94;
+  }
+
+  .display-accent {
+    color: var(--brand-primary);
+    font-family: var(--font-sans);
+    font-style: normal;
+    font-weight: 600;
+  }
+
+  .modern-btn,
+  .tertiary-btn {
+    align-items: center;
+    border-radius: 9999px;
+    display: inline-flex;
+    font-size: 1rem;
+    font-weight: 600;
+    justify-content: center;
+    line-height: 1.5;
+    min-height: 3rem;
+    padding: 0.75rem 1.5rem;
+    transition:
+      background-color 180ms ease,
+      border-color 180ms ease,
+      color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
+    white-space: nowrap;
+  }
+
+  .modern-btn {
+    background: var(--brand-dark);
+    color: var(--brand-light);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .modern-btn:hover {
+    background: var(--brand-primary);
+    transform: translateY(-1px);
+  }
+
+  .tertiary-btn {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(17, 24, 39, 0.1);
+    color: var(--brand-text);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    backdrop-filter: blur(14px);
+  }
+
+  .tertiary-btn:hover {
+    background: var(--brand-light);
+    border-color: rgba(240, 68, 77, 0.3);
+    color: var(--brand-accent);
+    transform: translateY(-1px);
+  }
+
+  .nav-link {
+    color: var(--brand-text);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    line-height: 1.5rem;
+    text-transform: uppercase;
+    transition: color 180ms ease;
+  }
+
+  .nav-link:hover,
+  .nav-link[data-active="true"] {
+    color: var(--brand-primary);
+  }
+
+  .sb-panel {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(17, 24, 39, 0.1);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+  }
+
   .num-mono {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     letter-spacing: 0;
+  }
+
+  .sb-legal-page {
+    min-height: 100vh;
+    background: var(--brand-bg);
+    color: var(--brand-text);
+  }
+
+  .sb-legal-page p,
+  .sb-legal-page li,
+  .sb-legal-page dd {
+    color: var(--brand-gray);
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+
+  .sb-legal-page h1 {
+    max-width: 64rem;
+    font-size: clamp(3rem, 7vw, 4.75rem);
+    line-height: 1.03;
+  }
+
+  .sb-legal-page h2 {
+    margin-top: 3rem;
+    font-size: clamp(1.75rem, 3vw, 2.25rem);
+    line-height: 1.15;
+  }
+
+  .sb-legal-page h3 {
+    margin-top: 1.5rem;
+  }
+
+  .sb-legal-page a {
+    color: var(--brand-accent);
+    text-decoration-color: rgba(224, 16, 64, 0.35);
+    text-underline-offset: 0.22em;
+  }
+
+  .sb-legal-page [class*="text-neutral"],
+  .sb-legal-page [class*="text-slate"],
+  .sb-legal-page [class*="text-blue"],
+  .sb-legal-page [class*="text-gray"] {
+    color: var(--brand-gray);
+  }
+
+  .sb-legal-page [class*="border-white"],
+  .sb-legal-page [class*="border-slate"] {
+    border-color: rgba(17, 24, 39, 0.1);
+  }
+
+  .sb-legal-page [class*="bg-slate"],
+  .sb-legal-page [class*="bg-neutral"],
+  .sb-legal-page [class*="bg-black"] {
+    background: rgba(255, 255, 255, 0.72);
   }
 }

@@ -16,14 +16,14 @@ export function BudgetExhaustedState({
   return (
     <section
       className={cn(
-        "rounded-xl border border-[color:var(--brand-warning)]/30 bg-[color:var(--brand-warning-soft)]/50 p-6",
+        "rounded-lg border border-[color:var(--brand-warning)]/30 bg-[color:var(--brand-warning-soft)]/50 p-6",
         className,
       )}
       role="status"
       data-testid="budget-exhausted-state"
     >
-      <div className="text-3xl">💰</div>
-      <h2 className="font-heading mt-2 text-lg font-semibold text-brand-ink">
+      <p className="sb-kicker text-[color:var(--brand-warning)]">Budget</p>
+      <h2 className="mt-2 text-lg font-semibold text-brand-ink">
         Daily budget exhausted
       </h2>
       <p className="mt-1 text-sm font-medium text-brand-ink">
@@ -42,7 +42,7 @@ export function BudgetExhaustedState({
         <RetryCountdown retryAfterSec={retryAfterSec} primaryLabel="Retry now" />
         <Link
           href="/calibration"
-          className="rounded-md border border-[color:var(--border-default)] bg-surface-elevated px-3 py-1.5 text-xs font-semibold text-brand-ink hover:bg-[color:var(--surface-soft)]"
+          className="tertiary-btn min-h-0 px-4 py-2 text-xs"
         >
           Browse calibration report
         </Link>

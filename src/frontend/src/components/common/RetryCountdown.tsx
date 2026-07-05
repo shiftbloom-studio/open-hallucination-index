@@ -47,9 +47,9 @@ export function RetryCountdown({
         onClick={onRetry}
         disabled={!canRetry || !onRetry}
         className={cn(
-          "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+          "rounded-full px-4 py-2 text-xs font-semibold transition-colors",
           canRetry
-            ? "bg-[color:var(--brand-indigo)] text-white shadow-sm hover:bg-[color:var(--brand-indigo-strong)]"
+            ? "bg-[color:var(--brand-dark)] text-white shadow-sm hover:bg-[color:var(--brand-primary)]"
             : "cursor-not-allowed bg-[color:var(--border-subtle)] text-brand-subtle",
         )}
       >

@@ -8,21 +8,21 @@ export interface CalibrationTableProps {
 
 function coverageColor(empirical: number, target: number): string {
   const delta = Math.abs(empirical - target);
-  if (delta <= 0.02) return "text-emerald-300";
-  if (delta <= 0.05) return "text-amber-300";
-  return "text-rose-300";
+  if (delta <= 0.02) return "text-[color:var(--brand-success)]";
+  if (delta <= 0.05) return "text-[color:var(--brand-warning)]";
+  return "text-[color:var(--brand-danger)]";
 }
 
 export function CalibrationTable({ report, className }: CalibrationTableProps) {
   const rows = Object.entries(report.domains);
   return (
-    <div className={cn("overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03]", className)}>
+    <div className={cn("sb-panel overflow-x-auto", className)}>
       <table
-        className="w-full min-w-[560px] border-collapse text-left text-xs text-slate-300"
+        className="w-full min-w-[560px] border-collapse text-left text-xs text-brand-muted"
         data-testid="calibration-table"
       >
         <thead>
-          <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-slate-500">
+          <tr className="border-b border-[color:var(--border-subtle)] text-[10px] uppercase tracking-wider text-brand-subtle">
             <th className="px-4 py-2">Domain</th>
             <th className="px-3 py-2 text-right">calib n</th>
             <th className="px-3 py-2 text-right">empirical coverage</th>
@@ -39,8 +39,8 @@ export function CalibrationTable({ report, className }: CalibrationTableProps) {
             </tr>
           ) : (
             rows.map(([name, d]) => (
-              <tr key={name} className="border-b border-white/5 last:border-b-0">
-                <td className="px-4 py-2 font-semibold text-slate-200">{name}</td>
+              <tr key={name} className="border-b border-[color:var(--border-subtle)] last:border-b-0">
+                <td className="px-4 py-2 font-semibold text-brand-ink">{name}</td>
                 <td className="px-3 py-2 text-right font-mono">{d.calibration_n.toLocaleString()}</td>
                 <td
                   className={cn(
@@ -57,9 +57,9 @@ export function CalibrationTable({ report, className }: CalibrationTableProps) {
           )}
         </tbody>
       </table>
-      <footer className="border-t border-white/10 px-4 py-2 text-[10px] text-slate-500">
-        Report date: <span className="font-mono text-slate-400">{report.report_date}</span> · target:{" "}
-        <span className="font-mono text-slate-400">
+      <footer className="border-t border-[color:var(--border-subtle)] px-4 py-2 text-[10px] text-brand-subtle">
+        Report date: <span className="font-mono text-brand-muted">{report.report_date}</span> · target:{" "}
+        <span className="font-mono text-brand-muted">
           {Math.round(report.global_coverage_target * 100)}%
         </span>
       </footer>

@@ -32,7 +32,10 @@ function EvidenceItem({ e, kind }: { e: Evidence; kind: "support" | "refute" }) 
       ? e.structured_data.bucket_score
       : e.classification_confidence,
   );
-  const relevance = formatScore(e.similarity_score);
+  const retrievalRelevance = formatScore(e.similarity_score);
+  const claimRelevance = formatScore(
+    typeof e.structured_data?.relevance_score === "number" ? e.structured_data.relevance_score : null,
+  );
   const cred = formatScore(e.source_credibility);
   const host = hostnameFor(e.source_uri);
   return (
@@ -60,7 +63,7 @@ function EvidenceItem({ e, kind }: { e: Evidence; kind: "support" | "refute" }) 
                 href={e.source_uri}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[color:var(--brand-indigo-strong)] hover:underline"
+                className="text-[color:var(--brand-accent)] hover:underline"
               >
                 {host}
               </a>
@@ -70,9 +73,14 @@ function EvidenceItem({ e, kind }: { e: Evidence; kind: "support" | "refute" }) 
                 {kind} {bucketScore}
               </span>
             )}
-            {relevance && (
-              <span className="num-mono" title="retrieval relevance">
-                rel {relevance}
+            {claimRelevance && (
+              <span className="num-mono" title="how directly this evidence addresses the specific claim">
+                match {claimRelevance}
+              </span>
+            )}
+            {retrievalRelevance && (
+              <span className="num-mono" title="retrieval similarity score">
+                rel {retrievalRelevance}
               </span>
             )}
             {cred && (

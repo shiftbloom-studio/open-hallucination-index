@@ -1,0 +1,9 @@
+allowBuilds:
+  '@tsparticles/engine': true
+  esbuild: true
+  msw: true
+  sharp: true
+  unrs-resolver: true
+overrides:
+  '@babel/core': 7.29.7
+  postcss: 8.5.16

@@ -9,7 +9,7 @@ import type {
   VerifyRequest,
 } from "./ohi-types";
 
-const DEFAULT_PUBLIC_API_BASE = "https://api.ohi.shiftbloom.studio/api/v2";
+const DEFAULT_PUBLIC_API_BASE = "https://ohi.shiftbloom.studio/api/v2";
 
 function apiBase(): string {
   const base = process.env.NEXT_PUBLIC_API_BASE;

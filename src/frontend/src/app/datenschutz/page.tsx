@@ -6,8 +6,8 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <main className="min-h-screen bg-black/[0.96] text-neutral-100 relative overflow-hidden">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main className="sb-legal-page">
+      <div className="mx-auto max-w-4xl px-6 py-32 md:py-40">
         <h1 className="text-4xl font-bold mb-6">Privacy Policy</h1>
 
         <div className="space-y-6 text-neutral-200">
@@ -59,20 +59,20 @@ export default function PrivacyPolicyPage() {
                 Legitimate interests (Art. 6(1)(f) GDPR), e.g., IT security, fraud prevention, error analysis, operation and optimization.
               </li>
               <li>
-                Consent (Art. 6(1)(a) GDPR), for analytics cookies and optional tracking. We use Vercel Analytics with your consent to understand how visitors use our website.
+                Consent (Art. 6(1)(a) GDPR), for optional cookies or tracking features if they are enabled later.
               </li>
             </ul>
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">4. Hosting (Vercel) and Server Logs</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">4. Hosting (Cloudflare) and Server Logs</h2>
             <p>
-              Our website is hosted on Vercel Inc., 440 N Barranca Ave #4133, Covina, CA 91723, USA. When visiting the website, Vercel processes technically necessary data and stores it in log files (e.g., IP address, date/time, page accessed, referrer URL, user agent, status codes). Processing occurs for website delivery, IT security, and error analysis.
+              Our website and API are hosted on Cloudflare, Inc., 101 Townsend St, San Francisco, CA 94107, USA. When visiting the website, Cloudflare processes technically necessary data and may store it in log files (e.g., IP address, date/time, page accessed, referrer URL, user agent, status codes). Processing occurs for website delivery, IT security, and error analysis.
             </p>
             <p>
-              Legal basis is Art. 6(1)(f) GDPR (legitimate interest in secure and stable operation). Vercel may transfer data to the USA. Transfer occurs under appropriate safeguards (e.g., Standard Contractual Clauses and the EU-U.S. Data Privacy Framework). For details, please refer to Vercel&apos;s privacy policy at{" "}
-              <a href="https://vercel.com/legal/privacy-policy" className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
-                https://vercel.com/legal/privacy-policy
+              Legal basis is Art. 6(1)(f) GDPR (legitimate interest in secure and stable operation). Cloudflare may transfer data to the USA. Transfer occurs under appropriate safeguards (e.g., Standard Contractual Clauses and the EU-U.S. Data Privacy Framework). For details, please refer to Cloudflare&apos;s privacy policy at{" "}
+              <a href="https://www.cloudflare.com/privacypolicy/" className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                https://www.cloudflare.com/privacypolicy/
               </a>.
             </p>
           </section>
@@ -124,7 +124,7 @@ export default function PrivacyPolicyPage() {
               We use cookies to the extent they are technically necessary (e.g., for login/session). Technically necessary cookies are required for the Service to function.
             </p>
             <p>
-              For analytics cookies (Vercel Analytics), we obtain your consent before setting them. You can manage your cookie preferences at any time using our cookie consent banner. For detailed information about the cookies we use, please see our{" "}
+              We do not currently set third-party analytics cookies. You can manage optional cookie preferences at any time using our cookie consent banner. For detailed information about the cookies we use, please see our{" "}
               <a href="/cookies" className="text-blue-400 hover:underline">
                 Cookie Policy
               </a>.
@@ -135,26 +135,26 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-2xl font-semibold text-neutral-100">8a. Web Analytics (Vercel Analytics)</h2>
+            <h2 className="text-2xl font-semibold text-neutral-100">8a. Web Analytics and Hosting Logs</h2>
             <p>
-              With your consent, we use Vercel Analytics to analyze website usage. Vercel Analytics is a privacy-focused analytics service that collects anonymous, aggregated data about page views, user flows, and website performance.
+              OHI is hosted on Cloudflare. Cloudflare may process request metadata, security events, and aggregated performance metrics to deliver, protect, and monitor the Service.
             </p>
             <p>
-              <strong>Data collected:</strong> Page URL, referrer, browser type, device type, country (derived from IP, but IP is not stored), screen size, and interaction events. No personal data such as IP addresses or user identifiers are stored.
+              <strong>Data processed:</strong> Request URL, timestamp, user agent, approximate location, IP address, security signals, and response metadata as required for hosting, security, and operational analytics.
             </p>
             <p>
-              <strong>Purpose:</strong> Understanding how visitors use our website, improving user experience, and optimizing our services.
+              <strong>Purpose:</strong> Delivering the website and API, protecting against abuse, diagnosing incidents, and improving reliability and performance.
             </p>
             <p>
-              <strong>Legal basis:</strong> Art. 6(1)(a) GDPR (your consent). You can withdraw your consent at any time by adjusting your cookie preferences.
+              <strong>Legal basis:</strong> Art. 6(1)(f) GDPR (legitimate interest in secure and reliable service operation). Optional cookies, if enabled later, require Art. 6(1)(a) GDPR consent.
             </p>
             <p>
-              <strong>Recipient:</strong> Vercel Inc., USA. Data transfer to the USA occurs under appropriate safeguards (EU-U.S. Data Privacy Framework, Standard Contractual Clauses).
+              <strong>Recipient:</strong> Cloudflare, Inc., USA. Data transfer to the USA occurs under appropriate safeguards including Cloudflare&apos;s data processing terms.
             </p>
             <p>
-              For more information, see Vercel&apos;s privacy policy at{" "}
-              <a href="https://vercel.com/legal/privacy-policy" className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
-                https://vercel.com/legal/privacy-policy
+              For more information, see Cloudflare&apos;s privacy policy at{" "}
+              <a href="https://www.cloudflare.com/privacypolicy/" className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                https://www.cloudflare.com/privacypolicy/
               </a>.
             </p>
           </section>
@@ -172,7 +172,7 @@ export default function PrivacyPolicyPage() {
               We use service providers who process personal data on our behalf. With these service providers, we conclude – where required – data processing agreements (Art. 28 GDPR).
             </p>
             <ul className="list-disc pl-6 space-y-1">
-              <li><strong>Vercel Inc.</strong> (USA) – Hosting and analytics</li>
+              <li><strong>Cloudflare, Inc.</strong> (USA) – Hosting, security, API runtime, and operational analytics</li>
               <li><strong>Supabase Inc.</strong> – Authentication and database</li>
               <li><strong>Stripe Inc.</strong> (USA) – Payment processing</li>
             </ul>

@@ -7,8 +7,8 @@ export const metadata: Metadata = {
 
 export default function CookiePolicyPage() {
   return (
-    <main className="min-h-screen bg-black/[0.96] text-neutral-100 relative overflow-hidden">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main className="sb-legal-page">
+      <div className="mx-auto max-w-4xl px-6 py-32 md:py-40">
         <h1 className="text-4xl font-bold mb-6">Cookie Policy</h1>
 
         <div className="space-y-6 text-neutral-200">
@@ -89,9 +89,9 @@ export default function CookiePolicyPage() {
                   </thead>
                   <tbody className="text-slate-300">
                     <tr>
-                      <td className="py-2 font-mono text-xs">va_*</td>
-                      <td className="py-2">Vercel Analytics - anonymous usage statistics</td>
-                      <td className="py-2">Session</td>
+                      <td className="py-2 font-mono text-xs">None currently</td>
+                      <td className="py-2">No third-party analytics cookies are set by OHI at this time</td>
+                      <td className="py-2">N/A</td>
                     </tr>
                   </tbody>
                 </table>
@@ -130,14 +130,14 @@ export default function CookiePolicyPage() {
             
             <div className="space-y-4">
               <div className="bg-slate-800/50 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-neutral-100 mb-2">Vercel Analytics</h3>
+                <h3 className="text-lg font-semibold text-neutral-100 mb-2">Cloudflare Hosting and Security</h3>
                 <p className="text-sm text-slate-300">
-                  We use Vercel Analytics to collect anonymous, aggregated data about how visitors use our website. Vercel Analytics is privacy-focused and does not collect personal data. It helps us understand page views, user flows, and website performance.
+                  OHI is hosted on Cloudflare. Cloudflare may process request metadata and security signals to deliver the site and API, protect against abuse, and provide aggregated operational analytics.
                 </p>
                 <p className="text-sm text-slate-400 mt-2">
                   Privacy Policy:{" "}
-                  <a href="https://vercel.com/legal/privacy-policy" className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
-                    https://vercel.com/legal/privacy-policy
+                  <a href="https://www.cloudflare.com/privacypolicy/" className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                    https://www.cloudflare.com/privacypolicy/
                   </a>
                 </p>
               </div>

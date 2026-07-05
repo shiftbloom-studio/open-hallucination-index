@@ -75,51 +75,62 @@ export function VerifyPage() {
   const fallbackCount = state.claims.filter((c) => c.fallback_used !== null).length;
 
   return (
-    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 py-8 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">
-      {/* LEFT — form + progress */}
-      <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-        <VerifyForm onSubmit={onSubmit} onCancel={cancel} streaming={streaming} />
-        <SseProgress
-          status={state.status}
-          progress={state.progress}
-          claimsRenderedCount={state.claims.length}
-        />
-      </div>
+    <div className="bg-surface-base pt-[168px] md:pt-[204px]">
+      <div className="sb-container">
+        <header className="max-w-5xl pb-16">
+          <p className="sb-kicker">Verify</p>
+          <h1 className="mt-6 max-w-5xl">Test a model answer.</h1>
+          <p className="mt-8 max-w-2xl text-[1.32rem] font-light leading-[1.625] text-brand-muted">
+            Paste generated text and inspect each factual claim as probability, interval, evidence,
+            and graph relationship.
+          </p>
+        </header>
 
-      {/* RIGHT — results */}
-      <div className="space-y-4">
-        {state.status === "error" && state.error && (
-          <ErrorPanel error={state.error} onRetry={onRetry} onRetrySync={onRetrySync} />
-        )}
-
-        {state.status === "sync_fallback" && (
-          <NetworkErrorState
-            detail="Switching to synchronous endpoint — SSE didn't deliver the first byte in time."
-            onRetrySync={onRetrySync}
-          />
-        )}
-
-        {state.status !== "idle" && state.status !== "error" && (
-          <>
-            <DocumentVerdictCard verdict={state.verdict} />
-            <DegradedState degradedLayers={degradedLayers} fallbackCount={fallbackCount} />
-            <ClaimList
-              claims={state.claims}
-              onShowInGraph={(id) => graphRef.current?.focusNode(id)}
-              onFlag={setFlagged}
-              emptyMessage={streaming ? "Claims will appear as they're verified…" : "No claims yet."}
+        <div className="grid w-full grid-cols-1 gap-8 pb-28 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)]">
+          <div className="space-y-4 lg:sticky lg:top-32 lg:self-start">
+            <VerifyForm onSubmit={onSubmit} onCancel={cancel} streaming={streaming} />
+            <SseProgress
+              status={state.status}
+              progress={state.progress}
+              claimsRenderedCount={state.claims.length}
             />
-            {state.claims.length > 0 && (
-              <PcgGraph ref={graphRef} claims={state.claims} height={360} />
-            )}
-          </>
-        )}
-
-        {state.status === "idle" && (
-          <div className="rounded-xl border border-dashed border-[color:var(--border-default)] bg-surface-elevated p-12 text-center text-sm text-brand-subtle">
-            Paste text in the form to start. Nothing is stored; only a hash of your input.
           </div>
-        )}
+
+          <div className="space-y-4">
+            {state.status === "error" && state.error && (
+              <ErrorPanel error={state.error} onRetry={onRetry} onRetrySync={onRetrySync} />
+            )}
+
+            {state.status === "sync_fallback" && (
+              <NetworkErrorState
+                detail="Switching to synchronous endpoint: SSE did not deliver the first byte in time."
+                onRetrySync={onRetrySync}
+              />
+            )}
+
+            {state.status !== "idle" && state.status !== "error" && (
+              <>
+                <DocumentVerdictCard verdict={state.verdict} />
+                <DegradedState degradedLayers={degradedLayers} fallbackCount={fallbackCount} />
+                <ClaimList
+                  claims={state.claims}
+                  onShowInGraph={(id) => graphRef.current?.focusNode(id)}
+                  onFlag={setFlagged}
+                  emptyMessage={streaming ? "Claims will appear as they are verified." : "No claims yet."}
+                />
+                {state.claims.length > 0 && (
+                  <PcgGraph ref={graphRef} claims={state.claims} height={360} />
+                )}
+              </>
+            )}
+
+            {state.status === "idle" && (
+              <div className="sb-panel p-12 text-center text-sm text-brand-subtle">
+                Paste text in the form to start. Nothing is stored; only a hash of your input.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {flagged && state.verdict && (
