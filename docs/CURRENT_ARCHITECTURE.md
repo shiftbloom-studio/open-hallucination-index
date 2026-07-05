@@ -2,25 +2,25 @@
 
 **Single Source of Truth (SSoT)** for the OHI production and local-dev topology. If another doc contradicts this file, this file wins and the other doc should be updated.
 
-**Last verified against prod:** 2026-07-05 (evidence-evaluation rework deploy)
+**Last verified against prod:** 2026-07-05 (cost-tiered Rigor profiles deploy)
 
 - Public URL: `https://ohi.shiftbloom.studio`
 - Worker: `ohi-cloudflare`
-- Latest verified Worker version: `a7ade597-5916-48ce-9e44-cccf2da0b753` (deployed via `wrangler deploy` directly — GitHub Actions could not run this deploy because the `shiftbloom-studio` GitHub account was billing-locked at push time; `main` and prod matched at deploy time)
+- Latest verified Worker version: `420ff05d-97ad-4cab-902a-64b846143046` (deployed via `wrangler deploy` directly — GitHub Actions still cannot run because the `shiftbloom-studio` GitHub account is billing-locked; `main` and prod matched at deploy time)
 - Health:
   - `GET /health/live`: healthy
   - `GET /health/ready`: D1, Durable Objects, Queue, Workers AI, and Vectorize healthy/configured
-  - `GET /health/deep`: `status=ok`, `corpus_store=cloudflare-vectorize+d1+r2`, `L3.nli` latency ~5.4s (up from ~60ms pre-rework — confirms the two-model ensemble classification is genuinely running, not a no-op)
+  - `GET /health/deep`: `status=ok`, `corpus_store=cloudflare-vectorize+d1+r2`. `L3.nli` latency varies a lot run-to-run (seen ~60ms up to ~5.4s) because the health probe's fixed test claim/evidence pair is Workers AI Gateway-cached for 1 hour (`cacheTtl: 3600`) — a fast reading means a cache hit, not a broken ensemble; a cold reading (~5s) confirms both ensemble models actually ran.
 - Verified end-to-end probe:
   - `/verify` renders the Cloudflare Turnstile widget.
   - Direct `POST /api/v2/verify` without `turnstile_token` returns `403 turnstile_required`.
-  - `POST /api/v2/verify` and `POST /mcp` both trip the zone WAF's scripted-client challenge for non-browser clients (curl) even with a valid admin token — this is by design (bot mitigation) and could not be bypassed to run a curl-based false-claim probe against `/verify` this session. `GET/POST /api/v2/admin/*` is not behind that challenge and was used for the checks below. A manual false-claim check through a real browser at `/verify` is still recommended as a final sanity check.
+  - `POST /api/v2/verify` and `POST /mcp` both trip the zone WAF's scripted-client challenge for non-browser clients (curl) even with a valid admin token — this is by design (bot mitigation) and could not be bypassed to run a curl-based false-claim probe against `/verify` this session, including via `wrangler dev --remote` (still proxies through the same zone edge). `GET/POST /api/v2/admin/*` is not behind that challenge and was used for the checks below. A manual false-claim check through a real browser at `/verify` is still recommended as a final sanity check, across all three rigor tiers.
 - Verified MCP:
   - `POST /mcp` initialize succeeds.
   - `tools/list` returns 25 tools: OHI tools plus the migrated multi-source knowledge tools from `src/ohi-mcp-server`.
 - Verified corpus seed (via `GET /api/v2/admin/corpus`):
   - Vectorize `ohi-evidence-bge-m3`: 1024 dimensions, cosine metric.
-  - D1 corpus: 987 documents / 3,366 chunks at last check before this deploy; a `strategy=random, limit=2000` Wikipedia seed run (`run_id` printed via the admin endpoint) was started after deploy to broaden general-knowledge coverage and was still in progress as of this note — re-check `GET /api/v2/admin/corpus` for current totals.
+  - D1 corpus: 2,295 documents / 4,743 chunks / 25 Wikidata entities / 1,263 graph edges — up from 987 docs / 3,366 chunks after a `strategy=random, limit=2000` Wikipedia seed run (`run_id 8d411151-c5c1-47da-975e-bdb24ea17bc0`) completed cleanly: 80/80 batches, 1,308 newly indexed documents, zero errors.
   - R2 bucket `ohi-corpus-prod`: raw corpus JSON objects archived per run.
   - `ADMIN_TOKEN` Worker secret was rotated this session (old value unknown/unreadable, GitHub Actions will overwrite it again from the `OHI_ADMIN_TOKEN` repo secret on the next successful CI deploy if one is configured).
 
@@ -30,7 +30,7 @@
 - `retrieveEvidence()` now fans out through the same `knowledge-tools.ts` connectors used by MCP (previously it had its own inline duplicate of Wikipedia/Wikidata search and never called the other 9 sources), selecting sources by `domain_hint`.
 - Verified by: a standalone Node script reproducing the reported bug scenario against the old vs. new scoring formula (0.692 → 0.352 for the reported failure mode); full local CI-equivalent gate (`tsc --noEmit`, `wrangler deploy --dry-run`, frontend `eslint`, `vitest run` — 142/142 tests, `next build`); and the `/health/deep` latency change above post-deploy.
 
-**Cost-tiered Rigor profiles (pending deploy, `RIGOR_PROFILES` in `cloudflare/ohi-worker/src/index.ts`):** the `fast`/`balanced`/`maximum` rigor options and `coverage_target` (80/90/95%) exposed in the frontend `VerifyForm` were already wired end-to-end to the backend, but `fast` and `balanced` were previously identical in cost (same evidence-per-claim, same two-model ensemble) and `maximum` silently capped at the same claim count as `balanced` given the default `VERIFY_MAX_CLAIMS=8` — none of the three tiers had a real cost ceiling. Fixed by sizing each tier against live Workers AI pricing fetched 2026-07-05:
+**Cost-tiered Rigor profiles (deployed, `RIGOR_PROFILES` in `cloudflare/ohi-worker/src/index.ts`):** the `fast`/`balanced`/`maximum` rigor options and `coverage_target` (80/90/95%) exposed in the frontend `VerifyForm` were already wired end-to-end to the backend, but `fast` and `balanced` were previously identical in cost (same evidence-per-claim, same two-model ensemble) and `maximum` silently capped at the same claim count as `balanced` given the default `VERIFY_MAX_CLAIMS=8` — none of the three tiers had a real cost ceiling. Fixed by sizing each tier against live Workers AI pricing fetched 2026-07-05:
   - `fast`: 4 claims, 3 evidence/claim, **single-model** classification (`@cf/meta/llama-4-scout-17b-16e-instruct`, no ensemble) — ~$0.005/request worst case.
   - `balanced` (default): 7 claims, 4 evidence/claim, two-model ensemble (`gemma-3-12b-it` + `llama-3.3-70b-instruct-fp8-fast`, same as the evidence-evaluation rework above) — ~$0.031/request worst case, under the $0.035 target.
   - `maximum`: 13 claims, 6 evidence/claim, same ensemble as `balanced` but more of it — ~$0.085/request worst case, under the $0.10 target. Gated by a new per-IP cooldown (`MAXIMUM_RIGOR_COOLDOWN_SECONDS`, default 90s, via the existing `RateLimitObject` DO under a separate `maximum-cooldown` key) limiting clients to one `maximum`-rigor request per cooldown window, on top of the existing general 12/min rate limit.
