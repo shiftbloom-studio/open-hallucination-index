@@ -1,5 +1,7 @@
 "use client";
 
+import Script from "next/script";
+import { useEffect } from "react";
 import { useState } from "react";
 import type { Domain, Rigor, VerifyRequest } from "@/lib/ohi-types";
 import { cn } from "@/lib/utils";
@@ -33,9 +35,9 @@ function Chip({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+        "rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors",
         active
-          ? "border-[color:var(--brand-indigo)] bg-[color:var(--brand-indigo-soft)] text-[color:var(--brand-indigo-strong)]"
+          ? "border-[color:var(--brand-primary)] bg-[color:var(--brand-secondary)] text-[color:var(--brand-accent)]"
           : "border-[color:var(--border-subtle)] bg-surface-elevated text-brand-muted hover:border-[color:var(--border-default)] hover:text-brand-ink",
         disabled && "cursor-not-allowed opacity-50",
       )}
@@ -51,10 +53,29 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
   const [rigor, setRigor] = useState<Rigor>("balanced");
   const [domainHint, setDomainHint] = useState<"auto" | Domain>("auto");
   const [coverage, setCoverage] = useState(0.9);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const turnstileRequired = Boolean(turnstileSiteKey);
 
   const chars = text.length;
   const overLimit = chars > MAX_CHARS;
-  const canSubmit = !streaming && text.trim().length > 0 && !overLimit;
+  const canSubmit = !streaming && text.trim().length > 0 && !overLimit && (!turnstileRequired || turnstileToken.length > 0);
+
+  useEffect(() => {
+    const target = window as typeof window & {
+      __ohiTurnstileSuccess?: (token: string) => void;
+      __ohiTurnstileExpired?: () => void;
+      __ohiTurnstileError?: () => void;
+    };
+    target.__ohiTurnstileSuccess = (token: string) => setTurnstileToken(token);
+    target.__ohiTurnstileExpired = () => setTurnstileToken("");
+    target.__ohiTurnstileError = () => setTurnstileToken("");
+    return () => {
+      delete target.__ohiTurnstileSuccess;
+      delete target.__ohiTurnstileExpired;
+      delete target.__ohiTurnstileError;
+    };
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -67,6 +88,9 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
         coverage_target: coverage,
       },
     };
+    if (turnstileToken) {
+      req.turnstile_token = turnstileToken;
+    }
     onSubmit(req);
   }
 
@@ -74,7 +98,7 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
     <form
       onSubmit={handleSubmit}
       className={cn(
-        "space-y-3 rounded-xl border border-[color:var(--border-subtle)] bg-surface-elevated p-4 shadow-sm",
+        "sb-panel space-y-5 p-5 md:p-6",
         className,
       )}
       aria-label="Verify text"
@@ -87,8 +111,8 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
           rows={8}
           disabled={streaming}
           maxLength={MAX_CHARS + 1000}
-          placeholder={'Paste an AI-generated paragraph here. e.g. "In 1905 Einstein published four papers…"'}
-          className="w-full resize-y rounded-md border border-[color:var(--border-default)] bg-surface-base p-2.5 font-mono text-xs leading-relaxed text-brand-ink focus:border-[color:var(--brand-indigo)] focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-indigo)]/25 disabled:opacity-60"
+          placeholder={'Paste an AI-generated paragraph here. e.g. "In 1905 Einstein published four papers..."'}
+          className="min-h-[260px] w-full resize-y rounded-md border border-[color:var(--border-default)] bg-surface-base p-3 font-mono text-sm leading-relaxed text-brand-ink focus:border-[color:var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-primary)]/20 disabled:opacity-60"
           aria-invalid={overLimit}
           aria-describedby="char-counter"
         />
@@ -145,7 +169,21 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
         ))}
       </div>
 
-      <div className="flex items-center justify-between pt-1">
+      {turnstileSiteKey && (
+        <>
+          <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />
+          <div
+            className="cf-turnstile min-h-16"
+            data-sitekey={turnstileSiteKey}
+            data-action="verify"
+            data-callback="__ohiTurnstileSuccess"
+            data-expired-callback="__ohiTurnstileExpired"
+            data-error-callback="__ohiTurnstileError"
+          />
+        </>
+      )}
+
+      <div className="flex flex-col gap-4 border-t border-[color:var(--border-subtle)] pt-5 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[10px] text-brand-subtle">
           Submitted text is not retained. Hashed for caching only.
         </p>
@@ -153,7 +191,7 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-[color:var(--brand-danger)]/40 bg-[color:var(--brand-danger-soft)] px-4 py-1.5 text-xs font-semibold text-[color:var(--brand-danger)] hover:bg-[color:var(--brand-danger-soft)]/80"
+            className="tertiary-btn min-h-0 px-5 py-2 text-sm text-[color:var(--brand-danger)]"
           >
             Cancel
           </button>
@@ -161,10 +199,9 @@ export function VerifyForm({ onSubmit, onCancel, streaming = false, className }:
           <button
             type="submit"
             disabled={!canSubmit}
-            className="rounded-md bg-[color:var(--brand-indigo)] px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[color:var(--brand-indigo-strong)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="modern-btn min-h-0 px-6 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
           >
             Verify
-            <span className="ml-1" aria-hidden>→</span>
           </button>
         )}
       </div>

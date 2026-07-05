@@ -6,8 +6,8 @@ export const metadata: Metadata = {
 
 export default function EulaPage() {
   return (
-    <main className="min-h-screen bg-black/[0.96] text-neutral-100 relative overflow-hidden">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <main className="sb-legal-page">
+      <div className="mx-auto max-w-4xl px-6 py-32 md:py-40">
         <h1 className="text-4xl font-bold mb-6">End User License Agreement (EULA)</h1>
 
         <div className="space-y-6 text-neutral-200">
@@ -137,7 +137,7 @@ export default function EulaPage() {
               <strong>7.3 Data Security.</strong> We implement appropriate technical and organizational measures to protect your personal data. However, no method of transmission over the Internet or electronic storage is completely secure, and we cannot guarantee absolute security.
             </p>
             <p>
-              <strong>7.4 Analytics.</strong> With your consent, we use Vercel Analytics to collect anonymous, aggregated data about how you use the Software. This helps us improve our services. You can manage your analytics preferences through our cookie consent banner. For more information, see our Privacy Policy and Cookie Policy.
+              <strong>7.4 Analytics.</strong> OHI is hosted on Cloudflare, which may process operational and security metadata to deliver, protect, and monitor the Software. We do not currently set third-party analytics cookies. For more information, see our Privacy Policy and Cookie Policy.
             </p>
           </section>
 

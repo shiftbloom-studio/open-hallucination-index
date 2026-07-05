@@ -38,45 +38,25 @@ The live service is at **<https://ohi.shiftbloom.studio>**.
 
 ## Current status
 
-OHI is mid-way through its **v2 rework** on `main` (the
-`feat/ohi-v2-foundation` branch was merged back into `main` in commit
-`c5010cc` — all v2 development now lands on `main` directly). v2
-replaces the v1 "trust score" heuristic with a proper probabilistic
-pipeline: NLI-based claim verification, Bayesian posterior update via
-Probabilistic Claim Graph (PCG), and split-conformal calibration.
+OHI is live as a **Cloudflare-native deployment** at
+<https://ohi.shiftbloom.studio>. The production path is fully hosted on
+Cloudflare and does not depend on local tunnels, local compute, Vercel,
+AWS Lambda, API Gateway, DynamoDB, Bedrock, Neo4j, or Qdrant.
 
-**Live today (Wave 2):**
+**Live today:**
 
-- Async verify flow: `POST /api/v2/verify` → `202` + `job_id`, client
-  polls `/api/v2/verify/status/{job_id}` until `status=done` or `error`
-- Gemini 3 Pro NLI (with `thinkingLevel=HIGH`, `safetySettings=BLOCK_NONE`)
-  over live Wikipedia evidence (MediaWiki MCP)
-- Verdict shape: per-claim `p_true`, confidence interval, supporting +
-  refuting evidence passages, PCG Beta-posterior update from NLI
-- AWS Lambda + API Gateway + Cloudflare WAF + Neo4j Aura + Qdrant-on-PC;
-  Next.js 16 static export on Vercel
-
-**In progress (Wave 3, final pre-merge):**
-
-- Full TRW-BP belief propagation + damped LBP fallback + Gibbs MCMC
-  sanity in `balanced`+ rigor (replaces the per-claim Beta placeholder)
-- Claim-claim NLI via OpenAI GPT-5.4 (`reasoning.effort=xhigh`) with
-  Gemini-3-Pro fallback — builds the actual probabilistic *claim graph*
-- Full-enwiki + Wikidata corpus ingestion (Aura = content source of
-  truth, Qdrant = vector-only passage index)
-- Automated merge-to-main gate with post-deploy synthetic probe +
-  auto-rollback
-
-**Deferred to v2.1 / Wave 4:**
-
-- Domain routing (v2.0 uses a single `general` stratum)
-- Calibration data (v2.0 ships with `fallback_used: "general"` badges;
-  intervals will be wide and honest)
-- Qdrant-to-AWS migration (EC2 / OpenSearch / Bedrock Knowledge Base —
-  sponsorship-pitch-driven choice)
-
-See [docs/superpowers/checkpoints/](docs/superpowers/checkpoints/) for
-full state (gitignored — local only; ask for access if needed).
+- Same-origin frontend, API, health checks, and MCP server on one
+  Cloudflare Worker custom domain.
+- Next.js 16 static export served by Cloudflare Worker Static Assets.
+- Async verify flow: `POST /api/v2/verify` returns `202 + job_id`;
+  clients poll `/api/v2/verify/status/{job_id}` until `done` or `error`.
+- Cloudflare Queue consumer runs the hosted verification pipeline.
+- Durable Objects hold per-job live state and the MCP server.
+- D1 stores job mirrors, feedback, and evidence cache rows.
+- Vectorize stores/retrieves evidence vectors.
+- Workers AI handles claim decomposition, NLI, embeddings, and reranking.
+- Public MCP endpoint at `/mcp` exposes `verify_text`, `job_status`, and
+  `search_evidence`.
 
 ---
 
@@ -84,30 +64,18 @@ full state (gitignored — local only; ask for access if needed).
 
 For every verify request:
 
-1. **Decomposition.** The input text is broken into atomic claims via a
-   Gemini 3 Pro call. Each claim gets an SPO shape (subject, predicate,
-   object) plus a type classifier (quantitative, temporal, factual,
-   etc.).
-2. **Evidence retrieval.** Claims are routed through `AdaptiveEvidenceCollector`:
-   - **MediaWiki MCP** (live Wikipedia search) for the current v2.0
-     baseline
-   - Wave 3+: Neo4j Aura graph walks (entity-centered, Wikidata-aligned)
-     + Qdrant passage-vector similarity search over a pinned enwiki
-     snapshot
-3. **Natural-Language Inference (NLI).** Each `(claim, evidence)` pair
-   goes to Gemini 3 Pro for a SUPPORT / REFUTE / NEUTRAL classification
-   with calibrated scores.
-4. **Probabilistic claim graph (PCG).** Wave 3 adds claim-claim NLI
-   (OpenAI GPT-5.4) over claim pairs that share entities. The graph
-   feeds TRW-BP belief propagation (with damped-LBP fallback + Gibbs
-   MCMC sanity) to produce coherent posteriors across claims.
-5. **Conformal calibration.** A split-conformal layer produces an
-   interval around each `p_true`. Wave 4 adds per-domain calibration
-   strata; until then every verdict carries an honest `fallback_used:
-   "general"` badge.
-6. **Verdict assembly.** Document-level `document_score` is the
-   geometric mean of per-claim `p_true`. Full provenance (evidence
-   passages with URLs) is included in the response.
+1. **Decomposition.** Workers AI breaks input text into atomic factual
+   claims.
+2. **Evidence retrieval.** The Worker combines Vectorize evidence cache
+   hits with live Wikipedia and Wikidata retrieval.
+3. **Reranking.** Workers AI BGE reranker orders candidate evidence.
+4. **Natural-Language Inference (NLI).** Workers AI classifies evidence
+   as SUPPORT / REFUTE / NEUTRAL, with a deterministic fallback for
+   debunking cues and lexical overlap.
+5. **Verdict assembly.** The Worker returns per-claim `p_true`,
+   confidence intervals, supporting/refuting evidence, and a document
+   score. Current calibration is marked with `fallback_used: "general"`
+   until a larger calibration set is shipped.
 
 See [docs/API.md](docs/API.md) for the complete API surface and response
 schemas.
@@ -117,59 +85,25 @@ schemas.
 ## Architecture
 
 ```
-Browser (static Next.js export)
+Browser
    │
-   │  fetch https://ohi.shiftbloom.studio
+   │  https://ohi.shiftbloom.studio
    ▼
-Vercel CDN
-   │
-   │  fetch https://ohi-api.shiftbloom.studio/api/v2/*
-   ▼
-Cloudflare edge            WAF • rate limit • Transform Rule (X-OHI-Edge-Secret)
-   │
-   ▼
-AWS API Gateway (HTTP API, regional custom domain + ACM cert)
-   │
-   ▼
-AWS Lambda (container image, 180s timeout)
-   ├─► DynamoDB ohi-verify-jobs (async job state, 1h TTL)
-   ├─► Self-invoke (async)   ─► same Lambda runs the pipeline
-   ├─► Gemini API (decomposer + claim-evidence NLI)
-   ├─► OpenAI API (claim-claim NLI — Wave 3)
-   ├─► MediaWiki MCP (live Wikipedia evidence)
-   ├─► Neo4j Aura Pro (entity graph + entity-level vector index)
-   ├─► Qdrant on PC (passage vectors, vector-only payload)
-   └─► AWS Secrets Manager (API keys, edge secret, Aura creds)
+Cloudflare Worker custom domain
+   ├─► Worker Static Assets (Next.js export)
+   ├─► /api/v2/* verification API
+   ├─► /health/* probes
+   ├─► /mcp streamable HTTP MCP server
+   ├─► Durable Objects (jobs + MCP)
+   ├─► Queues (async verification + DLQ)
+   ├─► D1 (jobs, feedback, evidence cache)
+   ├─► Vectorize (BGE-M3 evidence vectors)
+   ├─► Workers AI (Gemma 3, BGE-M3, BGE reranker)
+   └─► Wikimedia APIs (Wikipedia + Wikidata evidence)
 ```
 
-**Key architectural decisions** (full context in
-[CLAUDE.md](CLAUDE.md)):
-
-- **Lambda + API Gateway** over Lambda Function URL, because Function
-  URLs strict-check the Host header and Cloudflare's free/pro tier
-  can't override it
-- **Flat Cloudflare naming** (`ohi-api.shiftbloom.studio` not
-  `api.ohi.shiftbloom.studio`) because CF free-tier Universal SSL
-  covers only one level of wildcard
-- **Neo4j Aura Pro (Frankfurt)** currently hosts the graph — bolt
-  (TCP:7687) doesn't work through CF's free-tier HTTPS tunnel, so PC
-  Neo4j was ruled out on the first pass. A planned migration back to
-  PC-local Neo4j over **Tailscale** is tracked in
-  [docs/CURRENT_ARCHITECTURE.md §4](docs/CURRENT_ARCHITECTURE.md#4-planned-changes-not-yet-shipped)
-- **Embeddings run on AWS Bedrock Titan Text V2** (1024-dim). Keeps
-  the Lambda image slim (~500 MB instead of 2.4 GB) without requiring
-  the PC to be online. The `pc-embed` container is retained for local
-  dev.
-- **Reranking runs on AWS Bedrock Cohere rerank-v3-5** (top-40
-  candidates → top-12), slotted between Qdrant ANN and Aura passage
-  fetch in the `GraphRetriever` cascade
-- **Qdrant stays on PC** as vector-only index with payload
-  `{passage_id, qid}` — text content lives in Aura as the single source
-  of truth. v1's "redundancy pain" (text duplicated across both stores)
-  is eliminated
-- **Async polling** over SSE, because SSE would need Lambda Function
-  URL's `RESPONSE_STREAM` mode, which CF free-tier can't proxy due to
-  the Host-header issue above
+See [docs/CURRENT_ARCHITECTURE.md](docs/CURRENT_ARCHITECTURE.md) for
+the production SSoT.
 
 ---
 
@@ -185,23 +119,20 @@ open-hallucination-index/
 │   │   ├── server/            # FastAPI app, routes, middleware
 │   │   ├── interfaces/        # Ports (NliAdapter, PcgInferenceService, …)
 │   │   └── config/            # Settings, DI container, infra env
-│   ├── frontend/              # Next.js 16 static export (Vercel)
+│   ├── frontend/              # Next.js 16 static export (Cloudflare assets)
 │   │   ├── src/app/           # App Router pages
 │   │   ├── src/components/    # UI (shadcn/ui + Tailwind)
 │   │   └── src/lib/           # ohi-client, verify-controller, types
-│   └── ohi-mcp-server/        # (legacy) standalone MCP server; Wave 2 wired
-│                              #   MediaWiki directly into src/api
+│   └── ohi-mcp-server/        # Legacy standalone MCP package
+├── cloudflare/
+│   └── ohi-worker/            # Production Cloudflare Worker/API/MCP deployment
 ├── gui_ingestion_app/         # (legacy v1) Wikipedia ingestion pipeline.
 │                              #   v2 Wave 3 replaces with src/api/ingestion
 ├── gui_benchmark_app/         # Benchmark suite (Part 3)
-├── infra/
-│   └── terraform/             # AWS + CF + Vercel infra (layered: bootstrap,
-│                              #   storage, secrets, compute, cloudflare,
-│                              #   vercel, observability, jobs)
+├── infra/                     # Legacy Terraform from the pre-Cloudflare stack
 ├── docker/
-│   ├── lambda/                # Lambda container image build
-│   ├── compose/pc-data.yml    # PC-hosted Neo4j/Qdrant/embed stack
-│   └── pc-embed/              # MiniLM embedding service
+│   ├── compose/pc-data.yml    # Legacy/local data stack
+│   └── pc-embed/              # Local MiniLM embedding service
 ├── tests/                     # pytest: unit/, integration/, infra/
 ├── docs/
 │   ├── API.md                 # Current API surface (v2)
@@ -221,8 +152,9 @@ open-hallucination-index/
 
 - **Python 3.14+** (API + benchmark suite)
 - **Node.js 22+** (frontend)
-- **Docker Desktop** (Lambda image builds, local PC stack)
-- **AWS CLI v2, Terraform 1.14+, jq, gh** for infra work
+- **pnpm** (frontend and Cloudflare Worker packages)
+- **Wrangler** (installed as a dev dependency in `cloudflare/ohi-worker`)
+- **Docker Desktop** only for the legacy/local data stack
 
 ### Run the backend locally
 
@@ -246,10 +178,10 @@ pytest -q tests -m "not infra" --no-cov   # canonical runline (skips infra tests
 
 ```bash
 cd src/frontend
-npm install
-npm run dev        # http://localhost:3000
-npm run test       # vitest
-npm run build      # production static export
+pnpm install
+pnpm run dev        # http://localhost:3000
+pnpm run test:run   # vitest
+pnpm run build      # production static export
 ```
 
 ### Local Docker stack (PC data services)
@@ -264,83 +196,53 @@ docker compose -f docker/compose/pc-data.yml --profile pc-prod up -d
 See [docs/runbooks/pc-compose-start.md](docs/runbooks/pc-compose-start.md)
 for the PC stack's bring-up details.
 
-### Infrastructure (AWS + Cloudflare + Vercel)
+### Deploy to Cloudflare
 
-Bootstrap and layered Terraform live in `infra/terraform/`. To spin up a
-full clone of the production deployment:
+Production deployment lives in `cloudflare/ohi-worker/`.
 
 ```bash
-cd infra/terraform/bootstrap
-terraform init && terraform apply
-# Then apply layers: storage → secrets → compute → cloudflare → vercel
-#                    → observability → jobs
+cd src/frontend
+NEXT_PUBLIC_API_BASE=https://ohi.shiftbloom.studio/api/v2 \
+NEXT_PUBLIC_SITE_URL=https://ohi.shiftbloom.studio \
+pnpm run build
+
+cd ../../cloudflare/ohi-worker
+pnpm install
+pnpm run types
+pnpm run check
+pnpm run build
+pnpm run deploy
 ```
 
-Bootstrap runbook: [docs/runbooks/bootstrap-cold-start.md](docs/runbooks/bootstrap-cold-start.md).
+Apply D1 migrations when `cloudflare/ohi-worker/migrations/` changes:
+
+```bash
+cd cloudflare/ohi-worker
+pnpm exec wrangler d1 migrations apply ohi-prod --remote
+```
 
 ---
 
 ## Configuration
 
-v2 config flows through AWS Secrets Manager + Lambda env vars. For local
-dev or when running the FastAPI app outside Lambda, create
-`src/api/.env` with the values below:
+Cloudflare production bindings and variables are in
+`cloudflare/ohi-worker/wrangler.jsonc`.
+
+- `ENVIRONMENT=production`
+- `SITE_ORIGIN=https://ohi.shiftbloom.studio`
+- `VERIFY_MAX_CLAIMS=8`
+- `AI` binding for Workers AI
+- `OHI_DB` binding for D1 `ohi-prod`
+- `OHI_VECTOR` binding for Vectorize `ohi-evidence-bge-m3`
+- `VERIFY_QUEUE` binding for Queue `ohi-verify`
+- Durable Object bindings `JOBS` and `MCP_OBJECT`
+
+Frontend production public env:
 
 ```env
-# LLM — Gemini native adapter (production path)
-LLM_BACKEND=gemini
-LLM_API_KEY=<gemini-api-key>
-LLM_MODEL=gemini-3-flash-preview
-NLI_LLM_MODEL=gemini-3-pro-preview
-NLI_THINKING_LEVEL=HIGH
-NLI_SELF_CONSISTENCY_K=1
-
-# Wave 3+: claim-claim NLI via OpenAI
-CC_NLI_LLM_PROVIDER=openai
-CC_NLI_LLM_MODEL=gpt-5.4-xhigh
-CC_NLI_LLM_FALLBACK_MODEL=gemini-3-pro-preview
-# OHI_OPENAI_API_KEY=<openai-api-key>  # from ohi/openai-api-key secret in prod
-
-# Neo4j Aura (managed graph + vector index)
-NEO4J_URI=neo4j+s://<instance-id>.databases.neo4j.io
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=<password>
-
-# Qdrant (vector-only index on PC via CF tunnel in prod)
-QDRANT_HOST=ohi-qdrant.shiftbloom.studio
-QDRANT_PORT=443
-QDRANT_HTTPS=true
-QDRANT_COLLECTION_NAME=ohi_passages_titan1024
-QDRANT_VECTOR_SIZE=1024
-
-# Embeddings — Bedrock Titan v2 in prod (1024-dim).
-# Local dev: set OHI_EMBEDDING_BACKEND=local to use in-process
-# sentence-transformers, or =remote to call pc-embed over HTTP.
-OHI_EMBEDDING_BACKEND=bedrock
-BEDROCK_EMBED_MODEL_ID=amazon.titan-embed-text-v2:0
-BEDROCK_EMBED_DIM=1024
-BEDROCK_EMBED_REGION=eu-central-1
-
-# Reranking — Bedrock Cohere rerank-v3-5
-BEDROCK_RERANK_ENABLED=true
-BEDROCK_RERANK_MODEL_ID=cohere.rerank-v3-5:0
-BEDROCK_RERANK_CANDIDATES=40
-BEDROCK_RERANK_TOP_N=12
-
-# Evidence sources
-MEDIAWIKI_ENABLED=true
-MCP_OHI_ENABLED=false        # legacy MCP server; not wired in v2 prod
-
-# Async verify (DynamoDB polling)
-JOBS_TABLE_NAME=ohi-verify-jobs
-OHI_ASYNC_VERIFY_TTL_SECONDS=3600
-
-# Edge protection (production)
-OHI_CF_EDGE_SECRET=<same-value-injected-by-cloudflare-transform-rule>
+NEXT_PUBLIC_API_BASE=https://ohi.shiftbloom.studio/api/v2
+NEXT_PUBLIC_SITE_URL=https://ohi.shiftbloom.studio
 ```
-
-Full environment reference: [CLAUDE.md](CLAUDE.md) and the compute
-Terraform layer's `variables.tf`.
 
 ---
 
@@ -355,12 +257,16 @@ Summary:
 |---|---|
 | `POST /api/v2/verify` | Submit text, receive `202 Accepted` + `job_id` |
 | `GET /api/v2/verify/status/{job_id}` | Poll for pipeline progress + final verdict |
+| `GET /api/v2/calibration/report` | Public calibration report |
+| `POST /api/v2/feedback` | Submit claim feedback |
 | `GET /health/live` | Liveness probe |
-| `GET /health/deep` | Per-layer health (decomposer, Neo4j, Qdrant, embed, PCG version…) |
+| `GET /health/ready` | Binding readiness probe |
+| `GET /health/deep` | Per-layer health for decomposition, Wikimedia, Vectorize, and NLI |
+| `POST /mcp` | Streamable HTTP MCP endpoint |
 
-Authentication: production traffic requires the
-`X-OHI-Edge-Secret` header, injected by Cloudflare's Transform Rule on
-the `ohi-api.shiftbloom.studio` host. Local dev skips the header.
+The public Cloudflare deployment currently does not require API keys for
+the verification endpoints. Add rate limiting or Turnstile before
+opening high-volume public traffic.
 
 ---
 
@@ -373,8 +279,7 @@ the `ohi-api.shiftbloom.studio` host. Local dev skips the header.
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — contribution process
 - [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — community standards
 - [docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md) — public access framework
-- [docs/runbooks/](docs/runbooks/) — deploy, rollback, secret rotation,
-  cold-start bootstrap, PC stack bring-up
+- [docs/runbooks/](docs/runbooks/) — legacy and operational runbooks
 - [CLAUDE.md](CLAUDE.md) — operational knowledge (gotchas, Windows
   traps, agent instructions)
 
@@ -420,15 +325,13 @@ MIT — see [LICENSE](LICENSE).
 
 - [**FastAPI**](https://fastapi.tiangolo.com/) — Python API framework
 - [**Next.js**](https://nextjs.org/) — React framework for the frontend
-- [**Gemini** (Google)](https://ai.google.dev/) — decomposer + claim-
-  evidence NLI
-- [**Neo4j** (Aura)](https://neo4j.com/) — entity graph + vector index
-- [**Qdrant**](https://qdrant.tech/) — passage vector store
+- [**Cloudflare Workers**](https://developers.cloudflare.com/workers/) — hosted frontend, API, health, and MCP runtime
+- [**Cloudflare Workers AI**](https://developers.cloudflare.com/workers-ai/) — decomposer, NLI, embeddings, and reranker
+- [**Cloudflare D1**](https://developers.cloudflare.com/d1/) — job mirror, feedback, and evidence cache
+- [**Cloudflare Vectorize**](https://developers.cloudflare.com/vectorize/) — evidence vector index
+- [**Cloudflare Queues**](https://developers.cloudflare.com/queues/) — async verification jobs
 - [**MCP** (Anthropic)](https://modelcontextprotocol.io/) — Model
   Context Protocol for knowledge-source aggregation
-- **AWS** (Lambda, API Gateway, DynamoDB, Secrets Manager, CloudWatch,
-  S3, **Bedrock** — Titan Text Embeddings v2 + Cohere rerank-v3-5),
-  **Cloudflare** (edge + WAF + tunnel), **Vercel** (frontend hosting)
 
 ---
 

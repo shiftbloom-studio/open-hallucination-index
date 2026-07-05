@@ -1,8 +1,7 @@
 # Open Hallucination Index - OpenCode Agent Guide
 
 This guide is for OpenCode (and similar agentic coding tools) working in this monorepo.
-Goal: fast orientation, correct dev loops, and safe operations across API, frontend, MCP server,
-Docker stack, Nginx, and the two standalone GUI apps.
+Goal: fast orientation, correct dev loops, and safe operations across the Cloudflare production Worker, legacy API/frontend packages, Docker stack, and the two standalone GUI apps.
 
 ## Golden rules (do these first)
 
@@ -10,26 +9,32 @@ Docker stack, Nginx, and the two standalone GUI apps.
 - Avoid printing expanded envs.
   - `docker compose ... config` expands secrets; use `--quiet` or `--no-interpolate`.
 - Do not delete persistent data in `docker/data/` unless explicitly requested.
-- Prefer local-first workflows for feature work; use full Docker only for end-to-end validation.
+- Prefer the Cloudflare Worker deployment path for production fixes; use full Docker only for legacy/local-stack validation.
 
 ## Fast mental model (what talks to what)
 
-- Backend API base prefix: `/api/v1` (usually protected via `X-API-Key` when `API_API_KEY` is set).
-- Frontend uses a server-side proxy route:
-  - `src/frontend/src/app/api/ohi/[...path]/route.ts` handles `/api/ohi/*`
-  - It forwards to `DEFAULT_API_URL` and injects `X-API-Key` from `DEFAULT_API_KEY`.
-- Nginx routing (see `docker/nginx/nginx.conf`):
-  - Local dev: `/` -> Next.js, `/api/` -> FastAPI, `/health` -> FastAPI
-  - Production: most traffic -> Next.js; health -> FastAPI; Cloudflare tunnel hits Nginx port 8080 internally
-- API URL conventions:
-  - Local Nginx allows `http://localhost/api/v1/*` (direct FastAPI proxy)
-  - Public/prod prefers `https://<domain>/api/ohi/api/v1/*` (Next.js proxy)
+- Production URL: `https://ohi.shiftbloom.studio`
+- Production Worker package: `cloudflare/ohi-worker`
+- Production API base prefix: `/api/v2`
+- Frontend is a Next.js static export served by Cloudflare Worker Static Assets. There is no production Next.js server and no frontend proxy route.
+- Same-origin production routes:
+  - `/` and static assets -> Worker Static Assets
+  - `/api/v2/*` -> Worker API
+  - `/health/*` -> Worker health probes
+  - `/mcp` -> Cloudflare Agents SDK MCP server
+- Hosted production resources:
+  - Durable Objects: `JobObject`, `OhiMCP` bound as `MCP_OBJECT`
+  - D1: `ohi-prod`
+  - Vectorize: `ohi-evidence-bge-m3`
+  - Queues: `ohi-verify`, `ohi-verify-dlq`
+  - Workers AI binding: `AI`
 
 ## Repo map (what lives where)
 
 - `src/api/` - FastAPI verification API (Python)
 - `src/frontend/` - Next.js App Router frontend (TypeScript)
 - `src/ohi-mcp-server/` - MCP server aggregating external knowledge sources (Node/TypeScript)
+- `cloudflare/ohi-worker/` - Production Cloudflare Worker serving frontend, API, queue consumer, health, and MCP
 - `gui_ingestion_app/` - Ingestion GUI wrapper (runs `ingestion.gui_app`)
 - `gui_ingestion_app/ingestion/` - Wikipedia ingestion pipeline package (CLI + GUI)
 - `gui_benchmark_app/` - Benchmark GUI wrapper (runs `benchmark.gui_app`)
@@ -49,8 +54,12 @@ Docker stack, Nginx, and the two standalone GUI apps.
   - Routes: `src/api/server/routes/`
 - Frontend
   - App routes: `src/frontend/src/app/`
-  - API proxy: `src/frontend/src/app/api/ohi/[...path]/route.ts`
-  - API client wrapper: `src/frontend/src/lib/api.ts`
+  - API client wrapper: `src/frontend/src/lib/ohi-client.ts`
+  - Verify state machine: `src/frontend/src/lib/verify-controller.ts`
+- Cloudflare production Worker
+  - Worker entry: `cloudflare/ohi-worker/src/index.ts`
+  - Wrangler config: `cloudflare/ohi-worker/wrangler.jsonc`
+  - D1 migrations: `cloudflare/ohi-worker/migrations/`
 - MCP server
   - Entry: `src/ohi-mcp-server/src/index.ts`
   - Source adapters: `src/ohi-mcp-server/src/sources/`
@@ -98,7 +107,26 @@ Security gotchas:
 
 ## Recommended dev workflows
 
-### 1) Local-first (recommended for feature work)
+### 0) Production Cloudflare path
+
+- Build frontend static assets:
+  - `cd src/frontend`
+  - `pnpm install`
+  - `NEXT_PUBLIC_API_BASE=https://ohi.shiftbloom.studio/api/v2 NEXT_PUBLIC_SITE_URL=https://ohi.shiftbloom.studio pnpm run build`
+- Validate and deploy Worker:
+  - `cd cloudflare/ohi-worker`
+  - `pnpm install`
+  - `pnpm run types`
+  - `pnpm run check`
+  - `pnpm run build`
+  - `pnpm run deploy`
+- Apply D1 migrations when changed:
+  - `cd cloudflare/ohi-worker && pnpm exec wrangler d1 migrations apply ohi-prod --remote`
+- Smoke production:
+  - `curl -sS https://ohi.shiftbloom.studio/health/ready`
+  - `curl -sS https://ohi.shiftbloom.studio/health/deep`
+
+### 1) Local-first legacy stack
 
 Use Docker only for stateful infra, run app code locally.
 
@@ -115,7 +143,7 @@ Use Docker only for stateful infra, run app code locally.
     - `DEFAULT_API_URL=http://localhost:8080`
     - `DEFAULT_API_KEY=...` (same key as API)
 
-When you do this, you typically browse `http://localhost:3000` (Next dev server) and skip Nginx.
+When you do this, you typically browse `http://localhost:3000` (Next dev server) and skip Nginx. This is not the production topology.
 
 ### 2) Full Docker stack (end-to-end)
 
@@ -151,11 +179,19 @@ API - `src/api` (Python, strict mypy + Ruff):
 
 Frontend - `src/frontend` (Next.js):
 
-- `npm install`
-- `npm run lint`
-- `npm run test:run`
-- `npm run build` (for production regressions)
-- `npm run test:e2e` (only if routes/auth/proxy changed)
+- `pnpm install`
+- `pnpm run lint`
+- `pnpm run test:run`
+- `NEXT_PUBLIC_API_BASE=https://ohi.shiftbloom.studio/api/v2 NEXT_PUBLIC_SITE_URL=https://ohi.shiftbloom.studio pnpm run build`
+- `pnpm run test:e2e` (only if routes/auth/proxy changed)
+
+Cloudflare Worker - `cloudflare/ohi-worker`:
+
+- `pnpm install`
+- `pnpm run types`
+- `pnpm run check`
+- `pnpm run build`
+- `pnpm run deploy`
 
 MCP server - `src/ohi-mcp-server`:
 
@@ -176,14 +212,14 @@ Benchmark - `gui_benchmark_app/benchmark`:
 
 ## Debug checklist (quick)
 
-- API up?
-  - `GET http://127.0.0.1:8080/health/ready`
-- Nginx routing ok?
-  - `GET http://localhost/health`
+- Production Worker ready?
+  - `GET https://ohi.shiftbloom.studio/health/ready`
+- Deep pipeline ready?
+  - `GET https://ohi.shiftbloom.studio/health/deep`
 - MCP up?
-  - `GET http://127.0.0.1:8083/health`
-- Frontend -> API proxy ok?
-  - Verify `DEFAULT_API_URL` and `DEFAULT_API_KEY` in `src/frontend/.env.local` (local dev) or in the Docker env.
+  - `POST https://ohi.shiftbloom.studio/mcp` with MCP initialize JSON-RPC.
+- Frontend -> API ok?
+  - Verify `NEXT_PUBLIC_API_BASE=https://ohi.shiftbloom.studio/api/v2` in the frontend build.
 - Getting 401/403 from API?
   - Confirm `API_API_KEY` (backend) and `DEFAULT_API_KEY` (frontend proxy) match.
   - If calling FastAPI directly (not via `/api/ohi/*`), include `X-API-Key: <API_API_KEY>`.
@@ -202,5 +238,6 @@ Benchmark - `gui_benchmark_app/benchmark`:
 - `docs/CONTRIBUTING.md` - conventions and PR hygiene
 - `docs/API.md` - API endpoints + request/response schemas
 - `docs/FRONTEND.md` - frontend UX/data flow principles
+- `docs/CURRENT_ARCHITECTURE.md` - production topology SSoT
 - `docker/README.md` - stack overview and ops notes
 - `src/api/README.md`, `src/frontend/README.md`, `src/ohi-mcp-server/README.md` - subsystem details

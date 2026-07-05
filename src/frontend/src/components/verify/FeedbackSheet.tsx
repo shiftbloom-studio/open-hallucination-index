@@ -90,7 +90,7 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
       />
       <form
         onSubmit={handleSubmit}
-        className="relative w-full max-w-lg rounded-2xl border border-[color:var(--border-subtle)] bg-surface-elevated p-5 shadow-xl"
+        className="sb-panel relative w-full max-w-lg p-5 shadow-xl"
       >
         <header className="mb-3 flex items-start justify-between gap-4">
           <div>
@@ -124,7 +124,7 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
               className={cn(
                 "flex cursor-pointer items-start gap-2 rounded-md border border-transparent p-2 hover:bg-[color:var(--surface-soft)]/60",
                 label === opt.value &&
-                  "border-[color:var(--brand-indigo)]/40 bg-[color:var(--brand-indigo-soft)]",
+                  "border-[color:var(--brand-primary)]/40 bg-[color:var(--brand-secondary)]",
               )}
             >
               <input
@@ -133,7 +133,7 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
                 value={opt.value}
                 checked={label === opt.value}
                 onChange={() => setLabel(opt.value)}
-                className="mt-1 accent-[color:var(--brand-indigo)]"
+                className="mt-1 accent-[color:var(--brand-primary)]"
               />
               <span>
                 <span className="block text-sm text-brand-ink">{opt.title}</span>
@@ -150,8 +150,8 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
             onChange={(e) => setRationale(e.target.value)}
             rows={4}
             maxLength={2500}
-            className="w-full rounded-md border border-[color:var(--border-default)] bg-surface-base p-2 text-sm text-brand-ink focus:border-[color:var(--brand-indigo)] focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-indigo)]/25"
-            placeholder="Cite the source that contradicts / corroborates this claim…"
+            className="w-full rounded-md border border-[color:var(--border-default)] bg-surface-base p-2 text-sm text-brand-ink focus:border-[color:var(--brand-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-primary)]/20"
+            placeholder="Cite the source that contradicts / corroborates this claim..."
           />
           <span
             className={cn(
@@ -183,9 +183,9 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
           <button
             type="submit"
             disabled={rationaleTooLong || mutation.isPending || mutation.isSuccess}
-            className="rounded-md bg-[color:var(--brand-indigo)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[color:var(--brand-indigo-strong)] disabled:cursor-not-allowed disabled:bg-[color:var(--border-default)] disabled:text-brand-subtle"
+            className="modern-btn min-h-0 px-4 py-2 text-xs disabled:cursor-not-allowed disabled:bg-[color:var(--border-default)] disabled:text-brand-subtle"
           >
-            {mutation.isPending ? "Submitting…" : "Submit"}
+            {mutation.isPending ? "Submitting..." : "Submit"}
           </button>
         </div>
       </form>

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 function layerColor(status: HealthLayer["status"]): string {
   if (status === "ok" || status === "up") return "bg-emerald-400";
   if (status === "degraded") return "bg-amber-400";
-  if (status === "skipped") return "bg-slate-500";
+  if (status === "skipped") return "bg-brand-subtle";
   return "bg-rose-500";
 }
 
@@ -19,11 +19,11 @@ export function HealthMatrix({ data, className }: HealthMatrixProps) {
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-elevated)] shadow-sm",
+        "sb-panel overflow-hidden",
         className,
       )}
     >
-      <header className="border-b border-[color:var(--border-subtle)] bg-[color:var(--surface-soft)]/55 px-5 py-3">
+      <header className="border-b border-[color:var(--border-subtle)] bg-[color:var(--surface-soft)]/45 px-5 py-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-[color:var(--brand-ink)]">
             System health — <span className="font-mono text-[color:var(--brand-muted)]">{overall}</span>

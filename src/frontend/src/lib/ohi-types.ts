@@ -124,6 +124,7 @@ export const VerifyRequestSchema = z.object({
   text: z.string(),
   context: z.string().nullable().optional(),
   domain_hint: DomainSchema.nullable().optional(),
+  turnstile_token: z.string().nullable().optional(),
   options: VerifyOptionsSchema.optional(),
   request_id: z.string().nullable().optional(),
 });

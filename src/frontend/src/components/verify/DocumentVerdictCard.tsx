@@ -23,7 +23,7 @@ export function DocumentVerdictCard({ verdict, className }: DocumentVerdictCardP
     return (
       <div
         className={cn(
-          "rounded-xl border border-[color:var(--border-subtle)] bg-surface-elevated p-5 shadow-sm animate-pulse",
+          "sb-panel animate-pulse p-5",
           className,
         )}
         data-testid="document-verdict-skeleton"
@@ -48,7 +48,7 @@ export function DocumentVerdictCard({ verdict, className }: DocumentVerdictCardP
   return (
     <section
       className={cn(
-        "rounded-xl border border-[color:var(--border-subtle)] bg-surface-elevated p-5 shadow-sm",
+        "sb-panel p-5",
         className,
       )}
       aria-label="Document verdict"
@@ -62,7 +62,7 @@ export function DocumentVerdictCard({ verdict, className }: DocumentVerdictCardP
       <div className="flex items-end justify-between gap-6">
         <div>
           <div
-            className="num-mono font-display text-4xl font-semibold"
+            className="num-mono text-4xl font-semibold"
             style={{ color: scoreColor(document_score) }}
           >
             {document_score.toFixed(2)}

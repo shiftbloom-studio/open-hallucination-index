@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Inter, Space_Grotesk, JetBrains_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "sonner";
@@ -9,38 +8,9 @@ import { CookieConsent } from "@/components/layout/cookie-consent";
 import { ConsentAwareAnalytics } from "@/components/analytics/consent-aware-analytics";
 import { Footer } from "@/components/layout/footer";
 
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-space-grotesk",
-  display: "swap",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
-  display: "swap",
-});
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
-  display: "swap",
-  style: ["normal", "italic"],
-  weight: ["400", "500", "600", "700"],
-});
-
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000");
+  "https://ohi.shiftbloom.studio";
 const siteName = "Open Hallucination Index";
 const siteDescription =
   "OHI decomposes AI-generated text into atomic claims and assigns each one a calibrated probability of being true — with explicit uncertainty intervals, an auditable probabilistic claim graph, and a public calibration report. Open-source.";
@@ -183,9 +153,8 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} ${fraunces.variable}`}
     >
-      <body className="font-sans antialiased flex min-h-screen flex-col bg-surface-base text-brand-ink">
+      <body className="flex min-h-screen flex-col bg-surface-base font-sans text-brand-ink antialiased">
         <Script
           id="structured-data"
           type="application/ld+json"

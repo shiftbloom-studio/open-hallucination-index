@@ -44,7 +44,7 @@ export function ClaimList({
     return (
       <div
         className={cn(
-          "rounded-xl border border-dashed border-[color:var(--border-default)] bg-surface-elevated p-6 text-center text-sm text-brand-subtle",
+          "rounded-lg border border-dashed border-[color:var(--border-default)] bg-surface-elevated p-6 text-center text-sm text-brand-subtle",
           className,
         )}
       >
@@ -60,7 +60,7 @@ export function ClaimList({
         <label className="flex items-center gap-2 text-[10px] uppercase tracking-wider">
           <span>Sort</span>
           <select
-            className="num-mono rounded border border-[color:var(--border-subtle)] bg-surface-elevated px-2 py-0.5 text-[10px] text-brand-ink focus:border-[color:var(--brand-indigo)] focus:outline-none"
+            className="num-mono rounded border border-[color:var(--border-subtle)] bg-surface-elevated px-2 py-0.5 text-[10px] text-brand-ink focus:border-[color:var(--brand-primary)] focus:outline-none"
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as ClaimSortKey)}
             aria-label="Sort claims"

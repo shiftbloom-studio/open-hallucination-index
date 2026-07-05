@@ -20,7 +20,7 @@ export function FeedbackButton({ requestId, claim, className }: FeedbackButtonPr
         className={className ?? "text-brand-subtle hover:text-[color:var(--brand-warning)]"}
         aria-label="Flag this claim for review"
       >
-        <span aria-hidden>🚩</span> Flag
+        Flag
       </button>
       <FeedbackSheet
         requestId={requestId}

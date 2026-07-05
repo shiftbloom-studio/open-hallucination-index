@@ -94,8 +94,8 @@ function dotStyle(state: StepState): { className: string; style: React.CSSProper
     return {
       className: "",
       style: {
-        background: "var(--brand-indigo)",
-        boxShadow: "0 0 8px rgba(99,102,241,0.55)",
+        background: "var(--brand-primary)",
+        boxShadow: "0 0 8px rgba(240,68,77,0.45)",
       },
     };
   }
@@ -111,7 +111,7 @@ export function SseProgress({ status, progress, claimsRenderedCount, className }
   return (
     <section
       className={cn(
-        "rounded-xl border border-[color:var(--border-subtle)] bg-surface-elevated p-4 shadow-sm",
+        "sb-panel p-4",
         className,
       )}
       aria-label="Pipeline progress"
@@ -133,7 +133,7 @@ export function SseProgress({ status, progress, claimsRenderedCount, className }
               <span
                 className={cn(
                   s.state === "done" && "text-brand-ink",
-                  s.state === "active" && "text-[color:var(--brand-indigo-strong)] font-medium",
+                  s.state === "active" && "text-[color:var(--brand-accent)] font-medium",
                   s.state === "pending" && "text-brand-subtle",
                 )}
               >
