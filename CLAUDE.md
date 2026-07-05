@@ -5,56 +5,72 @@ gives you the hard-won operational knowledge the current owner
 (Fabian, `fabian@shiftbloom.studio`) and prior agents have accumulated.
 **Read it fully before making any non-trivial change.**
 
+Production is a **Cloudflare Worker** (`cloudflare/ohi-worker/`) — Workers
+runtime, D1, Vectorize, R2, Queues, Durable Objects, Workflows, and
+Workers AI. There is no AWS, Neo4j, Bedrock, Qdrant, Vercel, or
+Windows/Git-Bash dependency in the production path. The FastAPI tree
+under `src/api/`, `docker/`, and `infra/` (Terraform) are retained for
+local development and migration reference only — see
+[docs/CURRENT_ARCHITECTURE.md §4](docs/CURRENT_ARCHITECTURE.md#4-local-development).
+
 ## Before anything
 
 1. Read [`docs/CURRENT_ARCHITECTURE.md`](docs/CURRENT_ARCHITECTURE.md) —
-   the **single source of truth** for production topology, env vars, and
-   the drift note about Lambda image vs. ECR `:prod` tag. If anything in
+   the **single source of truth** for production topology, Cloudflare
+   resource bindings, and the "last verified against prod" anchor at the
+   top of the file (date + Worker version + corpus size). If anything in
    THIS file (CLAUDE.md) contradicts CURRENT_ARCHITECTURE.md, trust
-   CURRENT_ARCHITECTURE.md and update CLAUDE.md.
-2. Read the most recent checkpoint in `docs/superpowers/checkpoints/`
-   (sorted by date). It describes the live state of the infra and what
-   is known-broken vs known-placeholder.
-3. Read the spec and plan files in `docs/superpowers/specs/` and
-   `docs/superpowers/plans/` if present (gitignored, local-only — do
-   not try to commit them).
-4. If the task is a product/pipeline change, read
-   `src/api/config/dependencies.py::_initialize_adapters` and
-   `src/api/pipeline/pipeline.py::verify` first to understand what's
-   actually wired and what's `None`.
+   CURRENT_ARCHITECTURE.md and update CLAUDE.md in the same session.
+2. Check `git log --oneline -20` and `gh run list --limit 10` for the
+   real current state before claiming anything about what's deployed —
+   this repo has a documented history of docs drifting behind reality
+   (that's exactly why this file was rewritten on 2026-07-05).
+3. If the task touches the verification pipeline, read
+   `cloudflare/ohi-worker/src/index.ts` (request routing, NLI ensemble,
+   evidence retrieval, admin/turnstile auth) and
+   `cloudflare/ohi-worker/src/knowledge-tools.ts` (the shared MCP +
+   pipeline evidence connectors) first, to see what's actually wired.
+4. If the task touches corpus growth, read
+   `cloudflare/ohi-worker/src/corpus-ingestion.ts` (the
+   `ohi-corpus-ingestion` Workflow) before assuming what a run does.
 
 ## Single Source of Truth for architecture
 
 `docs/CURRENT_ARCHITECTURE.md` is authoritative for:
 
-- Production topology (what talks to what, which AWS services, which
-  PC services, which external APIs)
-- Live Lambda env-var reference
+- Production topology (what talks to what, which Cloudflare products,
+  which external APIs)
+- The Cloudflare resource table (Workers, D1, Vectorize, R2, Queues,
+  Durable Objects, Workflows, Turnstile, WAF)
 - Planned-but-unshipped changes
-- Last-verified-against-prod anchor (date + `main` tip + Lambda digest)
+- Last-verified-against-prod anchor (date, Worker version, corpus size)
 
-**Rule:** any architectural change (new service, moved service,
-changed env var, changed backend, changed external API dependency)
-MUST update CURRENT_ARCHITECTURE.md in the **same commit** as the code
-or TF change. Reviewers should reject PRs that change architecture
-without updating the SSoT.
+**Rule:** any architectural change (new Cloudflare resource, changed
+binding, changed model, changed external API dependency) MUST update
+CURRENT_ARCHITECTURE.md in the **same commit** as the code change.
+Reviewers should reject PRs that change architecture without updating
+the SSoT. **This rule was in the old version of this file too and was
+not followed for months — treat it as non-negotiable, not aspirational.**
 
-Other docs (`README.md`, `docker/README.md`, `docs/API.md`,
-`docs/FRONTEND.md`) may summarize or reference architecture but should
-NOT duplicate the authoritative details — link back to
-CURRENT_ARCHITECTURE.md instead. Runbooks describe procedures, not
-topology; if a runbook needs to state a topology fact, it should cite
-CURRENT_ARCHITECTURE.md.
+Other docs (`README.md`, `docs/API.md`, `docs/FRONTEND.md`) may
+summarize or reference architecture but should NOT duplicate the
+authoritative details — link back to CURRENT_ARCHITECTURE.md instead.
+This CLAUDE.md file follows the same rule: it intentionally does not
+restate topology, resource IDs, or "current state as of <date>" prose
+that belongs in CURRENT_ARCHITECTURE.md, because that's exactly the
+content that went stale last time.
 
 ## Anti-hallucination protocol (mandatory for every agent)
 
 Verified session-lapses on this project include: citing a file's line
-number from memory (was wrong by 40+ lines); writing a shell recipe
-for ECR retagging that silently corrupted the manifest digest;
-writing smoke assertions that were structurally unreachable given the
-pipeline's current state (caused two deploy rollbacks in a row); and
+number from memory (was wrong by 40+ lines); writing smoke assertions
+that were structurally unreachable given the pipeline's current state;
 assuming handoff files were saved to disk when they were only pasted
-into chat. All cases: memory-recall without tool verification. This
+into chat; and — the reason this file was rewritten — an architecture
+doc update landing without the corresponding CLAUDE.md update, leaving
+this file describing AWS Lambda/Neo4j/Windows infra for months after
+the production system moved to Cloudflare Workers. All cases:
+memory-recall or stale-doc-recall without tool verification. This
 section is the project-wide countermeasure.
 
 **Every agent (including the coordinator) MUST:**
@@ -66,33 +82,35 @@ section is the project-wide countermeasure.
 - **Grep before claim.** Never quote a symbol (function name,
   variable, class, import path) from memory. Run `Grep` first.
 - **Git-command before claim.** Never state what's on a branch,
-  what's merged, what the feat tip is, or what a merge-base is
-  without running `git log`, `git diff`, `git rev-parse`,
-  `git branch`, or `git merge-base`.
-- **Query prod before claim.** Before claiming Lambda's current
-  image, `/health/deep` state, DynamoDB record contents, Vercel
-  deployment state, or any other prod condition, run the `aws` /
-  `curl` / `gh` / `ls` command.
+  what's merged, or what the `main` tip is without running `git log`,
+  `git diff`, `git rev-parse`, `git branch`, or `git merge-base`.
+- **Query prod before claim.** Before claiming the Worker's deployed
+  version, `/health/deep` state, D1 row counts, Vectorize index size,
+  or any other prod condition, run the `wrangler` / `curl` / `gh`
+  command — don't trust a prior session's snapshot of prod state.
 - **Fetch docs before API claims.** Never assert parameter names,
   return-type shapes, or behaviour of an external library/SDK/API
-  from training-data recall. Use `WebFetch` (or `context7` MCP when
-  connected) to pull the current docs; pin SDK versions in code that
-  depends on the shape.
-- **Run the tests before saying they pass.** Never state "pytest
-  green" or "228 passed" from memory. Run the canonical runline:
-  `pytest -q tests -m "not infra"`.
+  (Cloudflare Workers runtime APIs included — they change fast) from
+  training-data recall. Use `WebFetch` to pull current docs; pin
+  `wrangler`/SDK versions in code that depends on the shape.
+- **Run the tests before saying they pass.** Never state "tests green"
+  from memory. Run the relevant suite: frontend `pnpm run test:run`
+  (`src/frontend/`), Worker `pnpm run check` + `pnpm run build`
+  (`cloudflare/ohi-worker/` — typecheck + `wrangler deploy --dry-run`),
+  or legacy-tree `pytest -q tests -m "not infra"` if the change touches
+  `src/api/`.
 - **Test or runbook-source every shell recipe for destructive
-  operations.** Especially for force-push, ECR retag, secret
-  rotation, `terraform destroy`, `update-function-code`. If writing
-  a new recipe, validate each step before handing it to another
-  agent.
+  operations.** Especially secret rotation (`wrangler secret put`),
+  D1 migrations against `--remote`, and anything touching the
+  `ohi-corpus-prod` R2 bucket or `ohi-prod` D1 database. If writing a
+  new recipe, validate each step before handing it to another agent.
 - **Trace the code path before writing smoke assertions.** Before
-  asserting `p_true > X`, `refuting_evidence non-empty`,
-  `fallback_used != "general"`, or any semantic property in a smoke
-  script, Read the current pipeline code to confirm the expected
-  value is actually produced by this deploy's codebase. Asserting
-  forward on not-yet-shipped behavior is structurally unreachable
-  and will roll back the deploy.
+  asserting a specific `p_true`, `relevance_score`, or verdict shape in
+  a smoke script, `Read` the current `index.ts` NLI/evidence logic to
+  confirm the expected value is actually produced by this deploy's
+  code. Asserting forward on not-yet-shipped behavior is structurally
+  unreachable and will make a real regression look like a smoke-script
+  bug (or vice versa).
 - **`ls` or `Read` before claiming a file was saved.** Producing
   content in chat is not the same as persisting to disk. Confirm.
 
@@ -114,222 +132,237 @@ Never speculate about code, files, git state, deployed state, or API
 shapes you have not verified with a tool. Before any factual claim
 about this project: (a) for file content — `Read` the file; (b) for
 code symbols — `Grep` the symbol; (c) for git state — run the `git`
-command; (d) for deployed state — run the `aws` / `curl` / `gh`
+command; (d) for deployed state — run the `wrangler` / `curl` / `gh`
 command; (e) for external APIs — `WebFetch` the docs. State
 uncertainty explicitly when you haven't verified. "I don't know" is
 a valid and preferred response to a confident-wrong one.
 </investigate_before_answering>
 ```
 
-This mirrors Anthropic's official Opus 4.7 prompting-guide pattern
-for reducing hallucinations in agentic coding workflows.
-
 ## Environment assumptions
 
-- **OS:** Windows 11 + Git Bash. cwd does **not** persist between `Bash`
-  tool calls — always `cd /c/Users/Fabia/Documents/shiftbloom/git/open-hallucination-index`
-  explicitly, or use absolute paths.
-- **`source ~/.ohi-deploy-env` at the start of every `Bash` call that
-  needs AWS / Cloudflare / Vercel credentials.** It sets AWS_PROFILE,
-  CLOUDFLARE_API_TOKEN, VERCEL_API_TOKEN, and several TF_VAR_* exports.
-  The file is chmod 600 and not in git.
-- Prefix `MSYS_NO_PATHCONV=1` on any AWS CLI call that passes a path
-  starting with `/aws/`, `/var/`, `/opt/` etc. — otherwise Git Bash
-  mangles it into `C:\Program Files\Git\aws\...` and AWS rejects.
-- **AWS CLI v2 has a Windows `charmap` Unicode bug.** Log lines that
-  contain non-cp1252 characters (e.g. `→`, `—`, emoji) crash
-  `aws logs tail` / `filter-log-events` with a UnicodeEncodeError mid-
-  stream. Use **boto3** via Python when fetching logs, and wrap every
-  printed string in `.encode('ascii', errors='backslashreplace').decode()`.
-  Same class of trap applies to **Python stdout on Windows** — prefix
-  smoke scripts that print Unicode with `PYTHONIOENCODING=utf-8`.
-- **Git-Bash `/tmp/...` paths are not resolvable from Windows-native
-  Python stdlib `open()`.** If a smoke script needs to read a `/tmp/`
-  file, pipe via `cat /tmp/foo.json | python -c "import sys, json; d =
-  json.loads(sys.stdin.read()); ..."` instead of `open('/tmp/foo.json')`.
-- **Canonical pytest runline:** `pytest -q tests -m "not infra"` (NOT
-  `pytest -q src/api/tests tests -m "not infra"` — `src/api/tests/`
-  doesn't exist; tests live under `tests/`). `pytest.ini` declares
-  `testpaths = tests` so the arg is redundant but harmless.
-- **Cross-worktree sys.modules purge** is handled session-scoped by
-  `tests/unit/conftest.py` (landed at commit `dfd2fe6` as a D1 follow-up).
-  New test files should NOT copy a per-test purge snippet — trust the
-  conftest. If extending the conftest's purge set, guard on
-  `sys.modules["interfaces"].__file__` (not `server`) to avoid breaking
-  module-identity checks in other tests.
+- **OS:** macOS (Darwin). No Windows/Git-Bash quirks apply — standard
+  POSIX paths, standard `cd`, no path-mangling or charmap traps.
+- Two independent pnpm projects, each with its own lockfile — `cd` into
+  the right one before running scripts:
+  - `src/frontend/` — Next.js 16, statically exported (`pnpm run build`
+    → `out/`), which the Worker serves via Static Assets.
+  - `cloudflare/ohi-worker/` — the Worker itself (`wrangler`,
+    TypeScript, `@modelcontextprotocol/sdk`, `agents`).
+- **`wrangler`** (v4, see `cloudflare/ohi-worker/package.json`) is
+  authenticated locally via OAuth token (`wrangler whoami` to confirm
+  identity/account). CI (`cloudflare-production.yml`) instead uses the
+  `CLOUDFLARE_API_TOKEN` repo secret — don't assume the two auth paths
+  behave identically if you hit a permissions error.
+- **`gh` CLI is authenticated** in this environment — use it to check
+  real Actions run status (`gh run list`, `gh run view <id>`) instead
+  of assuming a workflow succeeded because the code looks right.
+- Node 24 (matches `.github/workflows/cloudflare-production.yml`).
+- Legacy local dev (`src/api/` FastAPI, `docker/compose/pc-data.yml`,
+  `tests/` pytest suite) still works for local-only iteration but is
+  not part of the deploy path and is not exercised by
+  `cloudflare-production.yml`. Canonical pytest runline if you touch
+  that tree: `pytest -q tests -m "not infra"`.
 
-## Forbidden files (user WIP — do NOT edit without explicit approval)
+## Deployment (Cloudflare)
 
-Historical list — the user has relaxed some of these on a case-by-case
-basis. **Ask every time before touching:**
+Deployment lives entirely in `cloudflare/ohi-worker/`. Canonical manual
+flow (also what CI runs, minus the secret-sync steps):
 
-- `src/api/config/settings.py`
-- `src/api/config/dependencies.py` (unlocked during bring-up but still
-  treat as high-sensitivity; always show the user the diff first)
-- `src/api/adapters/null_graph.py`
-- `gui_ingestion_app/*`
-- `nul` (stray file; do not touch)
-- `api/` (the older module tree; current code lives under `src/api/`)
+```bash
+# 1. build the frontend static export first — the Worker's assets binding
+#    points at src/frontend/out
+cd src/frontend
+NEXT_PUBLIC_API_BASE=https://ohi.shiftbloom.studio/api/v2 \
+NEXT_PUBLIC_SITE_URL=https://ohi.shiftbloom.studio \
+pnpm run build
 
-The user has an explicit hard-rule pattern: "DO NOT push commits to
-remote without explicit user approval". Local commits are fine; push
-only after asking.
+# 2. build + typecheck + deploy the Worker
+cd ../../cloudflare/ohi-worker
+pnpm install
+pnpm run types    # wrangler types -> src/worker-configuration.d.ts
+pnpm run check    # tsc --noEmit
+pnpm run build    # wrangler deploy --dry-run --outdir dist
+pnpm run deploy   # wrangler deploy
+```
+
+Apply D1 migrations (`cloudflare/ohi-worker/migrations/`) with:
+
+```bash
+cd cloudflare/ohi-worker
+pnpm exec wrangler d1 migrations apply ohi-prod --remote
+```
+
+**CI/CD gate:** `.github/workflows/cloudflare-production.yml`, triggered
+on push to `main` or manual `workflow_dispatch`. `verify` job runs
+frontend lint/test/build + Worker typecheck/dry-run-build; `deploy` job
+(needs `verify` green) builds the frontend, applies D1 migrations,
+syncs the two Worker secrets below from repo secrets, runs
+`wrangler deploy`, and curls `/health/live`, `/health/ready`,
+`/health/deep` as a post-deploy smoke check. There is no separate
+staging environment — `main` green is the gate (see
+`environment: production` in the workflow).
+
+**Secrets are Worker secrets, not `wrangler.jsonc` vars:**
+- `ADMIN_TOKEN` — gates `GET/POST /api/v2/admin/*` (corpus overview,
+  corpus run start/status). Missing → those endpoints 503 with
+  `admin_token_not_configured`. Send it as `Authorization: Bearer
+  <token>` or `X-OHI-Admin-Token: <token>`.
+- `TURNSTILE_SECRET_KEY` — server-side verification for the Turnstile
+  widget gating `/api/v2/verify`. Missing → Turnstile check is
+  effectively disabled (see `requireTurnstile` in `src/index.ts`).
+
+Both are set via `wrangler secret put <NAME>` and are re-synced from
+the `OHI_ADMIN_TOKEN` / `TURNSTILE_SECRET_KEY` GitHub repo secrets on
+**every successful CI deploy** (`cloudflare-production.yml` steps
+"Configure admin token secret" / "Configure Turnstile secret"). If you
+rotate either manually with `wrangler secret put`, the next green CI
+deploy silently overwrites it back to the repo-secret value — update
+the GitHub repo secret too, or your manual rotation won't stick.
+
+## Corpus ingestion (D1 + Vectorize growth)
+
+The `ohi-corpus-ingestion` Cloudflare Workflow
+(`cloudflare/ohi-worker/src/corpus-ingestion.ts`, binding
+`CORPUS_WORKFLOW`) is how the evidence corpus grows. It's started via
+admin endpoints (`ADMIN_TOKEN` required):
+
+```bash
+# start a run
+curl -X POST https://ohi.shiftbloom.studio/api/v2/admin/corpus/runs \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "content-type: application/json" \
+  -d '{"strategy": "random", "limit": 2000}'
+# -> {"workflow_instance_id": "...", "status": "queued"}
+
+# check overall corpus state
+curl https://ohi.shiftbloom.studio/api/v2/admin/corpus -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# check one run
+curl https://ohi.shiftbloom.studio/api/v2/admin/corpus/runs/<run_id> -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+The Workflow fans work out through the `ohi-corpus-ingest` Queue
+(dead-letters to `ohi-corpus-ingest-dlq`), embeds with Workers AI,
+writes documents/chunks to D1 (`ohi-prod`), archives raw JSON to R2
+(`ohi-corpus-prod`), and upserts vectors into Vectorize
+(`ohi-evidence-bge-m3`). Queue delivery is at-least-once — consumers
+key on `(run_id, batch)` to stay idempotent; don't "fix" apparent
+duplicate processing by removing that key. Read
+`corpus-ingestion.ts` before assuming what a new `strategy` value does
+— don't guess from the field name.
 
 ## Known architectural choices (do NOT reverse without discussion)
 
-1. **Lambda + API Gateway HTTP API + CF proxy** for the API. NOT Lambda
-   Function URL as the CF origin — API Gateway is required because
-   Function URLs validate the HTTP Host header against their own
-   hostname and CF free/pro cannot override Host (Origin Rules are
-   Enterprise-only). See `infra/terraform/compute/api_gateway.tf` +
-   `infra/terraform/cloudflare/api_gateway_custom_domain.tf`.
-2. **Flat CF naming** (`ohi-api.shiftbloom.studio`, `ohi-neo4j.*`, etc.).
-   NOT nested `*.ohi.shiftbloom.studio`. CF free-tier Universal SSL
-   covers only 1-level wildcards. DNS + Access apps are all at zone root
-   with an `ohi-<label>` prefix. The `apex_subdomain="ohi"` variable in
-   cloudflare/ TF exists solely to keep the frontend apex at
-   `ohi.shiftbloom.studio`.
-3. **Native Gemini adapter** at `src/api/adapters/gemini.py` for LLM
-   calls. The OpenAI-compat shim (`adapters/openai.py`) is kept in-tree
-   as a fallback but NOT wired in prod (select via `LLM_BACKEND=openai`
-   env var). Gemini's OpenAI-compat shim silently drops
-   `safetySettings` + `generationConfig.thinkingConfig` — unacceptable
-   for a hallucination-detection product that MUST process factually-
-   wrong claims about real people.
-4. **Neo4j Aura Pro** (managed, AWS Frankfurt) is the graph store — NOT
-   the PC neo4j. Switched because bolt (TCP:7687) doesn't work through
-   CF's free-tier HTTPS tunnel. Aura instance id `0193408e`, URI in
-   compute TF's `var.neo4j_uri`, password in SM `ohi/neo4j-credentials`.
-5. **Embedding service runs on AWS Bedrock** (Titan Text Embeddings V2,
-   1024-dim). `OHI_EMBEDDING_BACKEND=bedrock` in Lambda env, consumed by
-   the tri-mode facade in `src/api/adapters/embeddings.py`
-   (`local` = in-process sentence-transformers for dev,
-   `remote` = HTTP to `pc-embed` container for legacy,
-   `bedrock` = prod). Historic note: embeddings ran on PC
-   (`docker/pc-embed/`, MiniLM-L12-v2) until 2026-04-21 — the
-   container is retained for local-dev use.
-6. **Reranking runs on AWS Bedrock** (Cohere `rerank-v3-5`).
-   `BEDROCK_RERANK_ENABLED=true`. `GraphRetriever` cascade is
-   Qdrant ANN (40 candidates) → Aura passage fetch → Cohere rerank
-   (top-12). Both collections are empty until Wave 3 Phase E ingestion
-   runs, so today the active evidence path is MCP sources (MediaWiki +
-   Wikidata + DBpedia).
-7. **Redis is currently disabled** (`REDIS_ENABLED=false` in compute TF
-   env). The PC webdis-over-CF-tunnel path is too lossy (webdis speaks
-   HTTP, `redis-py` speaks native Redis TCP). Planned migration:
-   ElastiCache for Valkey on `cache.t4g.micro` in a new VPC with fck-nat
-   for Lambda egress (~$15-20/mo total) once AWS Activate credits land.
-8. **Neo4j Aura Pro → PC-local Neo4j over Tailscale (planned).** The
-   Aura 64 GB RAM limit + managed-service cost are incompatible with
-   full biomed ingestion (PubMed + OpenAlex + enwiki + Wikidata) and
-   the non-profit / intermittent-availability use-case. Tailscale
-   solves the CF-free-tier bolt/TCP:7687 exposure problem that
-   originally forced the move TO Aura. Migration is not shipped yet —
-   track in `docs/CURRENT_ARCHITECTURE.md §4`.
+Full topology is in CURRENT_ARCHITECTURE.md — these are the choices
+worth knowing the *why* of before you suggest reversing them:
+
+1. **One Worker serves frontend + API + MCP on one custom domain**,
+   not a split frontend host + separate API backend. Same-origin
+   avoids the CORS/Host-header class of problems the prior
+   Lambda+CDN setup had, and Workers Static Assets serves the Next.js
+   static export natively.
+2. **D1 + Vectorize + R2 are the entire corpus store** — no external
+   graph DB or vector DB. Everything is a native Workers binding, so
+   there's no network hop or CF-tunnel dependency to keep alive.
+3. **NLI classification is an ensemble of two Workers AI models**
+   (`@cf/google/gemma-3-12b-it` + `@cf/meta/llama-3.3-70b-instruct-fp8-fast`)
+   run concurrently, with disagreement downgrading toward
+   neutral/refute, plus a separate `relevance_score` that gates
+   whether evidence counts toward the support/refute signal at all.
+   This replaced a single-model classifier that was scoring basic
+   false claims as ~70% true because one loosely-related "support"
+   evidence item could dominate `p_true` unpenalized — see the
+   evidence-evaluation rework note at the top of
+   CURRENT_ARCHITECTURE.md before changing this logic.
+4. **Cloudflare Turnstile + zone WAF/rate-limit rules gate public
+   traffic**, not an app-level account system. This is a public,
+   unauthenticated, non-profit service — bot mitigation has to happen
+   without requiring users to sign up.
+5. **Corpus growth runs through a Cloudflare Workflow**, not a one-shot
+   script, specifically for durable execution across many external
+   fetches (Wikipedia/Wikidata) with retry/resume built in.
 
 ## Critical operational traps
 
-Every one of these has bitten us. Watch for them.
+1. **A legacy AWS-era GitHub Actions workflow (`v2-main-deploy.yml`) is
+   still wired to `push: branches: [main]`** and still attempts an ECR
+   build + Lambda deploy on every push to `main`, alongside the real
+   `cloudflare-production.yml` gate. It is not part of the production
+   path and its pass/fail says nothing about the Cloudflare deploy.
+   Don't read a green/red on that workflow as a signal about prod, and
+   don't "fix" it without first confirming with Fabian whether the AWS
+   Lambda side is meant to be decommissioned entirely (deleting the
+   workflow file is a plausible fix but is a decision, not a given —
+   check first). Run `gh run list --workflow=cloudflare-production.yml`
+   specifically when you need real deploy status.
+2. **GitHub Actions on this repo can be billing-locked** — jobs fail in
+   ~3-5s with an annotation like "The job was not started because your
+   account is locked due to a billing issue," which looks identical to
+   a fast config error at a glance. `gh run view <id>` and read the
+   annotation before assuming a workflow bug. When this happens, manual
+   `wrangler deploy` from a local authenticated session is the
+   legitimate fallback — but **update CURRENT_ARCHITECTURE.md's
+   verified-Worker-version line yourself**, since GitHub Actions won't
+   record the deploy for you.
+3. **`ADMIN_TOKEN` / `TURNSTILE_SECRET_KEY` get overwritten on every
+   green CI deploy** from the `OHI_ADMIN_TOKEN` / `TURNSTILE_SECRET_KEY`
+   GitHub repo secrets (see Deployment section above). A manual
+   `wrangler secret put` rotation that isn't mirrored to the repo
+   secret will silently revert on the next successful deploy.
+4. **`/api/v2/verify` and `/mcp` trip the zone WAF's scripted-client
+   challenge for non-browser clients** (plain `curl`), even with a
+   valid admin token — this is intentional bot mitigation, not a bug.
+   `GET/POST /api/v2/admin/*` is not behind that challenge. If you need
+   to probe `/verify` end-to-end outside a real browser, expect the WAF
+   to block it and don't spend time trying to defeat it — that's the
+   point of the rule.
+5. **Queue consumers must stay idempotent per `(run_id, batch)`** (or
+   per job id for the verify queue) — `max_retries` + a DLQ mean
+   at-least-once delivery is guaranteed, not exactly-once. Don't add
+   logic that assumes a message is processed only once.
+6. **`wrangler deploy --dry-run --outdir dist` is the Worker's `build`
+   script**, not a real build step separate from deploy validation —
+   it's how CI/local checks catch config errors before a real
+   `wrangler deploy`. Don't skip it thinking it's redundant with `tsc`.
 
-1. **Lambda Function URL 403 `AccessDeniedException`** has four distinct
-   causes that look identical:
-   - Resource policy needs BOTH `FunctionURLAllowPublicAccess`
-     (InvokeFunctionUrl) AND `FunctionURLAllowInvokeAction` (InvokeFunction
-     with `lambda:InvokedViaFunctionUrl=true`) on this account. Fabian
-     added the second one via Console.
-   - Container crashed during init (bad entrypoint, missing module,
-     read-only-filesystem writes). Surfaces as 403 on URL invocation.
-   - Host header mismatch (URL validates Host). That's why we went to
-     API Gateway + custom domain.
-   - Account-level "Block public access for function URLs" — this
-     account didn't have it, but other AWS accounts might.
-2. **CF free-tier rate-limit rules** are capped at period=10s and
-   mitigation_timeout=10s. Any other value returns "not entitled to use
-   the period X". Cap is also 1 rule per `http_ratelimit` phase per zone.
-3. **CF Transform Rules cannot modify Host header** (error 20086/20087).
-   Origin Rules can, but **Origin Rules host_header override is
-   Enterprise-only**. Don't keep retrying.
-4. **CF free tier only supports creating ROOT zones**, not subdomain
-   zones. `ohi.shiftbloom.studio` as a CF zone fails with "Please ensure
-   you are providing the root domain and not any subdomains" (error
-   1116). This is why we flattened naming instead.
-5. **AWS Budgets only accepts USD.** Not EUR. compute/ TF already in USD.
-6. **Docker Lambda builds** require `--provenance=false --platform
-   linux/amd64` or Lambda rejects the image manifest as "not supported".
-7. **`terraform apply` exit 0 can be a lie.** The pattern we use is
-   `(... ; echo "DONE exit=$?") > /tmp/x.log 2>&1` — the outer shell
-   group's exit is whatever `echo` returns (always 0). Always grep the
-   log for `Error:`.
-8. **Gemini's OpenAI-compat endpoint rejects null-valued optional fields**
-   (e.g. `stop: null` → HTTP 400 "Value is not a string: null"). Our
-   adapter omits None values from the kwargs dict. Don't reintroduce
-   `stop=None` style.
-9. **Compute TF's `aws_lambda_permission.public_url`** has a history of
-   state drift — the permission exists in AWS but TF thinks it needs
-   to be created, so apply hangs 5m on "Still creating" before 409ing.
-   Already imported once; can recur. Treat the 409 as benign since
-   Lambda function itself gets modified before that error fires.
-10. **Qdrant client (qdrant-client 1.16) hides its httpx AsyncClient**
-    four levels deep: `self._client._client.http.<any>_api.api_client._async_client`.
-    `src/api/adapters/qdrant.py` walks to it via `dir()` + `endswith("_api")`
-    to inject the CF-Access-Client-Id/Secret headers. If qdrant-client
-    restructures, rewrite the walker.
-11. **`aws_secretsmanager_secret_version` resources have
-    `recovery_window_in_days=0`.** `put-secret-value` REPLACES with no
-    recovery. Always save the old value to a password manager before
-    rotating.
-12. **`aws lambda get-function-configuration --query ImageUri` returns
-    literal `"None"` for image-backed Lambdas** (Stream E1 discovery).
-    Use `aws lambda get-function --query 'Code.ImageUri'` instead —
-    that always returns the resolved-digest URI (`...@sha256:...`) of
-    the currently running image. Pin the immutable digest form, not a
-    mutable tag like `:prod`, when saving rollback anchors.
-13. **Response field is `document_score`, NOT `doc_score`** (E1
-    discovery). Any smoke parser that uses `d.get('doc_score')`
-    silently returns `None`. Use `d.get('document_score')`.
-14. **ECR `:prod` tag drifts after a rollback** (E1 trap). Rolling
-    Lambda back via `update-function-code --image-uri <prev-digest>`
-    updates Lambda but leaves `:prod` pointing at the failed image in
-    ECR. Always re-tag `:prod` to the rollback digest via
-    `aws ecr put-image --image-tag prod --image-manifest "$MANIFEST"`
-    so next-deploy agents don't reason incorrectly about what's in prod.
-15. **Autonomous deploy protocol** — Fabian disabled manual G3/G8 gates
-    on deploys after Wave 1 pacing pain. Deploy agents follow the
-    protocol in `docs/superpowers/plans/2026-04-18-phase2-orchestration.md`
-    §5.3: pre-deploy checkpoint → TF-plan safety audit → image build +
-    deploy → two-tier smoke (per-deploy + optional end-of-phase) →
-    auto-rollback on smoke fail → handoff with status. **One deploy
-    attempt per session, one rollback attempt, no retry loops.**
-16. **Lambda digest ≠ ECR `:prod` tag after a rollback.** Verify BOTH
-    before claiming prod state. As of 2026-04-22 the Lambda runs
-    `sha256:0e3676a2...` (hotfix-20260421-nli-refute) while ECR `:prod`
-    points at `sha256:7578dd4b...` (post-Bedrock deploy of `cf77b24`).
-    Always run `aws lambda get-function --query 'Code.ImageUri'` for
-    the live digest and `aws ecr describe-images --image-ids
-    imageTag=prod` for the tag pointer, and compare. See trap #14 for
-    the retag recipe.
+## Legacy code (retained, not production)
+
+`src/api/` (FastAPI verification service), `src/ohi-mcp-server/`
+(standalone MCP package), `gui_ingestion_app/`, `gui_benchmark_app/`,
+`docker/`, and `infra/` (Terraform for the pre-Cloudflare AWS stack)
+remain in the repo for local development and as migration reference.
+None of them are exercised by `cloudflare-production.yml` and none are
+in the live request path — see
+[docs/CURRENT_ARCHITECTURE.md §1](docs/CURRENT_ARCHITECTURE.md#1-production-architecture)
+("No production path depends on..."). Treat changes there as
+local-dev-only unless a task explicitly says otherwise, and don't infer
+production behavior from that code — read `cloudflare/ohi-worker/src/`
+instead.
+
+The user has an explicit hard-rule pattern: **"DO NOT push commits to
+remote without explicit user approval."** Local commits are fine; push
+only after asking. This applies regardless of which part of the repo
+you're touching.
 
 ## Git workflow
 
-- **Active branch is `main`.** The `feat/ohi-v2-foundation` branch was
-  merged into `main` at commit `c5010cc` ("v2.0 Wave 2 cutover — main
-  retired, feat is content"). All v2 development since then has landed
-  directly on `main`, and `main` auto-deploys Lambda via the
-  `.github/workflows/v2-main-deploy.yml` workflow (build → ECR → Lambda
-  update → health check → auto-rollback).
+- **Active branch is `main`.** `main` auto-deploys to Cloudflare via
+  `.github/workflows/cloudflare-production.yml` on every push (see
+  Deployment above, and trap #1 about the stale AWS workflow that also
+  fires).
 - **Push to `main` still requires Fabian's explicit approval (Gate
   G2)**, once per session. Subsequent pushes in the same session are
   fine after G2 opens.
 - **Per-feature branches**: `f/<name>`, `fix/<name>`, `feat/<name>` off
-  main. These can be pushed freely to remote for PRs / draft state —
+  `main`. These can be pushed freely to remote for PRs / draft state —
   only the merge into `main` is gated.
 - Commit messages: Conventional Commits. Heavy on the *why*, files
   involved, and "end state verified by" lines with concrete test
   evidence. No emoji. Commit-body length is fine — the git log is the
   audit trail for a public-facing open-source project.
-- Current `main` tip at time of this doc update: `cf77b24` (docs: add
-  CURRENT_ARCHITECTURE + OHI_onepager.pdf). Update on next major
-  milestone.
+- Any commit that changes Cloudflare topology, bindings, models, or env
+  vars must update `docs/CURRENT_ARCHITECTURE.md` in the same commit —
+  see the SSoT section above.
 
 ## User communication
 
@@ -339,76 +372,50 @@ Every one of these has bitten us. Watch for them.
 - Be honest about scope — but **do not give time estimates in hours /
   days / weeks for OHI work**. Fabian reads those as hallucinated
   under-estimates. Frame scope in **code-surface metrics** (files
-  touched, LOC, module count, stream count) instead. See memory
+  touched, LOC, module count) instead. See memory
   `feedback_no_time_scales.md`.
-- **Do not conflate RAM vs storage vs vector-index carve-out** when
-  citing GB numbers for any cloud service (Aura, DynamoDB, OpenSearch,
-  etc.). Always explicit: `<RAM>GB RAM / <disk>GB disk`. See memory
-  `feedback_gb_ram_vs_storage.md`.
+- **Do not conflate different capacity dimensions** when citing numbers
+  for any Cloudflare product — e.g. D1 storage size vs. row count,
+  Vectorize dimension count vs. index storage, R2 object count vs.
+  bytes stored, Workers CPU-time limit vs. wall-clock duration. Always
+  state which dimension a number refers to. See memory
+  `feedback_gb_ram_vs_storage.md` (written for the old AWS stack — the
+  underlying principle still applies to Cloudflare's resource limits).
 - When you hit 2-3 consecutive fixes that reveal new symptoms, **stop**
   and present architectural alternatives. Fabian's exact feedback:
   "den Wald vor lauter Bäumen nicht sehen."
 - When in doubt about whether an action is destructive or irreversible,
-  ask. The user has explicit hard rules about force-push, rotating
-  secrets without saving, and touching WIP files.
+  ask. This includes D1 migrations against `--remote`, secret rotation,
+  and force-push.
 
 ## Useful runbooks
 
-- `docs/runbooks/bootstrap-cold-start.md` — for recreating from scratch
-- `docs/runbooks/cloudflare-api-token-rotate.md` — CF token scopes list
-- `docs/runbooks/pc-compose-start.md` — PC docker stack bring-up
-- `docs/runbooks/rollback-deploy.md` — emergency Lambda image rollback
-- `docs/runbooks/rotate-secret.md` — generic SM secret rotation
-- `docs/runbooks/google-cloud-quota-cap.md` — Gemini API cost backstop
-- `docs/runbooks/vercel-setup.md` — first-time Vercel wiring
+`docs/runbooks/` predates the Cloudflare migration and most of it
+describes decommissioned AWS/Terraform/PC-Tailscale infrastructure
+(`bootstrap-cold-start.md`, `rollback-deploy.md`, `rotate-edge-secret.md`,
+`rotate-secret.md`, `vercel-setup.md`, `google-cloud-quota-cap.md`,
+`incident-response-basic.md`). **Do not follow their command examples
+against production** — verify against `cloudflare/ohi-worker/` and
+CURRENT_ARCHITECTURE.md first. Still generally applicable:
+
+- `docs/runbooks/cloudflare-api-token-rotate.md` — CF token scope
+  reference (some scopes listed are for the retired Terraform layers;
+  check against what `wrangler`/CI actually need before granting).
+- `docs/runbooks/pc-compose-start.md` — local Docker stack for legacy
+  local-dev services (`docker/compose/pc-data.yml`), unrelated to prod.
+
+No Cloudflare-native runbooks exist yet (deploy/rollback/secret-rotate
+procedures for the Worker are documented inline in this file and in
+CURRENT_ARCHITECTURE.md instead). Writing dedicated ones is a
+reasonable follow-up if this file grows unwieldy.
 
 ## Useful references
 
-- Spec + plan + checkpoints + handoffs: `docs/superpowers/` (gitignored,
-  local). Four subdirs: `specs/`, `plans/`, `checkpoints/`, `handoffs/`.
-- Active plan: `docs/superpowers/plans/2026-04-18-phase2-orchestration.md`
-  — Wave 2+3 orchestration, autonomous deploy protocol (§5.3), gates
-  table (§6.1), rollback recipe (§6.3).
-- Live traffic path diagram: `docs/CURRENT_ARCHITECTURE.md` §1 (SSoT).
-- Secret locations: latest checkpoint, §5.
-- Phase 2 backlog and priorities: latest checkpoint, §7.
-- Stream handoffs (sequential dev state record): `docs/superpowers/handoffs/`
-  — stream-a → stream-b → stream-d1 → stream-e1 → stream-d2 → stream-e2.
-
-## Current v2 state (2026-04-22)
-
-`main` tip `cf77b24`. Wave 1 + Wave 2 shipped; Wave 3 code-side
-largely landed (PCG + cc-NLI live; corpus ingestion pipeline in
-place, collections empty pending Phase E full run):
-
-- **Wave 1–2 (Streams A / B / D1 / F / D2)**: MediaWiki MCP,
-  Gemini 3 Pro claim-evidence NLI, NLI wired into the pipeline with
-  `asyncio.gather + Semaphore(10)`, Lambda `timeout_s=180`, async
-  `/verify` polling (202 + `job_id`, DynamoDB `ohi-verify-jobs`,
-  self-async-invoke, frontend poll loop).
-- **Wave 2.5 — Bedrock migration (commits `65b9818` → `d2b617a`)**:
-  embeddings moved PC → Bedrock Titan v2 (1024-dim); Bedrock Cohere
-  rerank-v3-5 added as a new `GraphRetriever` stage;
-  `EmbeddingSettings` + `RetrievalSettings` Bedrock fields + DI
-  wiring; Lambda IAM for `bedrock:InvokeModel` + `bedrock:Rerank`.
-- **Wave 3 — PCG + corpus ingestion**: `pcg_belief_propagation`
-  adapter (TRW-BP + LBP fallback + Gibbs MCMC sanity);
-  `ClaimClaimNliDispatcher` (OpenAI GPT-5.4 primary + Gemini
-  fallback — primary inactive today because `OHI_OPENAI_API_KEY` is
-  unset); offset-based checkpoint recovery for all ingestion passes;
-  `ohi-ingest` console script; `EndToEndHealth` dashboard +
-  `/health/live` + `/health/ready`.
-- **Post-deploy drift**: Lambda is currently on the pre-Bedrock-merge
-  hotfix digest (`sha256:0e3676a2...`, `hotfix-20260421-nli-refute`)
-  after a silent rollback on 2026-04-21 21:29 UTC. ECR `:prod` points
-  at `sha256:7578dd4b...` (`cf77b24` content). Env vars are
-  Bedrock-configured and the hotfix image is recent enough to support
-  the Bedrock backend selector. Running prod is functional but not on
-  the content of `main` tip — next deploy will roll forward.
-
-**Next planned change: Neo4j Aura → PC-local over Tailscale.** Driver:
-Aura 64 GB RAM limit + cost vs. full biomed ingestion + non-profit
-use-case. Requires Lambda networking adjustment (Tailscale extension
-/ sidecar), `NEO4J_URI` env change, and clean 503 behaviour when the
-Tailnet peer is offline. Full detail in
-[docs/CURRENT_ARCHITECTURE.md §4](docs/CURRENT_ARCHITECTURE.md#4-planned-changes-not-yet-shipped).
+- Live topology, resource table, deploy commands, last-verified anchor:
+  [docs/CURRENT_ARCHITECTURE.md](docs/CURRENT_ARCHITECTURE.md) (SSoT).
+- API surface: [docs/API.md](docs/API.md).
+- Frontend architecture (polling, MCP client): [docs/FRONTEND.md](docs/FRONTEND.md).
+- CI/CD definition: `.github/workflows/cloudflare-production.yml`.
+- Worker source: `cloudflare/ohi-worker/src/index.ts` (routing, pipeline,
+  admin/turnstile auth), `knowledge-tools.ts` (evidence connectors),
+  `corpus-ingestion.ts` (corpus Workflow).
