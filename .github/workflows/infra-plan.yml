@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        layer: [storage, secrets, vercel, compute, cloudflare, observability]
+        layer: [storage, secrets, compute, cloudflare, observability]
     defaults:
       run:
         working-directory: infra/terraform/${{ matrix.layer }}
