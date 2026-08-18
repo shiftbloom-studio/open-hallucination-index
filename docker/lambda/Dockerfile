@@ -13,7 +13,7 @@
 # Tailnet. See docker/lambda/entrypoint.sh for the startup choreography.
 
 # --- Stage 0: build tsnet proxy (Go) ---------------------------------------
-FROM public.ecr.aws/docker/library/golang:1.23-alpine AS tsproxy-builder
+FROM public.ecr.aws/docker/library/golang:1.24-alpine AS tsproxy-builder
 
 WORKDIR /src
 # Copy go.mod + go.sum together so `go mod download` uses the pinned
