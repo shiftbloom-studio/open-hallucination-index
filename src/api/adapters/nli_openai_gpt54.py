@@ -137,18 +137,14 @@ class NliOpenAIGpt54Adapter:
         self._model, self._effort = _parse_model_with_effort(model_with_effort)
         self._max_retries = max_retries
 
-    async def classify(
-        self, claim_text: str, evidence_text: str
-    ) -> NliResult:
+    async def classify(self, claim_text: str, evidence_text: str) -> NliResult:
         """Run one NLI classification. Never raises — terminal
         failures return the ``_NEUTRAL_FALLBACK`` sentinel.
 
         For the cc-NLI channel, ``claim_text`` is Claim A and
         ``evidence_text`` is Claim B (port signature reused from D1).
         """
-        prompt = _NLI_PROMPT_TEMPLATE.format(
-            claim_text=claim_text, evidence_text=evidence_text
-        )
+        prompt = _NLI_PROMPT_TEMPLATE.format(claim_text=claim_text, evidence_text=evidence_text)
         last_exc: Exception | None = None
         for attempt in range(1, self._max_retries + 1):
             try:
@@ -238,7 +234,7 @@ def _parse_result(raw: str) -> NliResult:
         if first_nl >= 0:
             stripped = stripped[first_nl + 1 :]
         if stripped.endswith("```"):
-            stripped = stripped[: -3]
+            stripped = stripped[:-3]
         stripped = stripped.strip()
     data = orjson.loads(stripped)
     label = data["label"]
@@ -249,9 +245,7 @@ def _parse_result(raw: str) -> NliResult:
     neutral = float(data["neutral_score"])
     total = supporting + refuting + neutral
     if total <= 0:
-        raise ValueError(
-            f"cc-NLI JSON scores sum to non-positive value {total!r}"
-        )
+        raise ValueError(f"cc-NLI JSON scores sum to non-positive value {total!r}")
     supporting /= total
     refuting /= total
     neutral /= total

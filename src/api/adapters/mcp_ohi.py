@@ -134,7 +134,9 @@ class TargetedOHISource(OHIMCPAdapter):
         return self._source_name_override
 
     async def find_evidence(self, claim: Claim) -> list[Evidence]:
-        logger.debug(f"TargetedOHISource.find_evidence for {self._source_name_override}, search_type={self._search_type}")
+        logger.debug(
+            f"TargetedOHISource.find_evidence for {self._source_name_override}, search_type={self._search_type}"
+        )
         return await self.search_for_evidence(claim, max_results=5, search_type=self._search_type)
 
     def _map_string_to_source(self, source_str: str) -> EvidenceSource:
@@ -156,7 +158,7 @@ class TargetedOHISource(OHIMCPAdapter):
             return EvidenceSource.MCP_CONTEXT7
         if "openalex" in s or "crossref" in s or "europe" in s and "pmc" in s or "academic" in s:
             return EvidenceSource.ACADEMIC
-        
+
         return EvidenceSource.KNOWLEDGE_GRAPH
 
     async def search_for_evidence(
@@ -198,12 +200,18 @@ class TargetedOHISource(OHIMCPAdapter):
             "europepmc": ("search_europepmc", {"query": claim.text, "limit": max_results}),
             # Medical cluster
             "pubmed": ("search_pubmed", {"query": claim.text, "limit": max_results}),
-            "clinical_trials": ("search_clinical_trials", {"query": claim.text, "limit": max_results}),
+            "clinical_trials": (
+                "search_clinical_trials",
+                {"query": claim.text, "limit": max_results},
+            ),
             # Other sources
             "gdelt": ("search_gdelt", {"query": claim.text, "limit": max_results}),
             "worldbank": ("get_world_bank_indicator", {"indicator": claim.text}),
             "osv": ("search_vulnerabilities", {"query": claim.text}),
-            "context7": ("query-docs", {"query": claim.text, "libraryId": "/general/tech"}), # Placeholder lib ID
+            "context7": (
+                "query-docs",
+                {"query": claim.text, "libraryId": "/general/tech"},
+            ),  # Placeholder lib ID
         }
 
         tool_name, arguments = tool_map.get(
@@ -213,7 +221,7 @@ class TargetedOHISource(OHIMCPAdapter):
 
         try:
             results = await self.call_tool(tool_name, arguments)
-            
+
             evidence_list: list[Evidence] = []
             default_source = TOOL_TO_SOURCE.get(tool_name, EvidenceSource.KNOWLEDGE_GRAPH)
 
@@ -224,7 +232,7 @@ class TargetedOHISource(OHIMCPAdapter):
                     source = self._map_string_to_source(str(source_str))
                 else:
                     source = default_source
-                
+
                 evidence_list.append(self._create_evidence(result, source, tool_name))
 
             logger.info(

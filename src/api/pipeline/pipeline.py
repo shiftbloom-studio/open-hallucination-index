@@ -371,14 +371,10 @@ class Pipeline:
         del assignments  # Domain routing feeds L5 conformal, not L3/L4 here.
 
         if self._pcg is not None and self._nli_adapter is not None:
-            return await self._compute_posteriors_via_pcg(
-                claims, evidence_per_claim, rigor=rigor
-            )
+            return await self._compute_posteriors_via_pcg(claims, evidence_per_claim, rigor=rigor)
 
         if self._nli_adapter is not None:
-            return await self._compute_posteriors_via_nli_adapter(
-                claims, evidence_per_claim
-            )
+            return await self._compute_posteriors_via_nli_adapter(claims, evidence_per_claim)
 
         # Placeholder path: no NLI adapter, so no per-evidence label
         # signal. Buckets default to the pre-NLI convention (everything
@@ -765,18 +761,14 @@ def _annotate_evidence_with_nli(
     bucket.
     """
     bucket_score = (
-        nli_result.supporting_score
-        if nli_result.label == "support"
-        else nli_result.refuting_score
+        nli_result.supporting_score if nli_result.label == "support" else nli_result.refuting_score
     )
     structured_data = dict(evidence.structured_data or {})
     structured_data.update(
         {
             "nli_label": nli_result.label,
             "nli_reasoning": (
-                None
-                if nli_result.reasoning == "nli_unavailable"
-                else nli_result.reasoning
+                None if nli_result.reasoning == "nli_unavailable" else nli_result.reasoning
             ),
             "supporting_score": nli_result.supporting_score,
             "refuting_score": nli_result.refuting_score,

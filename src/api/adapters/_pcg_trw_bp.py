@@ -58,9 +58,7 @@ def _edge_strength(binary_log_factor_2x2: np.ndarray) -> float:
     return float(np.abs(m[0, 0] - m[0, 1]) + np.abs(m[1, 1] - m[1, 0]))
 
 
-def _mst_prim(
-    n: int, edges: list[tuple[int, int]], weights: list[float]
-) -> list[int]:
+def _mst_prim(n: int, edges: list[tuple[int, int]], weights: list[float]) -> list[int]:
     """Prim's algorithm, maximum-spanning-tree variant (pick heaviest
     edge at each step). Returns indices into ``edges`` forming the MST.
     Works on a forest if the graph is disconnected (returns a

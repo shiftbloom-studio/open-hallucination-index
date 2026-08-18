@@ -30,9 +30,7 @@ logger = logging.getLogger("ohi.middleware.edge_secret")
 
 
 class EdgeSecretMiddleware(BaseHTTPMiddleware):
-    def __init__(
-        self, app: ASGIApp, *, get_expected_secret: Callable[[], str]
-    ) -> None:
+    def __init__(self, app: ASGIApp, *, get_expected_secret: Callable[[], str]) -> None:
         super().__init__(app)
         self._get_expected = get_expected_secret
 

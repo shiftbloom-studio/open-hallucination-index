@@ -459,7 +459,9 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
             title_terms = set(self._extract_keywords(title))
             snippet_terms = set(self._extract_keywords(snippet))
             object_overlap = sum(
-                1 for keyword in object_keywords if keyword in title_terms or keyword in snippet_terms
+                1
+                for keyword in object_keywords
+                if keyword in title_terms or keyword in snippet_terms
             )
             score += object_overlap * 6.0
 
