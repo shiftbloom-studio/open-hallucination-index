@@ -2,8 +2,72 @@
 
 First off, thank you for considering contributing to Open Hallucination Index! 🎉
 
+## First evening
+
+You do not need to be good. Finish the small thing.
+English or German is fine.
+Docs is a valid first door.
+
+Pick a [good first issue](https://github.com/shiftbloom-studio/open-hallucination-index/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22), comment on it, and open a focused PR.
+
+If the rest of this guide feels heavy, start at https://github.com/shiftbloom-studio/open-hallucination-index/issues/52
+
+## First Worker evening
+
+Production is the Cloudflare Worker in `cloudflare/ohi-worker/`. The FastAPI app in `src/api/` (`ohi-server`) is a legacy local stack. You do not need Docker, Neo4j, Qdrant, Redis, or `ohi-server` to work on the Worker.
+
+| | Production Worker | `ohi-server` (`src/api`) |
+|---|---|---|
+| Runtime | Cloudflare Workers (`wrangler`) | FastAPI / Python |
+| Public API | `/api/v2` | `/api/v1` |
+| Stores | D1, Vectorize, R2, Durable Objects | Neo4j, Qdrant, Redis |
+| In the live request path? | Yes (`https://ohi.shiftbloom.studio`) | No |
+
+Topology and the short recommended loop live in [CURRENT_ARCHITECTURE.md](CURRENT_ARCHITECTURE.md) §4.
+
+### Install and the safe wrangler commands
+
+This package has its own lockfile. Use `pnpm` from `cloudflare/ohi-worker/` (CI uses Node 24).
+
+```bash
+cd cloudflare/ohi-worker
+pnpm install
+pnpm run types   # wrangler types -> src/worker-configuration.d.ts
+pnpm run check   # tsc --noEmit
+pnpm run build   # wrangler deploy --dry-run --outdir dist
+```
+
+`pnpm run build` compiles the Worker without publishing it. That is the first-evening check.
+
+`pnpm run dev` runs `wrangler dev` (local Miniflare by default). Pair it with the frontend loop from CURRENT_ARCHITECTURE §4 (`NEXT_PUBLIC_API_BASE=http://localhost:8787/api/v2`). `wrangler.jsonc` serves static assets from `src/frontend/out`; build that export if you need the Worker to serve pages.
+
+Do not run these on a first evening (they touch production):
+
+- `pnpm run deploy` / `wrangler deploy`
+- `wrangler d1 migrations apply ohi-prod --remote`
+- `wrangler secret put`
+- `wrangler dev --remote` (uses deployed Cloudflare resources / the production zone edge)
+
+### Bindings and secrets without production credentials
+
+`wrangler.jsonc` does not set `remote: true` on bindings. Local `wrangler dev` therefore uses local simulations for D1 (`OHI_DB`), R2 (`OHI_CORPUS`), Queues, Durable Objects, and Workflows — empty, not a copy of prod. Vectorize (`OHI_VECTOR`) has no local simulation. Workers AI (`AI`) is not a local model; calls go to Cloudflare when you are authenticated.
+
+`ADMIN_TOKEN` and `TURNSTILE_SECRET_KEY` are Worker secrets, not `wrangler.jsonc` vars. Do not put production values in the repo.
+
+Without those secrets, the code fails closed or skips as follows (`cloudflare/ohi-worker/src/index.ts`):
+
+- `ADMIN_TOKEN` missing: `GET/POST /api/v2/admin/*` returns `503` with `admin_token_not_configured`
+- `TURNSTILE_SECRET_KEY` missing: `rejectIfAbusive` skips the Turnstile check and does not challenge the request
+- `GET /health/live`: no bindings required
+- `GET /health/ready`: probes local D1 and Durable Objects; it marks Workers AI and Vectorize as `configured` without calling them
+- `GET /health/deep`: actually calls Workers AI, Wikipedia, and Vectorize — expect `degraded` locally when Vectorize/AI are not remote
+
+Do not publish secrets. Do not try to bypass the production WAF or Turnstile.
+
 ## 📋 Table of Contents
 
+- [First evening](#first-evening)
+- [First Worker evening](#first-worker-evening)
 - [Code of Conduct](#code-of-conduct)
 - [Getting Started](#getting-started)
 - [Development Setup](#development-setup)
