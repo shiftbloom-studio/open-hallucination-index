@@ -7,7 +7,7 @@ on:
         type: choice
         description: Layer to apply
         required: true
-        options: [storage, secrets, vercel, cloudflare, observability]
+        options: [storage, secrets, cloudflare, observability]
       confirm:
         type: string
         description: 'Type "apply" to confirm'
