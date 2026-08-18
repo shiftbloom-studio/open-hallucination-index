@@ -255,9 +255,7 @@ class Pass2PassageWriter:
             if not plain:
                 continue
             mentions = self._extract_mention_titles(section.wikilinks)
-            for chunk_idx, (chunk, token_estimate) in enumerate(
-                self._split_into_chunks(plain)
-            ):
+            for chunk_idx, (chunk, token_estimate) in enumerate(self._split_into_chunks(plain)):
                 passage_id = _passage_id(article_qid, section_title, section_ordinal, chunk_idx)
                 text_hash = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
                 yield PassageChunk(

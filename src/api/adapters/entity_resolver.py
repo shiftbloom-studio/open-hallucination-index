@@ -30,9 +30,34 @@ logger = logging.getLogger(__name__)
 
 _STOPWORDS: frozenset[str] = frozenset(
     {
-        "the", "a", "an", "is", "was", "were", "are", "be", "been", "being",
-        "did", "do", "does", "has", "have", "had", "of", "in", "on", "at",
-        "to", "for", "with", "by", "from", "and", "or", "but",
+        "the",
+        "a",
+        "an",
+        "is",
+        "was",
+        "were",
+        "are",
+        "be",
+        "been",
+        "being",
+        "did",
+        "do",
+        "does",
+        "has",
+        "have",
+        "had",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "with",
+        "by",
+        "from",
+        "and",
+        "or",
+        "but",
     }
 )
 

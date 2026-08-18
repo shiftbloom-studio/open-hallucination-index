@@ -27,14 +27,16 @@ async def test_mediawiki_find_evidence_prefers_matched_search_snippet(
                     "pageid": 736,
                     "snippet": (
                         '<span class="searchmatch">Albert Einstein</span> '
-                        'was born in Ulm, Germany, in 1879.'
+                        "was born in Ulm, Germany, in 1879."
                     ),
                 }
             ]
         return []
 
     async def fake_get_extract(title: str, sentences: int = 5) -> str:
-        raise AssertionError(f"lead extract should not be fetched for snippet-friendly page {title!r}")
+        raise AssertionError(
+            f"lead extract should not be fetched for snippet-friendly page {title!r}"
+        )
 
     monkeypatch.setattr(adapter, "_search", fake_search)
     monkeypatch.setattr(adapter, "_get_extract", fake_get_extract)
@@ -98,8 +100,8 @@ async def test_mediawiki_find_evidence_ranks_exact_subject_page_above_noisy_full
                     "title": "Albert Einstein",
                     "pageid": 736,
                     "snippet": (
-                        "<span class=\"searchmatch\">Albert</span> "
-                        "<span class=\"searchmatch\">Einstein</span> "
+                        '<span class="searchmatch">Albert</span> '
+                        '<span class="searchmatch">Einstein</span> '
                         "(14 March 1879 – 18 April 1955) was a German-born theoretical physicist."
                     ),
                 }
@@ -126,9 +128,7 @@ async def test_mediawiki_find_evidence_ranks_exact_subject_page_above_noisy_full
     assert evidence[0].structured_data is not None
     assert evidence[0].structured_data["title"] == "Albert Einstein"
     assert evidence[0].structured_data["matched_query"] == "Albert Einstein"
-    assert evidence[0].content.startswith(
-        "Albert Einstein: Albert Einstein (14 March 1879"
-    )
+    assert evidence[0].content.startswith("Albert Einstein: Albert Einstein (14 March 1879")
 
 
 def test_annotate_evidence_with_nli_preserves_scores_and_reasoning() -> None:

@@ -77,9 +77,7 @@ class BedrockRerankAdapter:
         if not documents:
             return []
         if not self.enabled:
-            return [
-                RerankScore(index=i, relevance_score=0.0) for i in range(len(documents))
-            ]
+            return [RerankScore(index=i, relevance_score=0.0) for i in range(len(documents))]
 
         wanted = min(top_k or self._default_top_k, len(documents))
         loop = asyncio.get_running_loop()
@@ -131,11 +129,8 @@ class BedrockRerankAdapter:
             idx = item.get("index")
             score = item.get("relevanceScore")
             if isinstance(idx, int):
-                ranked.append(
-                    RerankScore(index=idx, relevance_score=float(score or 0.0))
-                )
+                ranked.append(RerankScore(index=idx, relevance_score=float(score or 0.0)))
         if not ranked:
             raise RuntimeError("Bedrock rerank returned no results")
         ranked.sort(key=lambda row: row.relevance_score, reverse=True)
         return ranked
-

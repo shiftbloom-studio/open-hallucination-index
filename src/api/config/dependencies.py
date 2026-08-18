@@ -168,9 +168,7 @@ async def _initialize_adapters() -> None:
         _llm_provider = OpenAILLMAdapter(settings.llm)
     else:
         _llm_provider = GeminiLLMAdapter(settings.llm)
-    logger.info(
-        f"LLM provider: {settings.llm.model} (backend={llm_backend})"
-    )
+    logger.info(f"LLM provider: {settings.llm.model} (backend={llm_backend})")
 
     # Neo4j — non-fatal on connect failure. A dead graph store degrades
     # retrieval (falls back to MediaWiki MCP + Qdrant) but must not take
@@ -232,9 +230,7 @@ async def _initialize_adapters() -> None:
     # the model id to settings.nli.llm_model — this lets L1 and L3 evolve
     # their model choices independently without duplicating all the other
     # LLM_* env vars.
-    _nli_llm_settings = settings.llm.model_copy(
-        update={"model": settings.nli.llm_model}
-    )
+    _nli_llm_settings = settings.llm.model_copy(update={"model": settings.nli.llm_model})
     _nli_llm_provider = GeminiLLMAdapter(_nli_llm_settings)
     _nli_adapter = NliGeminiAdapter(
         llm=_nli_llm_provider,
@@ -255,10 +251,7 @@ async def _initialize_adapters() -> None:
     for _src in _mcp_sources:
         try:
             await _src.connect()
-            logger.info(
-                f"MCP source connected: {_src.source_name} "
-                f"(available={_src.is_available})"
-            )
+            logger.info(f"MCP source connected: {_src.source_name} (available={_src.is_available})")
         except Exception as e:
             logger.warning(
                 f"MCP source {getattr(_src, 'source_name', type(_src).__name__)} "
@@ -327,9 +320,7 @@ async def _initialize_adapters() -> None:
     # we wire the Gemini fallback as BOTH primary and fallback (degrades
     # gracefully without blowing up cold-start).
     cc_openai_key = settings.cc_nli.openai_api_key.get_secret_value().strip()
-    want_openai_primary = (
-        settings.cc_nli.llm_provider == "openai" and bool(cc_openai_key)
-    )
+    want_openai_primary = settings.cc_nli.llm_provider == "openai" and bool(cc_openai_key)
 
     # Fallback Gemini cc-NLI uses a dedicated LLM instance tuned to
     # settings.cc_nli.llm_fallback_model — keeps claim-evidence and

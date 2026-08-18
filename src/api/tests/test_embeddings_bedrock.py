@@ -83,9 +83,7 @@ async def test_bedrock_embedding_adapter_invokes_titan_with_expected_payload(
 async def test_bedrock_embedding_adapter_accepts_embeddings_by_type_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fake_client = _FakeBedrockClient(
-        {"embeddingsByType": {"float": [0.9, 0.8, 0.7, 0.6]}}
-    )
+    fake_client = _FakeBedrockClient({"embeddingsByType": {"float": [0.9, 0.8, 0.7, 0.6]}})
 
     monkeypatch.setattr(
         boto3,

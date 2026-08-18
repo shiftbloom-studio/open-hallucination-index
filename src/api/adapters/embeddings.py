@@ -305,12 +305,8 @@ class LocalEmbeddingAdapter:
         backend = os.environ.get("OHI_EMBEDDING_BACKEND", "local").lower()
         if backend == "remote":
             self._impl: (
-                _InProcessEmbeddingAdapter
-                | _RemoteEmbeddingAdapter
-                | _BedrockEmbeddingAdapter
-            ) = (
-                _RemoteEmbeddingAdapter(settings)
-            )
+                _InProcessEmbeddingAdapter | _RemoteEmbeddingAdapter | _BedrockEmbeddingAdapter
+            ) = _RemoteEmbeddingAdapter(settings)
             logger.info("LocalEmbeddingAdapter facade → remote backend")
         elif backend == "bedrock":
             self._impl = _BedrockEmbeddingAdapter(settings)
