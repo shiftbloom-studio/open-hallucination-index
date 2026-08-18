@@ -262,7 +262,7 @@ class HTTPMCPAdapter(MCPKnowledgeSource):
                 score = float(raw_score.rstrip("%")) / 100.0
             else:
                 score = float(raw_score)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             score = 0.8
 
         # Normalize scores that may be on 0-100 scale or otherwise out of range

@@ -44,9 +44,7 @@ class QdrantPassageSearch:
         self._collection = collection_name
         self._score_threshold = score_threshold
 
-    async def search(
-        self, query_text: str, *, top_k: int = 10
-    ) -> list[PassageHit]:
+    async def search(self, query_text: str, *, top_k: int = 10) -> list[PassageHit]:
         try:
             vec = await self._embed.generate_embedding(query_text)
         except Exception as exc:  # noqa: BLE001

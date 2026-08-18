@@ -176,16 +176,28 @@ ALL_RELATIONSHIP_TYPES = [
 
 # Relationship categories for semantic queries
 PERSON_RELATIONSHIPS = [
-    REL_MARRIED_TO, REL_PARENT_OF, REL_CHILD_OF, REL_EDUCATED_AT,
-    REL_EMPLOYED_BY, REL_WON_AWARD, REL_HAS_OCCUPATION, REL_HAS_NATIONALITY,
+    REL_MARRIED_TO,
+    REL_PARENT_OF,
+    REL_CHILD_OF,
+    REL_EDUCATED_AT,
+    REL_EMPLOYED_BY,
+    REL_WON_AWARD,
+    REL_HAS_OCCUPATION,
+    REL_HAS_NATIONALITY,
 ]
 
 CREATIVE_RELATIONSHIPS = [
-    REL_AUTHORED, REL_HAS_GENRE, REL_INFLUENCED_BY, REL_INFLUENCED,
+    REL_AUTHORED,
+    REL_HAS_GENRE,
+    REL_INFLUENCED_BY,
+    REL_INFLUENCED,
 ]
 
 ORGANIZATION_RELATIONSHIPS = [
-    REL_FOUNDED_BY, REL_HEADQUARTERED_IN, REL_IN_INDUSTRY, REL_EMPLOYED_BY,
+    REL_FOUNDED_BY,
+    REL_HEADQUARTERED_IN,
+    REL_IN_INDUSTRY,
+    REL_EMPLOYED_BY,
 ]
 
 GEOGRAPHIC_RELATIONSHIPS = [
@@ -469,7 +481,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
 
     async def _find_paths(self, subject: str, obj: str, max_hops: int) -> list[Evidence]:
         """Find paths between two entities up to max_hops.
-        
+
         Uses a two-step approach: first find matching start/end nodes,
         then find paths between them (avoids shortestPath restrictions).
         """
@@ -1231,8 +1243,15 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
                 records = await result.data()
 
                 for r in records:
-                    subj = r.get("subject") or r.get("subject_title") or r.get("subject_qid") or "Unknown"
-                    obj = r.get("object") or r.get("object_title") or r.get("object_qid") or "Unknown"
+                    subj = (
+                        r.get("subject")
+                        or r.get("subject_title")
+                        or r.get("subject_qid")
+                        or "Unknown"
+                    )
+                    obj = (
+                        r.get("object") or r.get("object_title") or r.get("object_qid") or "Unknown"
+                    )
                     rel = r.get("relationship", "RELATED")
 
                     evidence.append(
