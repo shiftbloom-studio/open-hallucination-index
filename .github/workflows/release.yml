@@ -18,7 +18,9 @@ jobs:
 
   build-and-push-image:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     outputs:
       image_tag: ${{ steps.tag.outputs.tag }}
     steps:
@@ -52,7 +54,9 @@ jobs:
 
   deploy-compute:
     needs: build-and-push-image
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     environment: prod
     defaults:
       run:
@@ -114,7 +118,9 @@ jobs:
 
   notify:
     needs: deploy-compute
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     if: always()
     steps:
       - uses: actions/checkout@v4

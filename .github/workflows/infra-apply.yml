@@ -23,7 +23,9 @@ permissions:
 
 jobs:
   apply:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     environment: prod
     defaults:
       run:

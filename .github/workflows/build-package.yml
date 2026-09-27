@@ -20,7 +20,9 @@ jobs:
   # -----------------------------------------------------------------------------
   docker-api:
     name: Build Docker (API)
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +44,9 @@ jobs:
   # -----------------------------------------------------------------------------
   docker-mcp:
     name: Build Docker (MCP Server)
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
 
@@ -64,7 +68,9 @@ jobs:
   # -----------------------------------------------------------------------------
   package-benchmark:
     name: Package Benchmark App
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
 
@@ -90,7 +96,9 @@ jobs:
   # -----------------------------------------------------------------------------
   package-ingestion:
     name: Package Ingestion App
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
 
@@ -117,7 +125,9 @@ jobs:
   # -----------------------------------------------------------------------------
   package-frontend:
     name: Package Frontend
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
 
