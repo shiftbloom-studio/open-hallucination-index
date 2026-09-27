@@ -32,7 +32,9 @@ permissions:
 jobs:
   blocking-suite:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4

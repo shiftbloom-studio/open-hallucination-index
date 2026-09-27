@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   drift:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     defaults:
       run:
         working-directory: infra/terraform/bootstrap

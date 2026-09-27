@@ -28,7 +28,9 @@ permissions:
 
 jobs:
   build-push-deploy:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     timeout-minutes: 20
     outputs:
       image_digest: ${{ steps.push.outputs.image_digest }}
