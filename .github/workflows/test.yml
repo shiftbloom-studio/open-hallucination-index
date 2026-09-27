@@ -13,7 +13,9 @@ concurrency:
 jobs:
   api:
     name: API tests
-    runs-on: ubuntu-latest
+    runs-on:
+      group: Default
+      labels: [self-hosted, linux, x64]
     defaults:
       run:
         working-directory: src/api
