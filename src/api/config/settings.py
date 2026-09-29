@@ -359,8 +359,7 @@ class CCNliSettings(BaseSettings):
     llm_provider: Literal["openai", "gemini"] = Field(
         default="openai",
         description=(
-            "Primary cc-NLI provider. ``gemini`` forces fallback-only "
-            "(cost-cap emergency lever)."
+            "Primary cc-NLI provider. ``gemini`` forces fallback-only (cost-cap emergency lever)."
         ),
     )
     llm_model: str = Field(
@@ -415,9 +414,7 @@ class EmbeddingSettings(BaseSettings):
     )
     bedrock_model_id: str = Field(
         default="amazon.titan-embed-text-v2:0",
-        validation_alias=AliasChoices(
-            "BEDROCK_EMBED_MODEL_ID", "EMBEDDING_BEDROCK_MODEL_ID"
-        ),
+        validation_alias=AliasChoices("BEDROCK_EMBED_MODEL_ID", "EMBEDDING_BEDROCK_MODEL_ID"),
         description="Bedrock embedding model id used when OHI_EMBEDDING_BACKEND=bedrock",
     )
     bedrock_dimension: int = Field(
@@ -450,9 +447,7 @@ class EmbeddingSettings(BaseSettings):
     bedrock_timeout_seconds: float = Field(
         default=10.0,
         ge=1.0,
-        validation_alias=AliasChoices(
-            "BEDROCK_EMBED_TIMEOUT_S", "EMBEDDING_BEDROCK_TIMEOUT_S"
-        ),
+        validation_alias=AliasChoices("BEDROCK_EMBED_TIMEOUT_S", "EMBEDDING_BEDROCK_TIMEOUT_S"),
         description="Read timeout for Bedrock embedding invocations",
     )
 
@@ -474,9 +469,7 @@ class RetrievalSettings(BaseSettings):
         default=40,
         ge=1,
         le=200,
-        validation_alias=AliasChoices(
-            "RETRIEVAL_QDRANT_CANDIDATE_K", "BEDROCK_RERANK_CANDIDATES"
-        ),
+        validation_alias=AliasChoices("RETRIEVAL_QDRANT_CANDIDATE_K", "BEDROCK_RERANK_CANDIDATES"),
         description="Number of ANN candidates pulled from Qdrant before reranking",
     )
     qdrant_score_threshold: float = Field(

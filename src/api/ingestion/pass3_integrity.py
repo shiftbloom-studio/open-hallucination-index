@@ -55,12 +55,8 @@ async def generate_integrity_report(
 ) -> IntegrityReport:
     """Run the integrity queries and return the report object."""
     # Counts from Aura.
-    entity_count_rows = await graph_store.run_cypher(
-        "MATCH (e:Entity) RETURN count(e) AS n"
-    )
-    passage_count_rows = await graph_store.run_cypher(
-        "MATCH (p:Passage) RETURN count(p) AS n"
-    )
+    entity_count_rows = await graph_store.run_cypher("MATCH (e:Entity) RETURN count(e) AS n")
+    passage_count_rows = await graph_store.run_cypher("MATCH (p:Passage) RETURN count(p) AS n")
     entity_vector_rows = await graph_store.run_cypher(
         "MATCH (e:Entity) WHERE e.embedding IS NOT NULL RETURN count(e) AS n"
     )

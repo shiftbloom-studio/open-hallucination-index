@@ -89,18 +89,14 @@ class ClaimClaimNliDispatcher:
                 f"entity_overlap_threshold must be >= 0, got {entity_overlap_threshold}"
             )
         if claim_claim_max_pairs <= 0:
-            raise ValueError(
-                f"claim_claim_max_pairs must be > 0, got {claim_claim_max_pairs}"
-            )
+            raise ValueError(f"claim_claim_max_pairs must be > 0, got {claim_claim_max_pairs}")
         self._primary = primary
         self._fallback = fallback
         self._overlap_threshold = entity_overlap_threshold
         self._max_pairs = claim_claim_max_pairs
         self._sem = asyncio.Semaphore(max_concurrency)
 
-    async def classify_pairs(
-        self, claims: list["Claim"]
-    ) -> DispatchResult:
+    async def classify_pairs(self, claims: list["Claim"]) -> DispatchResult:
         """Build the pair set, fan out primary calls, fall back on
         sentinels, return the dispatch result."""
         if len(claims) < 2:
@@ -119,16 +115,12 @@ class ClaimClaimNliDispatcher:
             pairs = pairs[: self._max_pairs]
 
         # Primary pass — concurrent fan-out.
-        async def _primary_task(
-            ca: "Claim", cb: "Claim"
-        ) -> tuple[UUID, UUID, NliResult]:
+        async def _primary_task(ca: "Claim", cb: "Claim") -> tuple[UUID, UUID, NliResult]:
             async with self._sem:
                 result = await self._primary.classify(ca.text, cb.text)
             return ca.id, cb.id, result
 
-        primary_results = await asyncio.gather(
-            *[_primary_task(ca, cb) for ca, cb in pairs]
-        )
+        primary_results = await asyncio.gather(*[_primary_task(ca, cb) for ca, cb in pairs])
 
         # Fallback pass — only for primary sentinels. One shot, no retries.
         fallback_fired = 0
@@ -151,9 +143,7 @@ class ClaimClaimNliDispatcher:
             return id_a, id_b, result
 
         if fallback_pairs:
-            fb_results = await asyncio.gather(
-                *[_fallback_task(*fp) for fp in fallback_pairs]
-            )
+            fb_results = await asyncio.gather(*[_fallback_task(*fp) for fp in fallback_pairs])
             for id_a, id_b, result in fb_results:
                 fallback_fired += 1
                 final_results[(id_a, id_b)] = result
@@ -173,9 +163,7 @@ class ClaimClaimNliDispatcher:
             truncated_pair_count=truncated,
         )
 
-    def _build_pair_set(
-        self, claims: list["Claim"]
-    ) -> list[tuple["Claim", "Claim"]]:
+    def _build_pair_set(self, claims: list["Claim"]) -> list[tuple["Claim", "Claim"]]:
         """Generate all unique pairs with ``id_a < id_b`` that pass
         the entity-overlap short-circuit.
 
@@ -199,9 +187,7 @@ class ClaimClaimNliDispatcher:
         pairs.sort(key=lambda pair: (str(pair[0].id), str(pair[1].id)))
         return pairs
 
-    def _pair_passes_overlap(
-        self, ca: "Claim", cb: "Claim"
-    ) -> bool:
+    def _pair_passes_overlap(self, ca: "Claim", cb: "Claim") -> bool:
         """Entity-overlap check. Threshold is inclusive."""
         qa = set(getattr(ca, "entity_qids", {}).values() if ca.entity_qids else [])
         qb = set(getattr(cb, "entity_qids", {}).values() if cb.entity_qids else [])

@@ -126,10 +126,7 @@ async def verify(body: VerifyRequest, request: Request) -> ORJSONResponse:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
                 "code": "async_invoke_rejected",
-                "message": (
-                    f"async queue returned StatusCode={invoke_status}; "
-                    "expected 202"
-                ),
+                "message": (f"async queue returned StatusCode={invoke_status}; expected 202"),
             },
         )
 
@@ -168,8 +165,7 @@ async def verify_status(job_id: UUID) -> ORJSONResponse:
             detail={
                 "code": "job_not_found",
                 "message": (
-                    f"No verify job for id {job_id} (never existed, or TTL "
-                    "reaped the record)."
+                    f"No verify job for id {job_id} (never existed, or TTL reaped the record)."
                 ),
             },
         )

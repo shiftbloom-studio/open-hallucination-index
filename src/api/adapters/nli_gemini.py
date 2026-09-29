@@ -129,10 +129,7 @@ _NEUTRAL_FALLBACK = NliResult(
 
 
 def _is_fallback(result: NliResult) -> bool:
-    return (
-        result.reasoning == _NLI_UNAVAILABLE_REASON
-        and result.confidence == 0.0
-    )
+    return result.reasoning == _NLI_UNAVAILABLE_REASON and result.confidence == 0.0
 
 
 # Any averaged self-consistency confidence below this is snapped to 0.0
@@ -153,39 +150,27 @@ class NliGeminiAdapter:
         max_retries: int = 3,
     ) -> None:
         if self_consistency_k < 1:
-            raise ValueError(
-                f"self_consistency_k must be >= 1, got {self_consistency_k}"
-            )
+            raise ValueError(f"self_consistency_k must be >= 1, got {self_consistency_k}")
         if max_retries < 1:
-            raise ValueError(
-                f"max_retries must be >= 1, got {max_retries}"
-            )
+            raise ValueError(f"max_retries must be >= 1, got {max_retries}")
         self._llm = llm
         self._k = self_consistency_k
         self._max_retries = max_retries
 
-    async def classify(
-        self, claim_text: str, evidence_text: str
-    ) -> NliResult:
-        prompt = _NLI_PROMPT_TEMPLATE.format(
-            claim_text=claim_text, evidence_text=evidence_text
-        )
+    async def classify(self, claim_text: str, evidence_text: str) -> NliResult:
+        prompt = _NLI_PROMPT_TEMPLATE.format(claim_text=claim_text, evidence_text=evidence_text)
         messages = [LLMMessage(role="user", content=prompt)]
 
         if self._k == 1:
             return await self._single_pass_with_retry(messages)
 
-        samples = [
-            await self._single_pass_with_retry(messages) for _ in range(self._k)
-        ]
+        samples = [await self._single_pass_with_retry(messages) for _ in range(self._k)]
         successes = [s for s in samples if not _is_fallback(s)]
         if not successes:
             return _NEUTRAL_FALLBACK
         return _aggregate_samples(successes)
 
-    async def _single_pass_with_retry(
-        self, messages: list[LLMMessage]
-    ) -> NliResult:
+    async def _single_pass_with_retry(self, messages: list[LLMMessage]) -> NliResult:
         """One NLI classification with up to ``max_retries`` attempts.
 
         Catches every exception — transport, JSON parse, validation —
@@ -210,8 +195,7 @@ class NliGeminiAdapter:
                     exc,
                 )
         logger.error(
-            "NLI terminal failure after %d retries (last error: %s) — "
-            "returning neutral fallback",
+            "NLI terminal failure after %d retries (last error: %s) — returning neutral fallback",
             self._max_retries,
             last_exc,
         )
@@ -219,7 +203,6 @@ class NliGeminiAdapter:
 
     async def health_check(self) -> bool:
         return await self._llm.health_check()
-
 
 
 # ---------------------------------------------------------------------------
@@ -243,9 +226,7 @@ def _parse_result(raw: str) -> NliResult:
     neutral = float(data["neutral_score"])
     total = supporting + refuting + neutral
     if total <= 0:
-        raise ValueError(
-            f"NLI JSON scores sum to non-positive value {total!r}"
-        )
+        raise ValueError(f"NLI JSON scores sum to non-positive value {total!r}")
     supporting /= total
     refuting /= total
     neutral /= total

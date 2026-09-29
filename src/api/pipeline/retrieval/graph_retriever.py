@@ -38,9 +38,7 @@ class GraphRetriever:
     candidate_top_k: int = 40
     final_top_k: int = 12
 
-    async def retrieve(
-        self, query_text: str, *, top_k: int | None = None
-    ) -> list[Evidence]:
+    async def retrieve(self, query_text: str, *, top_k: int | None = None) -> list[Evidence]:
         final_top_k = top_k or self.final_top_k
         candidate_top_k = max(final_top_k, self.candidate_top_k)
 
@@ -77,7 +75,9 @@ class GraphRetriever:
         if not rerank_scores:
             ordered_indices = sorted(
                 range(len(fetched)),
-                key=lambda idx: by_id.get(fetched[idx].passage_id, PassageHit("", "", 0.0)).similarity,
+                key=lambda idx: (
+                    by_id.get(fetched[idx].passage_id, PassageHit("", "", 0.0)).similarity
+                ),
                 reverse=True,
             )
 
@@ -91,7 +91,9 @@ class GraphRetriever:
                 Evidence(
                     source=EvidenceSource.VECTOR_SEMANTIC,
                     content=p.text,
-                    source_uri=f"https://en.wikipedia.org/wiki/{wiki_title}" if wiki_title else None,
+                    source_uri=f"https://en.wikipedia.org/wiki/{wiki_title}"
+                    if wiki_title
+                    else None,
                     similarity_score=similarity,
                     structured_data={
                         "article_title": p.article_title,

@@ -325,9 +325,7 @@ def _deserialize_job(item: dict[str, Any]) -> dict[str, Any]:
 _ASYNC_ROUTE = "/_internal/async-verify"
 
 
-def async_invoke_verify(
-    *, job_id: str, text: str, ticket: str, depth: int = 1
-) -> int:
+def async_invoke_verify(*, job_id: str, text: str, ticket: str, depth: int = 1) -> int:
     """Fire a fire-and-forget Lambda invocation at this function itself.
 
     ``depth`` is relayed inside the body so the internal handler can
@@ -344,9 +342,7 @@ def async_invoke_verify(
     edge-secret-missing silent 403. See the log lines below for the
     CloudWatch signal an E2 smoke uses to confirm the invoke succeeded.
     """
-    payload = _build_async_event(
-        job_id=job_id, text=text, ticket=ticket, depth=depth
-    )
+    payload = _build_async_event(job_id=job_id, text=text, ticket=ticket, depth=depth)
     logger.info(
         "async_invoke_verify: invoking self job_id=%s depth=%s",
         job_id,
@@ -366,9 +362,7 @@ def async_invoke_verify(
     return status_code
 
 
-def _build_async_event(
-    *, job_id: str, text: str, ticket: str, depth: int
-) -> dict[str, Any]:
+def _build_async_event(*, job_id: str, text: str, ticket: str, depth: int) -> dict[str, Any]:
     """Synthetic APIGW v2 event targeting ``POST /_internal/async-verify``.
 
     Only the fields AWS Lambda Web Adapter actually reads are populated;
