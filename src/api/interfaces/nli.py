@@ -71,11 +71,11 @@ class NliAdapter(Protocol):
     ``nli_unavailable`` neutral fallback described on :class:`NliResult`.
     """
 
-    async def classify(
-        self, claim_text: str, evidence_text: str
-    ) -> NliResult: ...
+    async def classify(self, claim_text: str, evidence_text: str) -> NliResult:
+        pass
 
-    async def health_check(self) -> bool: ...
+    async def health_check(self) -> bool:
+        pass
 
 
 @runtime_checkable

@@ -120,8 +120,10 @@ def run_damped_lbp(
                     new_messages[k, 0, xj] = m + float(np.log(np.sum(np.exp(log_vals - m))))
             # Normalise (subtract log-sum-exp over states — keeps numbers bounded).
             lse = new_messages[k, 0, 0] + float(
-                np.log(np.exp(new_messages[k, 0, 0] - new_messages[k, 0, 0])
-                       + np.exp(new_messages[k, 0, 1] - new_messages[k, 0, 0]))
+                np.log(
+                    np.exp(new_messages[k, 0, 0] - new_messages[k, 0, 0])
+                    + np.exp(new_messages[k, 0, 1] - new_messages[k, 0, 0])
+                )
             )
             new_messages[k, 0, :] -= lse
 
@@ -142,8 +144,10 @@ def run_damped_lbp(
                 else:
                     new_messages[k, 1, xi] = m + float(np.log(np.sum(np.exp(log_vals - m))))
             lse = new_messages[k, 1, 0] + float(
-                np.log(np.exp(new_messages[k, 1, 0] - new_messages[k, 1, 0])
-                       + np.exp(new_messages[k, 1, 1] - new_messages[k, 1, 0]))
+                np.log(
+                    np.exp(new_messages[k, 1, 0] - new_messages[k, 1, 0])
+                    + np.exp(new_messages[k, 1, 1] - new_messages[k, 1, 0])
+                )
             )
             new_messages[k, 1, :] -= lse
 

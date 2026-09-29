@@ -45,9 +45,7 @@ class AuraPassageFetch:
         if not passage_ids:
             return []
         try:
-            rows = await self._graph.run_cypher(
-                _BATCH_FETCH_CYPHER, {"ids": passage_ids}
-            )
+            rows = await self._graph.run_cypher(_BATCH_FETCH_CYPHER, {"ids": passage_ids})
         except Exception as exc:  # noqa: BLE001
             logger.warning("AuraPassageFetch batch failed: %s", exc)
             return []

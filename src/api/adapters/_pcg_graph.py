@@ -160,8 +160,8 @@ def _binary_log_factor_from_cc_nli(
     off_diag = max(contradict + 0.5 * neutral, min_binary_tilt)
     # Re-weight by edge_weight: when edge_weight → 0, collapse to uniform;
     # when edge_weight → 1, keep full tilt.
-    diag_w = diag ** edge_weight
-    off_w = off_diag ** edge_weight
+    diag_w = diag**edge_weight
+    off_w = off_diag**edge_weight
     factor = np.array(
         [[diag_w, off_w], [off_w, diag_w]],
         dtype=np.float64,
@@ -218,15 +218,9 @@ def build_factor_graph(
         if i > j:
             i, j = j, i
         edges.append((i, j))
-        binary_rows.append(
-            _binary_log_factor_from_cc_nli(nli, edge_weight_scale=edge_weight_scale)
-        )
+        binary_rows.append(_binary_log_factor_from_cc_nli(nli, edge_weight_scale=edge_weight_scale))
 
-    binary = (
-        np.stack(binary_rows, axis=0)
-        if binary_rows
-        else None
-    )
+    binary = np.stack(binary_rows, axis=0) if binary_rows else None
 
     return FactorGraph(
         claim_ids=claim_ids,

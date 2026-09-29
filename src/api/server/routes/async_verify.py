@@ -86,9 +86,7 @@ async def async_verify(
     # stuck on an older image). D2's first deploy silent-failed for exactly
     # this reason; keeping the log line before every guard means regressions
     # on "request never reached the handler" show up loudly in observability.
-    logger.info(
-        "async-verify entry: depth=%s job_id=%s", body.depth, body.job_id
-    )
+    logger.info("async-verify entry: depth=%s job_id=%s", body.depth, body.job_id)
 
     # 1. Depth guard FIRST — before any DynamoDB read, before anything
     #    that could itself self-invoke. This is a hard $-cap.
@@ -135,9 +133,7 @@ async def async_verify(
         except Exception:  # noqa: BLE001
             # _safe_fire in pipeline.py swallows, but belt-and-braces here
             # so a local raise never leaks up to pipeline.verify.
-            logger.exception(
-                "update_phase(%s, %s) failed", body.job_id, phase
-            )
+            logger.exception("update_phase(%s, %s) failed", body.job_id, phase)
 
     try:
         verdict = await pipeline.verify(body.text, phase_callback=_advance_phase)

@@ -69,6 +69,7 @@ def _cf_access_headers() -> dict[str, str]:
         return {"CF-Access-Client-Id": cid, "CF-Access-Client-Secret": sec}
     return {}
 
+
 from interfaces.stores import VectorKnowledgeStore, VectorQuery
 from models.entities import Evidence, EvidenceSource
 
@@ -172,10 +173,14 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             # reference patches every outbound request.
             remote = getattr(self._client, "_client", None)
             http = getattr(remote, "http", None) if remote is not None else None
-            any_api = next(
-                (getattr(http, a) for a in dir(http) if a.endswith("_api")),
-                None,
-            ) if http is not None else None
+            any_api = (
+                next(
+                    (getattr(http, a) for a in dir(http) if a.endswith("_api")),
+                    None,
+                )
+                if http is not None
+                else None
+            )
             api_client = getattr(any_api, "api_client", None) if any_api is not None else None
             inner_httpx = getattr(api_client, "_async_client", None)
 
@@ -201,7 +206,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
         """
         Ensure the knowledge base collection exists with correct configuration.
         Handles concurrency between multiple workers.
-        
+
         IMPORTANT: This method will NOT delete existing collections with data.
         It supports both simple vectors and Named Vectors (hybrid collections).
         """
@@ -243,7 +248,10 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                             if hasattr(vec_config, "size") and vec_config.size == vector_size:
                                 existing_size = vec_config.size
                                 break
-                            elif isinstance(vec_config, dict) and vec_config.get("size") == vector_size:
+                            elif (
+                                isinstance(vec_config, dict)
+                                and vec_config.get("size") == vector_size
+                            ):
                                 existing_size = vec_config["size"]
                                 break
                     # Still no size? Just use first available
@@ -410,10 +418,10 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
     ) -> list[Evidence]:
         """
         Search for semantically similar content.
-        
+
         Supports hybrid search (dense + sparse vectors) and
         rich metadata filtering matching the ingestion structure.
-        
+
         Enhanced with:
         - Geographic radius filtering
         - Quality score filtering
@@ -437,113 +445,104 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             # Build filter from metadata (supports ingestion structure)
             query_filter = None
             must_conditions: list[dict] = []
-            
+
             # Basic metadata filters
             if query.filter_metadata:
                 for key, value in query.filter_metadata.items():
                     must_conditions.append({"key": key, "match": {"value": value}})
-            
+
             # Extended filters for ingestion metadata
             if query.infobox_types:
-                must_conditions.append({
-                    "key": "infobox_type",
-                    "match": {"any": query.infobox_types}
-                })
-            
+                must_conditions.append(
+                    {"key": "infobox_type", "match": {"any": query.infobox_types}}
+                )
+
             if query.categories:
                 # Categories is an array in payload - match any
-                must_conditions.append({
-                    "key": "categories",
-                    "match": {"any": query.categories}
-                })
-            
+                must_conditions.append({"key": "categories", "match": {"any": query.categories}})
+
             if query.section_filter:
-                must_conditions.append({
-                    "key": "section",
-                    "match": {"value": query.section_filter}
-                })
-            
+                must_conditions.append({"key": "section", "match": {"value": query.section_filter}})
+
             # =================================================================
             # NEW: Geographic radius filter
             # =================================================================
             if query.geo_filter:
-                must_conditions.append({
-                    "key": "geo",
-                    "geo_radius": {
-                        "center": {
-                            "lat": query.geo_filter.latitude,
-                            "lon": query.geo_filter.longitude,
+                must_conditions.append(
+                    {
+                        "key": "geo",
+                        "geo_radius": {
+                            "center": {
+                                "lat": query.geo_filter.latitude,
+                                "lon": query.geo_filter.longitude,
+                            },
+                            "radius": query.geo_filter.radius_km * 1000,  # Convert to meters
                         },
-                        "radius": query.geo_filter.radius_km * 1000,  # Convert to meters
                     }
-                })
-            
+                )
+
             # =================================================================
             # NEW: Quality score filter
             # =================================================================
             if query.quality_filter:
                 if query.quality_filter.min_quality_score is not None:
-                    must_conditions.append({
-                        "key": "quality_score",
-                        "range": {"gte": query.quality_filter.min_quality_score}
-                    })
+                    must_conditions.append(
+                        {
+                            "key": "quality_score",
+                            "range": {"gte": query.quality_filter.min_quality_score},
+                        }
+                    )
                 if query.quality_filter.min_incoming_links is not None:
-                    must_conditions.append({
-                        "key": "incoming_links",
-                        "range": {"gte": query.quality_filter.min_incoming_links}
-                    })
+                    must_conditions.append(
+                        {
+                            "key": "incoming_links",
+                            "range": {"gte": query.quality_filter.min_incoming_links},
+                        }
+                    )
                 if query.quality_filter.exclude_stubs:
                     # Exclude short articles (stubs have low page_length)
-                    must_conditions.append({
-                        "key": "page_length",
-                        "range": {"gte": 2000}  # At least 2KB
-                    })
-            
+                    must_conditions.append(
+                        {
+                            "key": "page_length",
+                            "range": {"gte": 2000},  # At least 2KB
+                        }
+                    )
+
             # =================================================================
             # NEW: Wikidata ID filter
             # =================================================================
             if query.wikidata_id:
-                must_conditions.append({
-                    "key": "wikidata_id",
-                    "match": {"value": query.wikidata_id.upper()}
-                })
-            
+                must_conditions.append(
+                    {"key": "wikidata_id", "match": {"value": query.wikidata_id.upper()}}
+                )
+
             if query.require_wikidata:
-                must_conditions.append({
-                    "key": "has_wikidata",
-                    "match": {"value": True}
-                })
-            
+                must_conditions.append({"key": "has_wikidata", "match": {"value": True}})
+
             # =================================================================
             # NEW: Exclude disambiguation and redirect pages
             # =================================================================
             if query.exclude_disambiguation:
-                must_conditions.append({
-                    "key": "is_disambiguation",
-                    "match": {"value": False}
-                })
-            
+                must_conditions.append({"key": "is_disambiguation", "match": {"value": False}})
+
             if query.exclude_redirects:
-                must_conditions.append({
-                    "key": "is_redirect",
-                    "match": {"value": False}
-                })
-            
+                must_conditions.append({"key": "is_redirect", "match": {"value": False}})
+
             if must_conditions:
                 query_filter = Filter(must=must_conditions)  # type: ignore[arg-type]
 
             # Use hybrid search if sparse vectors provided, otherwise dense only
             if query.sparse_indices and query.sparse_values:
                 # Hybrid search with sparse + dense
-                
+
                 # TODO: Qdrant client API for hybrid query may need adjustment
                 # For now, fall back to dense search
                 # Future: use proper hybrid query with sparse vector
                 logger.debug("Hybrid search requested but using dense-only for now")
-            
+
             # Dense vector search - use "dense" named vector if available, else default
             using_vector = "dense" if self._use_named_vectors else None
-            
+
             results = await self._client.query_points(
                 collection_name=self._settings.collection_name,
                 query=embedding,
@@ -563,12 +562,12 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                     # Fallback: for persisted external evidence, use "content"
                     if not content:
                         content = hit.payload.get("content", "")
-                
+
                 # Build source URI from url or source_uri
                 source_uri = None
                 if hit.payload:
                     source_uri = hit.payload.get("url") or hit.payload.get("source_uri")
-                
+
                 evidence_list.append(
                     Evidence(
                         id=uuid4(),
@@ -600,7 +599,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
     ) -> list[Evidence]:
         """
         Find semantically similar evidence for a claim.
-        
+
         Utilizes rich metadata filtering from ingestion:
         - infobox_type: Filter by entity types (Person, Organization, etc.)
         - categories: Filter by Wikipedia categories
@@ -615,10 +614,10 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             List of semantically similar evidence.
         """
         search_text = claim.normalized_form or claim.text
-        
+
         # Build metadata filters from claim structure
         filter_metadata = {}
-        
+
         # Filter by source if claim metadata available
         if hasattr(claim, "metadata") and claim.metadata:
             # Example: Filter by entity type, category, etc.
@@ -644,14 +643,14 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
     ) -> list[Evidence]:
         """
         Find evidence for a text query.
-        
+
         Simplified interface that accepts plain text instead of Claim object.
-        
+
         Args:
             text: The text to find evidence for.
             limit: Maximum number of results.
             min_similarity: Minimum similarity threshold.
-            
+
         Returns:
             List of semantically similar evidence.
         """

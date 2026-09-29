@@ -71,9 +71,7 @@ def _split_messages(
             # Gemini's conversation role for assistant is "model".
             contents.append({"role": "model", "parts": [{"text": m.content}]})
         # silently drop any other roles — Gemini would reject them
-    system_instruction = (
-        {"parts": [{"text": "\n\n".join(system_parts)}]} if system_parts else None
-    )
+    system_instruction = {"parts": [{"text": "\n\n".join(system_parts)}]} if system_parts else None
     return system_instruction, contents
 
 
@@ -145,21 +143,15 @@ class GeminiLLMAdapter(LLMProvider):
             body["systemInstruction"] = system_instruction
 
         try:
-            resp = await self._client.post(
-                f"/models/{self._model}:generateContent", json=body
-            )
+            resp = await self._client.post(f"/models/{self._model}:generateContent", json=body)
         except httpx.HTTPError as exc:
             logger.error(f"Gemini request failed: {exc}")
             raise LLMProviderError(f"Request failed: {exc}") from exc
 
         if resp.status_code != 200:
             # Gemini puts errors at the top level or wrapped in a list.
-            logger.error(
-                "Gemini API error: %s - %s", resp.status_code, resp.text[:500]
-            )
-            raise LLMProviderError(
-                f"Gemini API error: {resp.status_code} - {resp.text[:500]}"
-            )
+            logger.error("Gemini API error: %s - %s", resp.status_code, resp.text[:500])
+            raise LLMProviderError(f"Gemini API error: {resp.status_code} - {resp.text[:500]}")
 
         data = resp.json()
         candidates = data.get("candidates") or []
@@ -167,9 +159,7 @@ class GeminiLLMAdapter(LLMProvider):
             # Safety filters can still kick in via promptFeedback even with
             # BLOCK_NONE if the category isn't in our list. Surface it.
             pf = data.get("promptFeedback", {})
-            raise LLMProviderError(
-                f"Gemini returned no candidates; promptFeedback={pf}"
-            )
+            raise LLMProviderError(f"Gemini returned no candidates; promptFeedback={pf}")
 
         cand = candidates[0]
         parts = cand.get("content", {}).get("parts", [])
@@ -222,9 +212,7 @@ class GeminiLLMAdapter(LLMProvider):
             ) as resp:
                 if resp.status_code != 200:
                     raw = await resp.aread()
-                    raise LLMProviderError(
-                        f"Gemini stream error {resp.status_code}: {raw[:400]!r}"
-                    )
+                    raise LLMProviderError(f"Gemini stream error {resp.status_code}: {raw[:400]!r}")
                 async for line in resp.aiter_lines():
                     if not line or not line.startswith("data:"):
                         continue
