@@ -1,7 +1,7 @@
 <h1 align="center">Open Hallucination Index</h1>
 
 <p align="center">
-  <strong>Scientifically grounded fact-checking for LLM outputs — with calibrated uncertainty.</strong>
+  <strong>Grounded fact-checking for LLM outputs — with calibrated uncertainty.</strong>
 </p>
 
 <p align="center">
