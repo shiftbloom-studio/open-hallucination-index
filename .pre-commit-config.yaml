@@ -17,3 +17,11 @@ repos:
     rev: v8.21.2
     hooks:
       - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        files: ^(src/api|gui_benchmark_app|gui_ingestion_app|scripts|tests)/
+      - id: ruff-format
+        files: ^src/api/
