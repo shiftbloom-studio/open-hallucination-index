@@ -16,6 +16,8 @@ test-results/
 .env
 .env.*
 !.env.example
+!.env.*.example
+!.env.*-examples
 .dev.vars
 .dev.vars.*
 !.dev.vars.example
@@ -28,3 +30,24 @@ test-results/
 .DS_Store
 Thumbs.db
 *.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Local data for the Docker stack
+docker/data/
+docker/nginx/certs/
+neo4j-data/
+qdrant-data/
+benchmark_results/*
+!benchmark_results/.gitkeep
+gui_ingestion_app/.wiki_dumps/

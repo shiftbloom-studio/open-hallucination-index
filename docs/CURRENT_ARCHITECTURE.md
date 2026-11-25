@@ -166,4 +166,4 @@ pnpm install
 pnpm run dev
 ```
 
-The earlier Python/AWS stack (FastAPI on Lambda, Neo4j, Qdrant, Terraform) was retired in favour of this Worker. It is still in the git history before the v3 cleanup if you want to dig into it.
+The Python research pipeline in `src/api` (FastAPI, Neo4j, Qdrant) is not in the production path but runs locally, see `docker/README.md`. Its former AWS Lambda deployment and the Terraform for it were removed; they remain in the git history.

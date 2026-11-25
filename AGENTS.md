@@ -15,6 +15,13 @@ describes what runs in production and wins over any other doc.
   `src/lib/verify-controller.ts`. Legal pages read operator details from
   `NEXT_PUBLIC_OPERATOR_*` at build time (`src/lib/operator.ts`).
 - `src/ohi-mcp-server/`: standalone MCP server with the knowledge sources.
+- `src/api/`: Python research pipeline (FastAPI). `pipeline/` holds
+  decomposition, retrieval, conformal calibration and document assembly,
+  `adapters/` the NLI models, claim graph inference (LBP, Gibbs, TRW-BP),
+  Neo4j and Qdrant stores. Tests live in `tests/` at the repo root.
+- `gui_benchmark_app/`, `gui_ingestion_app/`, `scripts/`: benchmark,
+  ingestion and probe tooling for the Python stack.
+- `docker/`: images and Compose files to run the Python stack locally.
 
 ## Checks
 
@@ -22,6 +29,7 @@ describes what runs in production and wins over any other doc.
 cd cloudflare/ohi-worker && pnpm install && pnpm run types && pnpm run check && pnpm run build
 cd src/frontend && pnpm install && pnpm run lint && pnpm run test:run && pnpm run build
 cd src/ohi-mcp-server && npm install && npm run lint && npm run typecheck
+pip install -e "src/api[dev]" && pytest -q tests -m "not infra"
 ```
 
 `pnpm run build` in the Worker is `wrangler deploy --dry-run`. It catches

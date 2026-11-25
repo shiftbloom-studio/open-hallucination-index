@@ -72,12 +72,25 @@ Everything is one Cloudflare Worker on one domain:
 ## Repository
 
 ```
-cloudflare/ohi-worker/   Worker: API, queue consumer, MCP, corpus Workflow, D1 migrations
+cloudflare/ohi-worker/   Production Worker: API, queue consumer, MCP, corpus Workflow, D1 migrations
 src/frontend/            Next.js 16 frontend, built to a static export
+src/api/                 Python research pipeline (FastAPI): probabilistic claim graph with
+                         belief propagation, Gibbs and TRW-BP, split conformal calibration,
+                         copula document assembly, NLI adapters, ingestion passes
 src/ohi-mcp-server/      Standalone MCP server with the knowledge-source connectors
-docker/mcp-server/       Container image for the standalone MCP server
+gui_benchmark_app/       Benchmark suite comparing OHI with other hallucination detectors
+gui_ingestion_app/       Wikipedia ingestion into Neo4j and Qdrant (CLI and GUI)
+scripts/                 Benchmark harness, ingestion runner, probes, load test
+tests/                   pytest suites for the Python pipeline and benchmark
+docker/                  Images and Compose stacks for running the Python stack locally
+infra/local/             Postgres and MinIO for the local infra tests
 docs/                    API reference, architecture, runbooks
 ```
+
+The live service runs the Worker. The Python pipeline is the fuller
+research implementation of the method (claim graph inference and
+calibration) and runs locally against Neo4j and Qdrant; parts of it were
+ported to the Worker.
 
 ## Run it locally
 
@@ -101,6 +114,15 @@ Workflows. Vectorize has no local mode, and Workers AI calls go to
 Cloudflare when you are logged in, so `/health/deep` reports `degraded`
 offline. [CONTRIBUTING.md](CONTRIBUTING.md) lists which commands are safe
 and which touch production.
+
+The Python pipeline needs Python 3.12+ and, for the full graph, Docker:
+
+```sh
+docker compose -f docker/compose/pc-data.yml -f docker/compose/pc-data.local-dev.yml --profile local-dev up -d
+pip install -e "src/api[dev]"
+ohi-server                       # http://localhost:8080
+pytest -q tests -m "not infra"
+```
 
 ## Deploy your own
 
@@ -149,8 +171,9 @@ Schemas, errors and examples: [docs/API.md](docs/API.md).
 ## History
 
 OHI started in January 2026 as a Python service on AWS Lambda with Neo4j
-and Qdrant. In July 2026 it moved completely to Cloudflare, and the old
-stack was later removed from this repository. The old code is still in the git history.
+and Qdrant. In July 2026 production moved completely to Cloudflare. The
+AWS deployment (Terraform, Lambda image, its workflows) was removed from
+this repository; the Python pipeline itself stays here.
 
 ## License
 

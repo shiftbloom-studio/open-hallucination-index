@@ -16,10 +16,14 @@ to safety@shiftbloom.studio, see [SECURITY.md](SECURITY.md).
 | `cloudflare/ohi-worker/` | Production Worker: API, queue consumer, health probes, MCP server, corpus Workflow |
 | `src/frontend/` | Next.js static export served by the Worker |
 | `src/ohi-mcp-server/` | Standalone MCP server with the multi-source knowledge tools |
+| `src/api/` | Python research pipeline: claim graph inference, calibration, NLI adapters |
+| `gui_benchmark_app/`, `gui_ingestion_app/`, `scripts/` | Benchmark, ingestion and probe tooling |
+| `tests/` | pytest suites for the Python code |
 | `docs/` | API reference, architecture, runbooks |
 
-You need Node 26 and pnpm (`corepack enable pnpm`). No Docker, Python or cloud
-account is needed for the local loop.
+You need Node 26 and pnpm (`corepack enable pnpm`) for the Worker and the
+frontend. The Python pipeline needs Python 3.12+ and Docker for Neo4j and
+Qdrant.
 
 ## Worker
 
@@ -78,6 +82,16 @@ pnpm run build               # static export into src/frontend/out
 cd src/ohi-mcp-server
 npm install
 npm run build
+```
+
+## Python pipeline
+
+```bash
+docker compose -f docker/compose/pc-data.yml -f docker/compose/pc-data.local-dev.yml --profile local-dev up -d
+python -m venv .venv && source .venv/bin/activate
+pip install -e "src/api[dev]"
+ruff check src/api && mypy src/api
+pytest -q tests -m "not infra"     # add -m infra with infra/local running
 ```
 
 ## Pull requests
