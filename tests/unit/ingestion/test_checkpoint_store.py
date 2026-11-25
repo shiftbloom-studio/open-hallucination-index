@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — checkpoint_store unit tests.
+"""Wave 3 Stream C - checkpoint_store unit tests.
 
 Covers the crash-mid-batch resume invariant and the pause ↔
 running state transitions.

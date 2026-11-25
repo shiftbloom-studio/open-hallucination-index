@@ -5,7 +5,7 @@ LLM's context window can handle documents of any length. The overlap
 preserves co-reference across chunk boundaries (e.g. a pronoun resolved
 in chunk N-1 is still visible to the decomposer in chunk N).
 
-Token counting is a rough ``len(text) / 4`` approximation — adequate for
+Token counting is a rough ``len(text) / 4`` approximation - adequate for
 sizing the chunker, and avoids a mandatory ``tiktoken`` dependency. The
 decomposer itself still uses the LLM provider's native tokenization for
 the actual call, so the ~4-char-per-token estimate only drives chunk
@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# Roughly 4 chars per token in English — used only for chunk sizing.
+# Roughly 4 chars per token in English - used only for chunk sizing.
 _CHARS_PER_TOKEN = 4
 
 
@@ -68,7 +68,7 @@ def _split_paragraphs(text: str) -> list[tuple[str, int, int]]:
 
 
 def _split_sentences(text: str, *, start_offset: int) -> list[tuple[str, int, int]]:
-    """Coarse sentence-boundary split. Not perfect — good enough for chunking.
+    """Coarse sentence-boundary split. Not perfect - good enough for chunking.
 
     Returns absolute-offset tuples so callers can thread character spans
     through from the top-level input.

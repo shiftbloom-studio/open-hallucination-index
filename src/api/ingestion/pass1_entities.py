@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — Pass 1: Wikidata entity graph into Aura.
+"""Wave 3 Stream C - Pass 1: Wikidata entity graph into Aura.
 
 Streams the Wikidata JSON dump, projects each entity with an English
 Wikipedia sitelink into a ``(:Entity {...})`` Neo4j node, and writes
@@ -99,7 +99,7 @@ RETURN count(e) AS n
 
 
 class Pass1EntityWriter:
-    """Run Pass 1 — Wikidata → Aura entities + property edges."""
+    """Run Pass 1 - Wikidata → Aura entities + property edges."""
 
     def __init__(
         self,
@@ -225,7 +225,7 @@ class Pass1EntityWriter:
             self._ckpt.increment_dlq("pass1", n=len(batch))
             return False
 
-        # Edge writes — one batch per relationship type.
+        # Edge writes - one batch per relationship type.
         by_edge_type: dict[str, list[dict[str, str]]] = {}
         for e in batch:
             for pid, edge_type in self._edge_filter.items():

@@ -21,7 +21,7 @@ if str(_SRC_API) not in sys.path:
 # the full-suite run that imports ``config`` transitively loads
 # ``adapters`` from there into sys.modules. Our path insert above would
 # then be too late because subsequent ``from adapters.foo import ...``
-# reuses the cached package and walks its frozen ``__path__`` — which
+# reuses the cached package and walks its frozen ``__path__`` - which
 # points at the main checkout's adapters/, where this worktree's new
 # ``nli_gemini`` module does NOT exist. Purging the flat-namespace
 # sibling packages from the import cache forces the next import to
@@ -47,13 +47,13 @@ from adapters.nli_gemini import NliGeminiAdapter  # noqa: E402
 from interfaces.llm import LLMMessage, LLMProvider, LLMResponse  # noqa: E402
 from interfaces.nli import NliAdapter, NliResult  # noqa: E402
 
-# ruff: noqa: I001  — the block above is deliberately ordered after the
+# ruff: noqa: I001  - the block above is deliberately ordered after the
 # sys.path insert so `from interfaces.*` resolves to THIS worktree's
 # src/api tree, not any installed editable-install from a sibling checkout.
 
 
 # ---------------------------------------------------------------------------
-# Canned LLM stub — the ONLY thing the adapter talks to in these tests.
+# Canned LLM stub - the ONLY thing the adapter talks to in these tests.
 # Zero live Gemini calls, zero network, zero $.
 # ---------------------------------------------------------------------------
 
@@ -62,8 +62,8 @@ class _CannedLLM(LLMProvider):
     """Records every call and pops the next reply off a scripted queue.
 
     Each queue entry is either:
-    * ``str`` — returned verbatim as ``LLMResponse.content``
-    * ``Exception`` — raised from ``complete()`` (simulates transport err)
+    * ``str`` - returned verbatim as ``LLMResponse.content``
+    * ``Exception`` - raised from ``complete()`` (simulates transport err)
 
     Exhausting the queue is itself an assertion signal: the test should
     not have called more times than it scripted. We raise ``AssertionError``
@@ -101,7 +101,7 @@ class _CannedLLM(LLMProvider):
         )
         if not self._replies:
             raise AssertionError(
-                "CannedLLM ran out of scripted replies — test undercounted calls"
+                "CannedLLM ran out of scripted replies - test undercounted calls"
             )
         nxt = self._replies.pop(0)
         if isinstance(nxt, Exception):
@@ -184,7 +184,7 @@ def test_nli_result_is_frozen_dataclass_with_expected_fields() -> None:
 
 class _StructurallyValidAdapter:
     """Bare-minimum implementation exercising the NliAdapter Protocol
-    shape. No behavior — the assertion is only that isinstance() at
+    shape. No behavior - the assertion is only that isinstance() at
     runtime accepts this against the Protocol."""
 
     async def classify(
@@ -212,7 +212,7 @@ def test_nli_adapter_is_runtime_checkable_protocol() -> None:
 
 
 # ---------------------------------------------------------------------------
-# NliGeminiAdapter — single-pass label dispatch
+# NliGeminiAdapter - single-pass label dispatch
 # ---------------------------------------------------------------------------
 
 
@@ -316,7 +316,7 @@ async def test_classify_neutral_label_single_pass() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Self-consistency (K > 1) — majority-vote label, averaged scores
+# Self-consistency (K > 1) - majority-vote label, averaged scores
 # ---------------------------------------------------------------------------
 
 
@@ -449,12 +449,12 @@ async def test_max_retries_param_is_respected() -> None:
 async def test_json_parse_error_retries_then_recovers() -> None:
     """LLM emits malformed JSON on first call, valid JSON on second:
     adapter retries and returns the valid classification. This is a
-    realistic Gemini failure mode — the model occasionally wraps the
+    realistic Gemini failure mode - the model occasionally wraps the
     JSON in markdown fences or prose, and Gemini 3's strict JSON mode
     is opt-in, not guaranteed."""
     llm = _CannedLLM(
         [
-            "not valid json — missing braces",
+            "not valid json - missing braces",
             _json_reply(
                 "support",
                 0.9,
@@ -537,7 +537,7 @@ async def test_scores_are_renormalised_when_they_do_not_sum_to_one() -> None:
 
 
 async def test_zero_sum_scores_treated_as_parse_error() -> None:
-    """All three scores being 0 is pathological — the adapter can't
+    """All three scores being 0 is pathological - the adapter can't
     renormalise by 0. It must fall back rather than divide-by-zero."""
     import orjson
 
@@ -584,12 +584,12 @@ async def test_unknown_label_is_treated_as_parse_error() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Health check — delegates to underlying LLMProvider
+# Health check - delegates to underlying LLMProvider
 # ---------------------------------------------------------------------------
 
 
 async def test_health_check_delegates_to_underlying_llm() -> None:
-    """Adapter has no state of its own worth probing — its health is
+    """Adapter has no state of its own worth probing - its health is
     the underlying LLMProvider's health. The Lambda health endpoint
     will call this via the DI container's wiring (D1 / Task 1.9)."""
     llm = _CannedLLM([])  # no replies needed; no classify calls in this test
@@ -636,7 +636,7 @@ async def test_self_consistency_low_confidence_snaps_to_zero() -> None:
     signal regardless of whether the pathway was a terminal fallback or a
     run of agreeing-but-unsure samples.
 
-    The label vote and scores still stand — the adapter isn't rewriting
+    The label vote and scores still stand - the adapter isn't rewriting
     the classification, only flagging it as low-signal via confidence.
     Reasoning is also preserved (not swapped for ``nli_unavailable``)
     because the UI should still be able to show the model's (weak)
@@ -662,7 +662,7 @@ async def test_self_consistency_low_confidence_snaps_to_zero() -> None:
 
     result = await adapter.classify("c", "e")
 
-    # Average raw confidence is (0.02+0.03+0.01)/3 = 0.02 — below the
+    # Average raw confidence is (0.02+0.03+0.01)/3 = 0.02 - below the
     # snap threshold, so forced to exactly 0.0.
     assert result.confidence == 0.0
     # The label vote and the renormalised scores are unaffected.
@@ -701,5 +701,5 @@ async def test_self_consistency_above_floor_confidence_is_preserved() -> None:
 
     result = await adapter.classify("c", "e")
 
-    # Average 0.70 — well above any reasonable floor.
+    # Average 0.70 - well above any reasonable floor.
     assert abs(result.confidence - 0.70) < 1e-6

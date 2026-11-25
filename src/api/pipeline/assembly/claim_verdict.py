@@ -34,7 +34,7 @@ def assemble_claim_verdict(
 ) -> ClaimVerdict:
     """Construct a frozen public ``ClaimVerdict``.
 
-    Thin wrapper — kept as a function (rather than inline Pydantic
+    Thin wrapper - kept as a function (rather than inline Pydantic
     construction at call sites) so future field additions only need to
     touch this one place, and so the pipeline orchestrator doesn't need
     to know the ClaimVerdict constructor signature directly.

@@ -1,5 +1,5 @@
 """Integration test: the full ``create_app()`` stack wrapped around
-``/_internal/async-verify`` — closes the test-coverage gap E2 surfaced
+``/_internal/async-verify`` - closes the test-coverage gap E2 surfaced
 in D3's handoff §5.3.
 
 D2's 34 existing tests all mount the internal router directly onto a
@@ -22,7 +22,7 @@ AWS side effects (Secrets Manager, DynamoDB) stubbed out and
 
 The fixture intentionally does NOT use ``with TestClient(app):`` so
 the lifespan context (which boots the real LLM / Qdrant / Neo4j
-adapters and wants live AWS creds) is skipped — dependency overrides
+adapters and wants live AWS creds) is skipped - dependency overrides
 take its place.
 """
 
@@ -36,7 +36,7 @@ import pytest
 
 # ---------------------------------------------------------------------------
 # sys.path + cross-worktree sys.modules purge. Same guarded pattern as
-# the other tests/unit/server/* files — see tests/unit/conftest.py for
+# the other tests/unit/server/* files - see tests/unit/conftest.py for
 # the session-scoped layer this complements.
 # ---------------------------------------------------------------------------
 _SRC_API = Path(__file__).resolve().parents[3] / "src" / "api"
@@ -169,7 +169,7 @@ def middleware_app(
     app = create_app()
 
     # 5. Dependency-override get_pipeline (lifespan is intentionally
-    # NOT triggered — see module docstring).
+    # NOT triggered - see module docstring).
     from config import dependencies as deps
 
     pipeline = _StubPipeline()
@@ -192,7 +192,7 @@ def _body() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# 1. Silent-fail regression — missing header → 403, handler untouched.
+# 1. Silent-fail regression - missing header → 403, handler untouched.
 # ---------------------------------------------------------------------------
 
 
@@ -211,7 +211,7 @@ def test_internal_async_verify_403s_without_edge_secret(
     assert resp.status_code == 403
     assert resp.json()["detail"] == "missing_edge_secret"
 
-    # Handler not reached — no ticket check, no phase updates, no
+    # Handler not reached - no ticket check, no phase updates, no
     # terminal write, pipeline never invoked.
     assert recorded["get_job"] == []
     assert recorded["update_phase"] == []
@@ -221,7 +221,7 @@ def test_internal_async_verify_403s_without_edge_secret(
 
 
 # ---------------------------------------------------------------------------
-# 2. Fix verification — correct header → handler runs end to end.
+# 2. Fix verification - correct header → handler runs end to end.
 # ---------------------------------------------------------------------------
 
 

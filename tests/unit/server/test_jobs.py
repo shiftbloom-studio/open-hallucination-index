@@ -1,4 +1,4 @@
-"""Unit tests for ``src/api/server/jobs.py`` — DynamoDB + self-invoke helpers.
+"""Unit tests for ``src/api/server/jobs.py`` - DynamoDB + self-invoke helpers.
 
 Stream D2 replaces the single long-running sync ``POST /verify`` with a
 three-piece async handshake:
@@ -31,7 +31,7 @@ import pytest
 
 # ---------------------------------------------------------------------------
 # sys.path + cross-worktree sys.modules purge (mirrors the pattern adopted by
-# tests/unit/pipeline/test_compute_posteriors.py — see the note there about
+# tests/unit/pipeline/test_compute_posteriors.py - see the note there about
 # the shared .venv's editable install pointing at the MAIN checkout's
 # src/api, which silently shadows this worktree's server/jobs.py otherwise).
 # tests/unit/conftest.py does the session-scoped purge first; this guarded
@@ -367,7 +367,7 @@ def test_get_job_surfaces_error_message(
 
 
 # ---------------------------------------------------------------------------
-# async_invoke_verify — synthetic APIGW v2 event + InvocationType=Event
+# async_invoke_verify - synthetic APIGW v2 event + InvocationType=Event
 # ---------------------------------------------------------------------------
 
 
@@ -392,7 +392,7 @@ def test_async_invoke_verify_sends_event_invocation_to_self(
     assert payload["rawPath"] == "/_internal/async-verify"
     assert payload["requestContext"]["http"]["method"] == "POST"
     assert payload["requestContext"]["http"]["path"] == "/_internal/async-verify"
-    # body is itself JSON — Web Adapter forwards body as-is to FastAPI.
+    # body is itself JSON - Web Adapter forwards body as-is to FastAPI.
     body = json.loads(payload["body"])
     assert body == {
         "__async_verify": True,
@@ -432,7 +432,7 @@ def test_async_invoke_verify_propagates_depth_counter(
 
 
 # ---------------------------------------------------------------------------
-# Edge-secret header injection — D3 fix for D2's silent 403 path.
+# Edge-secret header injection - D3 fix for D2's silent 403 path.
 # ---------------------------------------------------------------------------
 
 
@@ -457,7 +457,7 @@ def test_async_invoke_verify_embeds_edge_secret_header_when_configured(
     # Lower-case per Web Adapter normalisation; matches Starlette's
     # case-insensitive read on the middleware side.
     assert headers["x-ohi-edge-secret"] == "edge-secret-test-abc"
-    # Existing headers are preserved — regression guard against a future
+    # Existing headers are preserved - regression guard against a future
     # refactor that replaces the headers dict wholesale.
     assert headers["content-type"] == "application/json"
     assert headers["x-ohi-async-job-id"] == "jid-4"

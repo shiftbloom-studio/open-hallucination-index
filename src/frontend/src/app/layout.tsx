@@ -13,7 +13,7 @@ const siteUrl =
   "https://ohi.shiftbloom.studio";
 const siteName = "Open Hallucination Index";
 const siteDescription =
-  "OHI decomposes AI-generated text into atomic claims and assigns each one a calibrated probability of being true — with explicit uncertainty intervals, an auditable probabilistic claim graph, and a public calibration report. Open-source.";
+  "OHI decomposes AI-generated text into atomic claims and assigns each one a calibrated probability of being true - with explicit uncertainty intervals, an auditable probabilistic claim graph, and a public calibration report. Open-source.";
 
 const structuredData = {
   "@context": "https://schema.org",
@@ -104,7 +104,7 @@ export const metadata: Metadata = {
         url: "/open-graph.jpg",
         width: 1200,
         height: 630,
-        alt: "Open Hallucination Index — improving AI factuality",
+        alt: "Open Hallucination Index - improving AI factuality",
         type: "image/jpeg",
       },
       // Medium variant for social previews
@@ -112,7 +112,7 @@ export const metadata: Metadata = {
         url: "/open-graph-800x418.jpg",
         width: 800,
         height: 418,
-        alt: "Open Hallucination Index — improving AI factuality (800x418)",
+        alt: "Open Hallucination Index - improving AI factuality (800x418)",
         type: "image/jpeg",
       },
       // WebP versions for platforms that support modern formats
@@ -120,14 +120,14 @@ export const metadata: Metadata = {
         url: "/open-graph-1200x630.webp",
         width: 1200,
         height: 630,
-        alt: "Open Hallucination Index — improving AI factuality (webp)",
+        alt: "Open Hallucination Index - improving AI factuality (webp)",
         type: "image/webp",
       },
       {
         url: "/open-graph-800x418.webp",
         width: 800,
         height: 418,
-        alt: "Open Hallucination Index — improving AI factuality (webp)",
+        alt: "Open Hallucination Index - improving AI factuality (webp)",
         type: "image/webp",
       },
     ],

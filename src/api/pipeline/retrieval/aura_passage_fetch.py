@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — Aura passage fetch (Decision K).
+"""Wave 3 Stream C - Aura passage fetch (Decision K).
 
 After :class:`QdrantPassageSearch` returns passage IDs, this fetcher
 runs one Cypher ``MATCH`` to pull the full passage text + article

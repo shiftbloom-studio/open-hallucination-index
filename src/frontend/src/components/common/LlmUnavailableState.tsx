@@ -21,7 +21,7 @@ export function LlmUnavailableState({ onRetry, className }: LlmUnavailableStateP
         Upstream LLM unavailable
       </h2>
       <p className="mt-1 text-sm font-medium text-brand-ink">
-        Google Gemini — OHI&apos;s sole Phase-1 verification LLM — is not responding.
+        Google Gemini - OHI&apos;s sole Phase-1 verification LLM - is not responding.
       </p>
       <p className="mt-2 max-w-prose text-sm text-brand-muted">
         This is outside our control. Retry in a moment; if it persists, please report it.

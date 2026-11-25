@@ -1,4 +1,4 @@
-"""Wave 3 Stream P — pipeline PCG path integration test.
+"""Wave 3 Stream P - pipeline PCG path integration test.
 
 Wires the pipeline with a stubbed NLI adapter, stubbed cc-NLI
 dispatcher, and the real :class:`PCGBeliefPropagationAdapter`. Asserts
@@ -116,7 +116,7 @@ async def test_pcg_path_populates_pcg_observability_on_posteriors_result() -> No
         conformal=_StubConformal(),  # type: ignore[arg-type]
         nli_adapter=stub_nli,  # type: ignore[arg-type]
         pcg=pcg,
-        cc_nli_dispatcher=None,  # single claim — no cc pairs anyway
+        cc_nli_dispatcher=None,  # single claim - no cc pairs anyway
     )
     result = await pipeline._compute_posteriors(
         [claim], {claim.id: evidence}, {claim.id: _DEFAULT_ASSIGNMENT},

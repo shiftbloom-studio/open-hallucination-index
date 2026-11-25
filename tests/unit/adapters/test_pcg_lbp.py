@@ -1,4 +1,4 @@
-"""Wave 3 Stream P — damped LBP solver tests."""
+"""Wave 3 Stream P - damped LBP solver tests."""
 
 from __future__ import annotations
 

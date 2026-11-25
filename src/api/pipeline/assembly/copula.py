@@ -1,6 +1,6 @@
 """Gaussian copula joint-truth aggregator. Spec §9.
 
-Computes ``Φ_R(Φ⁻¹(b_1), ..., Φ⁻¹(b_N))`` — the Gaussian-copula joint
+Computes ``Φ_R(Φ⁻¹(b_1), ..., Φ⁻¹(b_N))`` - the Gaussian-copula joint
 probability that all N claims are true, accounting for their correlation
 structure inferred from L3 claim↔claim NLI.
 
@@ -131,7 +131,7 @@ def gaussian_copula_joint(
 
 
 def build_correlation_matrix_identity(n: int) -> np.ndarray:
-    """Phase 1 helper — returns an N×N identity matrix.
+    """Phase 1 helper - returns an N×N identity matrix.
 
     When Phase 2 PCG lands, the real correlation matrix will be built
     from L3 claim↔claim NLI (entail − contradict) via

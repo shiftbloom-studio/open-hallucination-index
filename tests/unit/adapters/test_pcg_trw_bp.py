@@ -1,4 +1,4 @@
-"""Wave 3 Stream P — TRW-BP solver tests."""
+"""Wave 3 Stream P - TRW-BP solver tests."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def test_trwbp_single_node_with_evidence() -> None:
 
 
 def test_trwbp_produces_reasonable_marginals_with_support_edge() -> None:
-    """Two claims + SUPPORT edge — TRW-BP should produce per-node
+    """Two claims + SUPPORT edge - TRW-BP should produce per-node
     marginals consistent with the agreement preference.
 
     We deliberately do NOT assert on ``converged``: the shortcut 2-tree

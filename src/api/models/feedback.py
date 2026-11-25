@@ -72,7 +72,7 @@ class CalibrationEntry(BaseModel):
 
 
 class DisputedClaim(BaseModel):
-    """Disputed claims queue entry (spec §12 — disputed_claims_queue)."""
+    """Disputed claims queue entry (spec §12 - disputed_claims_queue)."""
 
     claim_id: UUID
     first_disputed_at: datetime
@@ -87,6 +87,6 @@ class DisputedClaim(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-# Explicit alias for readability — the Postgres adapter returns a UUID
+# Explicit alias for readability - the Postgres adapter returns a UUID
 # string, and callers treat it as opaque.
 FeedbackId = str

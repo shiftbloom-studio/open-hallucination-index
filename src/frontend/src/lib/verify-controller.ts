@@ -13,7 +13,7 @@ import type {
  * host-header quirk and a 30 s hard cap. The controller is now a
  * polling loop against ``GET /api/v2/verify/status/{job_id}``. The
  * public state shape is preserved so ``VerifyPage`` and ``SseProgress``
- * (naming-legacy-only) continue to work — status values that SSE
+ * (naming-legacy-only) continue to work - status values that SSE
  * populated are now driven from phase transitions in the polled
  * record.
  *
@@ -102,7 +102,7 @@ function applyPhaseToProgress(progress: ProgressBag, phase: string): ProgressBag
   const next: ProgressBag = { ...progress, currentPhase: phase, phasesSeen };
 
   // Opportunistic population of legacy SseProgress fields. Each phase
-  // marks *its predecessor* as done — so "retrieving_evidence" arrives
+  // marks *its predecessor* as done - so "retrieving_evidence" arrives
   // the moment the pipeline finished decomposing, and so on. Counts
   // are placeholders until the verdict arrives; the goal is just to
   // drive the step-state machine in SseProgress.
@@ -117,7 +117,7 @@ function applyPhaseToProgress(progress: ProgressBag, phase: string): ProgressBag
     }
   }
   if (phase === "classifying" || phase === "calibrating" || phase === "assembling") {
-    // No real claim-routing phase exists in pipeline.py — domain routing
+    // No real claim-routing phase exists in pipeline.py - domain routing
     // is a trivial dict lookup so it never gets its own boundary. We
     // fake a single-entry routed[] so SseProgress shows the routing
     // step as active, then done, at the right moment.
@@ -211,7 +211,7 @@ export interface UseVerifyControllerApi {
   state: VerifyState;
   submit: (req: VerifyRequest) => Promise<void>;
   /**
-   * Alias for ``submit`` — kept for back-compat with VerifyPage's
+   * Alias for ``submit`` - kept for back-compat with VerifyPage's
    * "Retry with sync fallback" button. Pre-D2 this bypassed SSE and
    * hit /verify directly; under D2 there is no SSE path at all, so
    * both entry points drive the same polling flow.
@@ -307,7 +307,7 @@ export function useVerifyController(options?: {
       } catch (err) {
         if (signal.aborted) return;
         if (err instanceof OhiError && err.status === 404) {
-          // Job disappeared — either TTL reaped it (shouldn't happen
+          // Job disappeared - either TTL reaped it (shouldn't happen
           // within 3 min) or a producer bug. Surface.
           dispatch({ type: "ERROR", error: err });
           return;

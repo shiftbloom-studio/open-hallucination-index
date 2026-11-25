@@ -160,7 +160,7 @@ async def _initialize_adapters() -> None:
     _embedding_adapter = LocalEmbeddingAdapter(settings.embedding)
     logger.info(f"Embedding adapter: {settings.embedding.model_name}")
 
-    # LLM — native Gemini adapter. OpenAILLMAdapter is kept in-tree as a
+    # LLM - native Gemini adapter. OpenAILLMAdapter is kept in-tree as a
     # fallback for non-Gemini deployments; select via env var LLM_BACKEND
     # ("gemini" | "openai"; default gemini since prod targets Gemini).
     llm_backend = os.environ.get("LLM_BACKEND", "gemini").lower()
@@ -170,7 +170,7 @@ async def _initialize_adapters() -> None:
         _llm_provider = GeminiLLMAdapter(settings.llm)
     logger.info(f"LLM provider: {settings.llm.model} (backend={llm_backend})")
 
-    # Neo4j — non-fatal on connect failure. A dead graph store degrades
+    # Neo4j - non-fatal on connect failure. A dead graph store degrades
     # retrieval (falls back to MediaWiki MCP + Qdrant) but must not take
     # down the whole app. /health/deep surfaces the layer state.
     _graph_store = Neo4jGraphAdapter(settings.neo4j)
@@ -179,12 +179,12 @@ async def _initialize_adapters() -> None:
         logger.info(f"Graph store: {settings.neo4j.uri}")
     except Exception as exc:  # noqa: BLE001
         logger.error(
-            "Graph store connect failed (%s); proceeding in degraded mode — "
+            "Graph store connect failed (%s); proceeding in degraded mode - "
             "retrieval will skip Neo4j until it recovers on next request",
             exc,
         )
 
-    # Qdrant — non-fatal on connect failure. Post-incident 2026-04-19:
+    # Qdrant - non-fatal on connect failure. Post-incident 2026-04-19:
     # PC Docker stack outage (CF tunnel 1033) previously crashed Lambda
     # init because connect() raised. Now the app stays up; AdaptiveEvidenceCollector
     # already routes around a dead vector_store via its local-timeout
@@ -198,13 +198,13 @@ async def _initialize_adapters() -> None:
         logger.info(f"Vector store: {settings.qdrant.host}:{settings.qdrant.port}")
     except Exception as exc:  # noqa: BLE001
         logger.error(
-            "Vector store connect failed (%s); proceeding in degraded mode — "
+            "Vector store connect failed (%s); proceeding in degraded mode - "
             "PC Docker stack / CF tunnel likely down. Lambda stays up; "
             "retrieval degrades to MediaWiki MCP + graph paths until recovery.",
             exc,
         )
 
-    # Redis trace (optional — used by knowledge-track; the v1 verdict cache
+    # Redis trace (optional - used by knowledge-track; the v1 verdict cache
     # is gone and the v2 cache lives elsewhere). Already non-fatal via the
     # settings.redis.enabled gate.
     if settings.redis.enabled:
@@ -217,17 +217,17 @@ async def _initialize_adapters() -> None:
             _trace_store = None
     else:
         _trace_store = None
-        logger.info("Redis disabled — trace store unavailable")
+        logger.info("Redis disabled - trace store unavailable")
 
     # L1 decomposer
     _claim_decomposer = LLMClaimDecomposer(llm_provider=_llm_provider)
 
-    # L3 NLI — Phase 2 LLM-based 3-way classifier (Stream B port, wired by
+    # L3 NLI - Phase 2 LLM-based 3-way classifier (Stream B port, wired by
     # Stream D1). Always the native Gemini adapter regardless of LLM_BACKEND
     # because NLI depends on safetySettings=BLOCK_NONE + thinkingLevel=HIGH,
     # which the OpenAI-compat shim strips. We use model_copy to reuse the
     # decomposer's LLMSettings (same api_key, timeout, etc.) while swapping
-    # the model id to settings.nli.llm_model — this lets L1 and L3 evolve
+    # the model id to settings.nli.llm_model - this lets L1 and L3 evolve
     # their model choices independently without duplicating all the other
     # LLM_* env vars.
     _nli_llm_settings = settings.llm.model_copy(update={"model": settings.nli.llm_model})
@@ -255,7 +255,7 @@ async def _initialize_adapters() -> None:
         except Exception as e:
             logger.warning(
                 f"MCP source {getattr(_src, 'source_name', type(_src).__name__)} "
-                f"connect failed — skipping: {e}"
+                f"connect failed - skipping: {e}"
             )
     _mcp_selector = SmartMCPSelector(_mcp_sources) if _mcp_sources else None
 
@@ -289,7 +289,7 @@ async def _initialize_adapters() -> None:
 
     # Adaptive collector (reused by v2 L1 retrieval layer).
     # Stream F fix: plumb _mcp_selector so Tier 2 (external MCP sources)
-    # actually runs — without it `_collect_mcp` hits the "No sources and
+    # actually runs - without it `_collect_mcp` hits the "No sources and
     # no selector" branch and returns []. Also plumb the verification
     # timeouts; the collector's hard-coded defaults (local=50ms,
     # mcp=500ms, total=2000ms) are tighter than MediaWiki's ~600-800ms
@@ -307,14 +307,14 @@ async def _initialize_adapters() -> None:
     )
 
     # Knowledge mesh builder (used by L1 retrieval). trace_store is optional
-    # — None when Redis is disabled; build_mesh() falls back to live queries.
+    # - None when Redis is disabled; build_mesh() falls back to live queries.
     _mesh_builder = KnowledgeMeshBuilder(
         trace_store=_trace_store,
         graph_store=_graph_store,
         vector_store=_vector_store,
     )
 
-    # Wave 3 Stream P — Claim-claim NLI dispatcher (OpenAI GPT-5.4 xhigh
+    # Wave 3 Stream P - Claim-claim NLI dispatcher (OpenAI GPT-5.4 xhigh
     # primary + Gemini fallback). Decision H. Primary is optional-on-config:
     # if the openai_api_key secret is empty OR cc_nli.llm_provider=='gemini',
     # we wire the Gemini fallback as BOTH primary and fallback (degrades
@@ -323,7 +323,7 @@ async def _initialize_adapters() -> None:
     want_openai_primary = settings.cc_nli.llm_provider == "openai" and bool(cc_openai_key)
 
     # Fallback Gemini cc-NLI uses a dedicated LLM instance tuned to
-    # settings.cc_nli.llm_fallback_model — keeps claim-evidence and
+    # settings.cc_nli.llm_fallback_model - keeps claim-evidence and
     # claim-claim Gemini pulls independent if models diverge.
     _cc_fallback_llm_settings = settings.llm.model_copy(
         update={"model": settings.cc_nli.llm_fallback_model}
@@ -353,7 +353,7 @@ async def _initialize_adapters() -> None:
         _cc_primary_adapter = _cc_fallback_adapter
         logger.warning(
             "cc-NLI primary=Gemini (OpenAI disabled or key empty); "
-            "fallback also Gemini — no true fallback layer active"
+            "fallback also Gemini - no true fallback layer active"
         )
 
     _cc_nli_dispatcher = ClaimClaimNliDispatcher(
@@ -363,7 +363,7 @@ async def _initialize_adapters() -> None:
         claim_claim_max_pairs=settings.pcg.claim_claim_max_pairs,
     )
 
-    # Wave 3 Stream P — PCG inference adapter (TRW-BP + LBP + Gibbs).
+    # Wave 3 Stream P - PCG inference adapter (TRW-BP + LBP + Gibbs).
     _pcg_adapter = PCGBeliefPropagationAdapter(
         max_iters=settings.pcg.max_iters,
         convergence_tol=settings.pcg.convergence_tol,
@@ -381,7 +381,7 @@ async def _initialize_adapters() -> None:
         settings.pcg.rigor_default,
     )
 
-    # v2 Pipeline orchestrator — Wave 3 PCG path live.
+    # v2 Pipeline orchestrator - Wave 3 PCG path live.
     _verdict_store = InMemoryVerdictStore()
     conformal_calibrator = SplitConformalCalibrator(InMemoryCalibrationStore())
     _pipeline = Pipeline(
@@ -389,14 +389,14 @@ async def _initialize_adapters() -> None:
         retrieval=_evidence_collector,
         conformal=conformal_calibrator,
         domain_router=None,  # Wave 4 Phase 3
-        nli=None,  # NLIService (cross-encoder) — reserved for future path
+        nli=None,  # NLIService (cross-encoder) - reserved for future path
         nli_adapter=_nli_adapter,  # D1: claim-evidence Gemini NLI
         pcg=_pcg_adapter,  # Wave 3 Stream P: TRW-BP/LBP/Gibbs live
         cc_nli_dispatcher=_cc_nli_dispatcher,  # Wave 3 Stream P: OpenAI+Gemini cc-NLI
         domain_adapters=None,  # Wave 4 Phase 3
     )
 
-    logger.info("DI container initialized — Wave 3 pipeline live (PCG + cc-NLI wired)")
+    logger.info("DI container initialized - Wave 3 pipeline live (PCG + cc-NLI wired)")
 
 
 def _build_mcp_sources(settings: Any) -> list[MCPKnowledgeSource]:
@@ -411,7 +411,7 @@ def _build_mcp_sources(settings: Any) -> list[MCPKnowledgeSource]:
     # even if MCP_*_ENABLED defaults are left at their pydantic values.
     in_test_env = getattr(settings, "environment", "development") == "test"
 
-    # MediaWiki (live Wikipedia Action API) — Phase 2 Wave 1 cheap-evidence
+    # MediaWiki (live Wikipedia Action API) - Phase 2 Wave 1 cheap-evidence
     # source. Default ON via MCPSettings.wikipedia_enabled.
     if getattr(mcp_cfg, "wikipedia_enabled", True) and not in_test_env:
         sources.append(MediaWikiAdapter())  # type: ignore[arg-type]

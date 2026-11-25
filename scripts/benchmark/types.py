@@ -1,6 +1,6 @@
 """Shared types for the benchmark harness.
 
-Kept deliberately small — these are the only types every engine adapter,
+Kept deliberately small - these are the only types every engine adapter,
 dataset loader, runner, and metric function needs to agree on.
 """
 

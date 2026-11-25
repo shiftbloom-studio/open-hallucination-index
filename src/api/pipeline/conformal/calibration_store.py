@@ -2,16 +2,16 @@
 
 The store exposes three operations L5 uses at request time:
 
-  * ``get_quantile(partition)`` — the ``(1-α)`` conformal quantile for a
+  * ``get_quantile(partition)`` - the ``(1-α)`` conformal quantile for a
     given partition (``"<domain>:<claim_type>"`` or ``"<domain>:any"``
     when per-stratum data is insufficient).
-  * ``get_n(partition)`` — number of calibration entries. Used by the
+  * ``get_n(partition)`` - number of calibration entries. Used by the
     Mondrian fallback cascade in Task 3.7 to decide when to fall back.
-  * ``add_entry(partition, posterior, true_label)`` — write a single
+  * ``add_entry(partition, posterior, true_label)`` - write a single
     calibration entry. Phase 4 (Task 4.1) replaces this with the
     Postgres-backed implementation that reads from ``calibration_set``.
 
-The Phase 1 in-memory store is deliberately empty — every partition has
+The Phase 1 in-memory store is deliberately empty - every partition has
 n=0, so L5 always takes the ``fallback_used="general"`` path. This lets
 the full pipeline return valid ``DocumentVerdict`` objects without
 fabricating coverage guarantees we can't honor.
@@ -59,7 +59,7 @@ class CalibrationStore(ABC):
 
 
 class InMemoryCalibrationStore(CalibrationStore):
-    """Process-local store — fine for tests + Phase 1.
+    """Process-local store - fine for tests + Phase 1.
 
     Entries are grouped by partition. Per-partition nonconformity scores
     are recomputed on every ``get_quantile`` call (small N; negligible

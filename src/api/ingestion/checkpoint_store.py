@@ -1,11 +1,11 @@
-"""Wave 3 Stream C — SQLite checkpoint store (Decision C).
+"""Wave 3 Stream C - SQLite checkpoint store (Decision C).
 
 Fine-grained resume points for the multi-hour corpus-ingestion run.
 One row per ``(pass, last_committed_id)`` tracks the high-water mark
 of successfully-committed records per pass, plus run-level state
 (``running`` / ``paused`` / ``aborted`` / ``complete``).
 
-Upsert semantics throughout — re-running the orchestrator picks up at
+Upsert semantics throughout - re-running the orchestrator picks up at
 ``last_committed_id + 1`` for each non-terminal pass without losing
 data if a batch was partially written (the resume path verifies and
 re-writes idempotently on mismatch).
@@ -142,7 +142,7 @@ class CheckpointStore:
     # ------------------------------------------------------------------
 
     def start_pass(self, pass_name: PassName) -> None:
-        """Mark a pass as running. Idempotent — if a row already exists
+        """Mark a pass as running. Idempotent - if a row already exists
         in ``paused`` state, flip to ``running`` without resetting
         counters."""
         now = _now_iso()

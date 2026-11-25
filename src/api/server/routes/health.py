@@ -173,7 +173,7 @@ class DeepHealthStatus(BaseModel):
     "/deep",
     response_model=DeepHealthStatus,
     status_code=status.HTTP_200_OK,
-    summary="Deep health — per-layer status + latency + model versions",
+    summary="Deep health - per-layer status + latency + model versions",
     description=(
         "Exercises every pipeline layer with a synthetic payload and "
         "returns per-layer latency + status, plus model versions and "
@@ -204,7 +204,7 @@ async def deep_health(
             return
         start = perf_counter()
         try:
-            # get_* dependency functions are synchronous — they return the
+            # get_* dependency functions are synchronous - they return the
             # singleton adapter instance populated during lifespan startup.
             instance = getter()
         except Exception as exc:
@@ -254,7 +254,7 @@ async def deep_health(
         overall = "degraded"
         model_versions = {}
 
-    # Verdict store — always in-memory in Phase 1, should never fail
+    # Verdict store - always in-memory in Phase 1, should never fail
     start = perf_counter()
     try:
         get_verdict_store()

@@ -337,8 +337,8 @@ class LLMClaimDecomposer(ClaimDecomposer):
         freshly-extracted claim.
 
         Writes:
-          - ``normalized_form`` — canonical text (always populated).
-          - ``entity_qids`` — Wikidata QIDs (empty dict when MCP stub).
+          - ``normalized_form`` - canonical text (always populated).
+          - ``entity_qids`` - Wikidata QIDs (empty dict when MCP stub).
         Returns a new frozen Claim; the original is not mutated.
         """
         updates: dict[str, object] = {}
@@ -357,7 +357,7 @@ class LLMClaimDecomposer(ClaimDecomposer):
             if value is not None:
                 logger.debug("Quantitative claim normalized: %r -> %s", claim.text[:60], value)
 
-        # Entity QIDs (stub — empty until Wikidata MCP is wired).
+        # Entity QIDs (stub - empty until Wikidata MCP is wired).
         entities = [claim.subject, claim.object]
         entities_clean = [e for e in entities if e]
         if entities_clean:

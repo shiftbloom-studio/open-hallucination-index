@@ -4,7 +4,7 @@ This module is deliberately separate from `settings.py` (which is user WIP and
 off-limits). It reads environment variables populated by the Lambda runtime
 (set in Terraform via `aws_lambda_function.environment.variables`).
 
-Every accessor raises `KeyError` with a clear message if the var is missing —
+Every accessor raises `KeyError` with a clear message if the var is missing -
 fail-fast at Lambda cold start is intentional.
 """
 

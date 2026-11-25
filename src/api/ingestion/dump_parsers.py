@@ -1,23 +1,23 @@
-"""Wave 3 Stream C — streaming dump parsers.
+"""Wave 3 Stream C - streaming dump parsers.
 
 Two parsers:
 
-* :class:`WikidataJsonDumpParser` — streams the
+* :class:`WikidataJsonDumpParser` - streams the
   ``wikidata-YYYYMMDD-all.json.bz2`` archive entity-by-entity. The
   file is a giant JSON array, one entity per line (except the first
   and last lines). We bypass the standard JSON parser entirely and
   line-read, parsing each line as one entity object. This avoids
   loading ~100 GB into memory.
-* :class:`EnwikiXmlDumpParser` — streams
+* :class:`EnwikiXmlDumpParser` - streams
   ``enwiki-YYYYMMDD-pages-articles.xml.bz2`` main-namespace article
   by article using ``xml.etree.ElementTree.iterparse``. Only ``page``
   elements with ``ns=0`` and a non-redirect ``revision`` are yielded.
 
 Both parsers are designed to cooperate with the lifecycle machinery
-(:mod:`~ingestion.lifecycle`) — they yield records at a cadence the
+(:mod:`~ingestion.lifecycle`) - they yield records at a cadence the
 orchestrator can batch into checkpointable commits.
 
-These are DEFENSIVE parsers — bad UTF-8, truncated records, malformed
+These are DEFENSIVE parsers - bad UTF-8, truncated records, malformed
 XML attributes are logged + skipped (the DLQ lane handles persistently-
 bad records). The stream never raises mid-iteration unless the file
 itself is unreadable.
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 class WikidataEntity:
     """Minimal projection of a Wikidata JSON entity record.
 
-    Not a pydantic model — we skip validation here to keep the parser
+    Not a pydantic model - we skip validation here to keep the parser
     fast; the orchestrator's pass layer filters + validates before
     writing to Aura.
     """
@@ -77,7 +77,7 @@ class WikidataJsonDumpParser:
         with bz2.open(self.path, "rt", encoding="utf-8") as fh:
             first = fh.readline().strip()
             if first != "[":
-                # Some dumps ship without the leading bracket — rewind.
+                # Some dumps ship without the leading bracket - rewind.
                 fh.seek(0)
             for raw_line in fh:
                 line = raw_line.strip().rstrip(",")

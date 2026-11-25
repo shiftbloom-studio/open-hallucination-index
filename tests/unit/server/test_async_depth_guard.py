@@ -6,14 +6,14 @@ The handler refuses any invocation with ``depth > 1`` and writes an
 state immediately. Without this guard, a misconfiguration (bug in the
 async-invoke helper, an extra AWS policy change that makes the
 handler recurse, …) could fire N self-invokes for a single request
-— quietly burning Lambda invocations at exponential rate. The guard
+- quietly burning Lambda invocations at exponential rate. The guard
 is a hard 2-invocation cap per request (the initial + one defensive
 margin).
 
 Depth-guard is separate from the rest of the async-verify contract
 (handler happy-path / refuse-paths live in
 ``test_async_verify_handler.py``) because it's the one test that MUST
-keep working even when future refactors loosen other defences — it's
+keep working even when future refactors loosen other defences - it's
 the last line against a runaway Lambda bill.
 """
 
@@ -115,7 +115,7 @@ def depth_guard_env(monkeypatch: pytest.MonkeyPatch) -> Any:
 
     app = FastAPI()
     app.include_router(async_verify_mod.router)
-    # Override by the original function reference — see the note in
+    # Override by the original function reference - see the note in
     # test_async_verify_handler.py for why monkey-patching deps.get_pipeline
     # breaks the dependency-override match.
     app.dependency_overrides[deps.get_pipeline] = lambda: pipeline
@@ -136,8 +136,8 @@ def test_depth_exceeded_refuses_without_calling_pipeline(depth_guard_env) -> Non
             "ticket": _TICKET,
         },
     )
-    # Handler returns 200 OK — Lambda must not see a failure (would
-    # trigger retry-on-failure semantics) — but refuses internally.
+    # Handler returns 200 OK - Lambda must not see a failure (would
+    # trigger retry-on-failure semantics) - but refuses internally.
     assert resp.status_code == 200
     assert resp.json().get("refused") is True
 
@@ -194,7 +194,7 @@ def test_depth_one_is_allowed(depth_guard_env) -> None:
     )
     # Pipeline will raise (it's _PoisonPipeline) so the handler's
     # exception branch fires fail_job. What matters HERE: the guard
-    # did NOT pre-empt and the pipeline WAS attempted — proving depth=1
+    # did NOT pre-empt and the pipeline WAS attempted - proving depth=1
     # is allowed through the guard.
     assert resp.status_code == 200
     assert pipeline.invocations == 1

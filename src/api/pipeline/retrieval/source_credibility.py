@@ -58,7 +58,7 @@ def temporal_decay(
     """Half-life decay factor.
 
     Returns 1.0 at age 0, 0.5 at one half-life, 0.25 at two. Evidence ages
-    past a few years decay to a near-zero floor — useful for news and
+    past a few years decay to a near-zero floor - useful for news and
     fast-moving topics, essentially a no-op for Wikipedia-grade knowledge.
     """
     if evidence_age_days < 0:

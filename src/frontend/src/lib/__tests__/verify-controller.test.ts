@@ -8,7 +8,7 @@ import type { DocumentVerdict, ClaimVerdict } from "../ohi-types";
 import type { JobStatus } from "../ohi-client";
 
 /**
- * Tests for the Stream D2 polling reducer — SSE events replaced with
+ * Tests for the Stream D2 polling reducer - SSE events replaced with
  * JobStatus updates from ``GET /api/v2/verify/status/{id}``. These pin
  * the two pieces the UI actually reads:
  *

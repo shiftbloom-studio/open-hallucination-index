@@ -1,10 +1,10 @@
-"""L1 retrieval package — moved from pipeline/{router,collector,selector,mesh}.py.
+"""L1 retrieval package - moved from pipeline/{router,collector,selector,mesh}.py.
 
 The four retrieval primitives (claim routing, adaptive evidence collection,
 MCP source selection, knowledge-mesh building) live here. Task 1.4 move.
 
 Added in this package:
-  - source_credibility.py — per-source credibility priors + temporal decay
+  - source_credibility.py - per-source credibility priors + temporal decay
                             + provenance fingerprinting. Used by the
                             collector to stamp Evidence objects with
                             weight metadata the L4 PCG will consume.

@@ -3,7 +3,7 @@
 We talk to the *native* Gemini API
 (https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent)
 instead of the OpenAI-compatible shim at /v1beta/openai/ because the shim
-does not forward `safetySettings` or `generationConfig.thinkingConfig` —
+does not forward `safetySettings` or `generationConfig.thinkingConfig` -
 OHI is a hallucination-detection product, so blocking factually-wrong-but-
 safety-adjacent prompts (e.g. false claims about real people) at the LLM
 layer would defeat its purpose. We set all four safety categories to
@@ -13,9 +13,9 @@ reasoning.
 The adapter implements the LLMProvider port so it swaps in for
 OpenAILLMAdapter without any caller-side changes. The LLMSettings fields
 it uses are:
-- api_key  — Gemini API key (AIza...)
-- model    — e.g. "gemini-3-flash-preview"
-- timeout_seconds — request timeout
+- api_key  - Gemini API key (AIza...)
+- model    - e.g. "gemini-3-flash-preview"
+- timeout_seconds - request timeout
 
 base_url is ignored; the Gemini endpoint is baked in.
 """
@@ -70,7 +70,7 @@ def _split_messages(
         elif m.role == "assistant":
             # Gemini's conversation role for assistant is "model".
             contents.append({"role": "model", "parts": [{"text": m.content}]})
-        # silently drop any other roles — Gemini would reject them
+        # silently drop any other roles - Gemini would reject them
     system_instruction = {"parts": [{"text": "\n\n".join(system_parts)}]} if system_parts else None
     return system_instruction, contents
 

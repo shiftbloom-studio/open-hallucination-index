@@ -9,7 +9,7 @@ Three terminal shapes + one unknown shape + one malformed-id shape:
 * 422         → path param isn't a valid UUID
 
 Also pinned: the response never leaks ``invoke_ticket`` or ``text``.
-Those fields are internal — ``invoke_ticket`` is a capability used by
+Those fields are internal - ``invoke_ticket`` is a capability used by
 the async handler; ``text`` is user content that retention middleware
 already gates.
 """

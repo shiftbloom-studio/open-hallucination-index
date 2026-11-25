@@ -1,4 +1,4 @@
-"""Async /verify job helpers — DynamoDB state + Lambda self-async-invoke.
+"""Async /verify job helpers - DynamoDB state + Lambda self-async-invoke.
 
 Stream D2 split ``POST /api/v2/verify`` into an async handshake:
 
@@ -32,7 +32,7 @@ clears the field, so replay is single-shot.
 
 Boto3 clients are module-level via lazy accessors so warm-start
 invocations reuse the same TCP pools. Tests monkey-patch the accessors
-to install in-memory stubs — that is the only supported extension
+to install in-memory stubs - that is the only supported extension
 point for injecting a custom client.
 """
 
@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 # code path (~200 ms cold). Deferring to first use keeps module import
 # time out of the Lambda cold-start critical path and, crucially, keeps
 # test files importable without AWS credentials. Once created the client
-# persists for the life of the Lambda sandbox — AWS recommends module-
+# persists for the life of the Lambda sandbox - AWS recommends module-
 # level clients for exactly this reuse.
 # ---------------------------------------------------------------------------
 
@@ -88,7 +88,7 @@ def _get_edge_secret() -> str | None:
     against: any request reaching the Lambda over HTTP must carry
     ``X-OHI-Edge-Secret: <value>`` or the middleware 403s before the
     route handler runs. The D2 polling flow's self-async-invoke sends a
-    synthetic APIGW v2 event back through the SAME Lambda — which means
+    synthetic APIGW v2 event back through the SAME Lambda - which means
     it too traverses the middleware and must carry the header. (D2's
     first prod deploy shipped without this and every async-verify 403'd
     silently because ``InvocationType=Event`` swallows downstream
@@ -104,7 +104,7 @@ def _get_edge_secret() -> str | None:
       lifetime (minutes to ~hours). A rotated secret propagates on the
       next cold start; we do NOT actively invalidate mid-warm. If that
       becomes a problem a future stream can switch to relying solely
-      on ``SecretsLoader`` TTL — but middleware reads the same
+      on ``SecretsLoader`` TTL - but middleware reads the same
       ``get_loader().get(...)`` surface and has the same property, so
       there is nothing to gain from invalidating here alone.
     * Local dev: when ``OHI_CF_EDGE_SECRET_ARN`` is unset,
@@ -134,7 +134,7 @@ def _get_table_name() -> str:
         return os.environ["JOBS_TABLE_NAME"]
     except KeyError as exc:
         raise RuntimeError(
-            "JOBS_TABLE_NAME env var not set — compute TF must surface the "
+            "JOBS_TABLE_NAME env var not set - compute TF must surface the "
             "jobs/ layer's verify_jobs_table_name output."
         ) from exc
 
@@ -145,7 +145,7 @@ def _get_self_function_name() -> str:
         return os.environ["AWS_LAMBDA_FUNCTION_NAME"]
     except KeyError as exc:
         raise RuntimeError(
-            "AWS_LAMBDA_FUNCTION_NAME env var not set — this should only be "
+            "AWS_LAMBDA_FUNCTION_NAME env var not set - this should only be "
             "reachable inside the Lambda runtime. Tests must stub it."
         ) from exc
 
@@ -163,7 +163,7 @@ def _get_ttl_seconds() -> int:
 
 
 # ---------------------------------------------------------------------------
-# Identifier helpers — one call per POST /verify.
+# Identifier helpers - one call per POST /verify.
 # ---------------------------------------------------------------------------
 
 
@@ -173,7 +173,7 @@ def new_job_id() -> str:
 
 
 def new_invoke_ticket() -> str:
-    """Random 32-byte url-safe token — see module docstring for the threat
+    """Random 32-byte url-safe token - see module docstring for the threat
     model. Do not log this value."""
     return secrets.token_urlsafe(32)
 
@@ -188,7 +188,7 @@ def new_invoke_ticket() -> str:
 # actually covers.
 # ---------------------------------------------------------------------------
 
-# Sentinel phase strings — kept here so every caller uses the same vocabulary.
+# Sentinel phase strings - kept here so every caller uses the same vocabulary.
 PHASE_QUEUED = "queued"
 PHASE_DECOMPOSING = "decomposing"
 PHASE_RETRIEVING_EVIDENCE = "retrieving_evidence"
@@ -318,7 +318,7 @@ def _deserialize_job(item: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Self-async-invoke — the synthetic APIGW v2 event.
+# Self-async-invoke - the synthetic APIGW v2 event.
 # ---------------------------------------------------------------------------
 
 
@@ -329,14 +329,14 @@ def async_invoke_verify(*, job_id: str, text: str, ticket: str, depth: int = 1) 
     """Fire a fire-and-forget Lambda invocation at this function itself.
 
     ``depth`` is relayed inside the body so the internal handler can
-    refuse recursion past depth 1 — a defensive backstop in case the
+    refuse recursion past depth 1 - a defensive backstop in case the
     self-invoke IAM policy is ever widened or a misconfiguration makes
     the handler re-enter.
 
     Returns the ``StatusCode`` from boto3's invoke response. For a
     successful ``InvocationType=Event`` accept this is 202. Anything
     else means the async queue refused the payload (throttle, IAM
-    regression, quota) and the caller MUST treat it as a failure —
+    regression, quota) and the caller MUST treat it as a failure -
     silently returning 202 to the user's client when the async path
     never fired is exactly how D2's first deploy hid the
     edge-secret-missing silent 403. See the log lines below for the

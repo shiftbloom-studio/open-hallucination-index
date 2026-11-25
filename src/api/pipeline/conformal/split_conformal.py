@@ -6,7 +6,7 @@ fewer than the spec-§7 minimum of 50 entries.
 
 Phase 1 behaviour (stub): every partition is empty, so every claim
 comes back with ``coverage_target=None``, ``fallback_used="general"``,
-``interval=(0.0, 1.0)``. Honest by design — we don't claim coverage we
+``interval=(0.0, 1.0)``. Honest by design - we don't claim coverage we
 cannot deliver.
 
 Phase 3+ fills the calibration sets via the adjudicator-labeling sprint
@@ -36,7 +36,7 @@ class SplitConformalCalibrator(ConformalCalibrator):
     The ``stratum`` argument is ``"<domain>:<claim_type>"`` or
     ``"<domain>:any"`` for the per-domain fallback. Mondrian-stratum
     fallback-cascade logic (Task 3.7) lives in the pipeline
-    orchestrator, not in this class — this class calibrates one
+    orchestrator, not in this class - this class calibrates one
     (claim, posterior, stratum) tuple at a time.
     """
 
@@ -51,7 +51,7 @@ class SplitConformalCalibrator(ConformalCalibrator):
         domain: Domain,
         stratum: str,
     ) -> CalibratedVerdict:
-        del claim  # unused — reserved for claim-type-specific logic later
+        del claim  # unused - reserved for claim-type-specific logic later
 
         # Honest Phase 1 / stratum-too-small path: no coverage guarantee.
         # The stub-store returns None for every partition in Phase 1.

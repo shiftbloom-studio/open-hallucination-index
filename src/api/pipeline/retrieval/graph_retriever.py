@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — graph retriever orchestrating the
+"""Wave 3 Stream C - graph retriever orchestrating the
 Qdrant → Aura → rerank path (Decision K).
 
 Flow:

@@ -312,7 +312,7 @@ class NLISettings(BaseSettings):
         description=(
             "Majority-vote samples per (claim, evidence) classification."
             " K=1 disables self-consistency. Flipping to K>1 multiplies Gemini"
-            " spend by K — plan §6.2 G6 gate required."
+            " spend by K - plan §6.2 G6 gate required."
         ),
     )
 

@@ -19,9 +19,9 @@ from pipeline.retrieval import (
 )
 
 __all__ = [
-    # L1 — Decomposition
+    # L1 - Decomposition
     "LLMClaimDecomposer",
-    # L1 — Retrieval primitives (live under pipeline.retrieval)
+    # L1 - Retrieval primitives (live under pipeline.retrieval)
     "ClaimRouter",
     "SmartMCPSelector",
     "AdaptiveEvidenceCollector",

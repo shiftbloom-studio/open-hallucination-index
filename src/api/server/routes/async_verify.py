@@ -1,4 +1,4 @@
-"""Internal ``POST /_internal/async-verify`` route — consumer side of the
+"""Internal ``POST /_internal/async-verify`` route - consumer side of the
 async polling handshake (Stream D2).
 
 Reached ONLY via Lambda self-async-invoke. The producer
@@ -26,7 +26,7 @@ regression, replay, runaway self-invoke):
 
 Every refuse / error path returns HTTP 200 with a small JSON payload.
 Lambda's async-invoke retry policy treats non-200 as "retry up to 2
-times with exponential backoff" — exactly the wrong thing to do for a
+times with exponential backoff" - exactly the wrong thing to do for a
 verdict that already landed an error record.
 """
 
@@ -52,7 +52,7 @@ class _AsyncVerifyRequest(BaseModel):
     """Body shape that the POST /api/v2/verify producer packs into a
     synthetic APIGW v2 event. The leading-double-underscore sentinel is
     aliased because pydantic (like Python itself) reserves ``__*`` field
-    names for itself — see ``jobs.async_invoke_verify`` for the
+    names for itself - see ``jobs.async_invoke_verify`` for the
     producer side."""
 
     sentinel: bool = Field(alias="__async_verify")
@@ -74,7 +74,7 @@ def _refuse(reason: str) -> ORJSONResponse:
 @router.post(
     "/_internal/async-verify",
     status_code=status.HTTP_200_OK,
-    include_in_schema=False,  # Internal — don't surface in OpenAPI.
+    include_in_schema=False,  # Internal - don't surface in OpenAPI.
 )
 async def async_verify(
     body: _AsyncVerifyRequest,
@@ -88,7 +88,7 @@ async def async_verify(
     # on "request never reached the handler" show up loudly in observability.
     logger.info("async-verify entry: depth=%s job_id=%s", body.depth, body.job_id)
 
-    # 1. Depth guard FIRST — before any DynamoDB read, before anything
+    # 1. Depth guard FIRST - before any DynamoDB read, before anything
     #    that could itself self-invoke. This is a hard $-cap.
     if body.depth > 1:
         logger.error(
@@ -119,13 +119,13 @@ async def async_verify(
         return _refuse("ticket_mismatch")
     if record.get("status") != "pending":
         logger.warning(
-            "async_verify: %s already in status=%s — refusing replay",
+            "async_verify: %s already in status=%s - refusing replay",
             body.job_id,
             record.get("status"),
         )
         return _refuse("already_consumed")
 
-    # 3. Happy path — run the pipeline with a phase callback that
+    # 3. Happy path - run the pipeline with a phase callback that
     #    ADVANCES the DynamoDB record in parallel.
     async def _advance_phase(phase: str) -> None:
         try:

@@ -45,7 +45,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan_manager,
     )
 
-    # CORS — prod locks down to the frontend origin via the
+    # CORS - prod locks down to the frontend origin via the
     # OHI_CORS_ORIGINS env var (set by infra compute layer). Falls back to
     # settings.api.cors_origins (defaults to ["*"]) for local dev.
     from config.infra_env import cors_origins as _infra_cors_origins
@@ -70,7 +70,7 @@ def create_app() -> FastAPI:
     # Edge-secret gate (infra sub-project): every request must carry the
     # X-OHI-Edge-Secret header that Cloudflare's Transform Rule injects. See
     # the v2 design notes (internal) §7.5.
-    # Skipped gracefully if the secret ARN env var is unset — keeps local
+    # Skipped gracefully if the secret ARN env var is unset - keeps local
     # development (where there's no CF in front) working unchanged.
     import os as _os  # local import to avoid polluting module scope
 

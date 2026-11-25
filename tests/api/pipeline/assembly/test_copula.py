@@ -48,7 +48,7 @@ def test_copula_independent_claims_multiplies_marginals() -> None:
 
 def test_copula_exact_path_for_small_n() -> None:
     """For small N with real (non-identity) correlation, we use scipy's
-    MVN CDF — verify it gives sensible answers on a simple correlated
+    MVN CDF - verify it gives sensible answers on a simple correlated
     example. Two fully-correlated claims with p=0.7 each should give
     joint ≈ 0.7 (both succeed together)."""
     n = 3
@@ -128,7 +128,7 @@ def test_nearest_psd_clips_negative_eigenvalues() -> None:
 
 
 def test_nearest_psd_preserves_symmetry() -> None:
-    # Asymmetric input — should be symmetrized internally
+    # Asymmetric input - should be symmetrized internally
     m = np.array([[1.0, 0.3, 0.1], [0.7, 1.0, 0.2], [0.1, 0.2, 1.0]])
     projected, _ = nearest_psd(m)
     assert np.allclose(projected, projected.T)

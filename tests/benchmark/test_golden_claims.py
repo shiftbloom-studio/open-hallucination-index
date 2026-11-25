@@ -1,4 +1,4 @@
-"""Wave 3 Stream G.2 — golden-claim benchmark (blocking item #5).
+"""Wave 3 Stream G.2 - golden-claim benchmark (blocking item #5).
 
 Fires a curated claim set against live prod and asserts:
 * Obviously-true claims → p_true ≥ 0.70.
@@ -30,7 +30,7 @@ pytestmark = pytest.mark.integration
 class GoldenClaim:
     text: str
     expected_range: tuple[float, float]  # inclusive (lo, hi) on p_true
-    label: str  # 'support' / 'refute' / 'ambiguous' — for report grouping
+    label: str  # 'support' / 'refute' / 'ambiguous' - for report grouping
 
 
 # Keep this list small + curated. Adding a claim means adding a
@@ -43,7 +43,7 @@ GOLDEN_CLAIMS: list[GoldenClaim] = [
     # Obviously-true facts.
     GoldenClaim("Marie Curie won two Nobel Prizes.", (0.70, 1.0), "support"),
     GoldenClaim("Albert Einstein developed the theory of relativity.", (0.70, 1.0), "support"),
-    # Ambiguous / unverifiable — wide interval acceptable.
+    # Ambiguous / unverifiable - wide interval acceptable.
     GoldenClaim(
         "Einstein was the most influential physicist of the 20th century.",
         (0.30, 1.0),

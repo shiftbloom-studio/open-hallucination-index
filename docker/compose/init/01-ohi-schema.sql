@@ -6,7 +6,7 @@ BEGIN;
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Verifications — one row per /verify call
+-- Verifications - one row per /verify call
 CREATE TABLE IF NOT EXISTS verifications (
     id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     text_hash               char(64) NOT NULL,          -- sha256 of input text + options

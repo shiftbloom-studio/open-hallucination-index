@@ -1,6 +1,6 @@
 """Unit tests for scripts/benchmark/metrics.py.
 
-All tests are deterministic and synthetic — they exercise the metric
+All tests are deterministic and synthetic - they exercise the metric
 implementations against known inputs with closed-form expected outputs.
 No network, no model, no filesystem.
 """

@@ -8,7 +8,7 @@ Normalization runs after the LLM has returned raw claim JSON. It cleans up:
   2. **Numbers → SI base units**. "5 million" → ``5000000``, "5%" →
      ``0.05``, "3.5 kg" → ``3.5`` (with unit stripped into a separate
      metadata dict if needed).
-  3. **Entity QIDs** — a stub at this point. Full Wikidata MCP integration
+  3. **Entity QIDs** - a stub at this point. Full Wikidata MCP integration
      lands when the MCP adapter is wired; for now the function returns an
      empty dict so downstream code never has to special-case None.
 
@@ -200,7 +200,7 @@ def normalize_claim_text(text: str) -> str:
     """Produce a canonical form for equality / dedup comparisons.
 
     Lowercases, collapses internal whitespace, and strips a single
-    trailing punctuation mark. Does NOT alter dates or numbers — those
+    trailing punctuation mark. Does NOT alter dates or numbers - those
     get normalized separately and stored in dedicated Claim fields.
     """
     normalized = " ".join(text.lower().split())
@@ -219,7 +219,7 @@ async def resolve_entity_qids(entities: list[str]) -> dict[str, str]:
     project will wire the Wikidata MCP and replace this implementation.
 
     Using an async function now means the eventual network-backed
-    implementation is a drop-in replacement — no signature change.
+    implementation is a drop-in replacement - no signature change.
     """
     del entities  # unused in the stub
     return {}

@@ -1,9 +1,9 @@
 name: v2 unit tests
 
-# Wave 3 e2e-test-and-merge.md §2 item 3 — the pre-push gate. Runs the
+# Wave 3 e2e-test-and-merge.md §2 item 3 - the pre-push gate. Runs the
 # canonical pytest runline on every PR + feat push. Green here is the
 # prerequisite for the v2-release.yml fast-forward to main (Decision D:
-# no preview Lambda, no preview deploy — CI green is the gate).
+# no preview Lambda, no preview deploy - CI green is the gate).
 
 on:
   pull_request:

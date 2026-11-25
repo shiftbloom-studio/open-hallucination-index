@@ -16,7 +16,7 @@ const config: Config = {
         mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       colors: {
-        /* shadcn HSL contract — backed by shiftbloom palette in globals.css */
+        /* shadcn HSL contract - backed by shiftbloom palette in globals.css */
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {
@@ -58,7 +58,7 @@ const config: Config = {
           "5": "hsl(var(--chart-5))",
         },
 
-        /* Semantic brand tokens — direct hex, for component-level use */
+        /* Semantic brand tokens - direct hex, for component-level use */
         surface: {
           base: "var(--surface-base)",
           elevated: "var(--surface-elevated)",

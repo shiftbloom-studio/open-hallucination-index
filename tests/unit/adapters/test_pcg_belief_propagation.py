@@ -1,4 +1,4 @@
-"""Wave 3 Stream P — PCGBeliefPropagationAdapter tests.
+"""Wave 3 Stream P - PCGBeliefPropagationAdapter tests.
 
 Behavioural smoke: empty inputs, rigor dispatch, wrap shape.
 """

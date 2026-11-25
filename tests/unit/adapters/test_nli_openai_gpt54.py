@@ -1,4 +1,4 @@
-"""Wave 3 Stream P — NliOpenAIGpt54Adapter tests.
+"""Wave 3 Stream P - NliOpenAIGpt54Adapter tests.
 
 Canned-response stubs; ZERO live OpenAI calls.
 """
@@ -104,7 +104,7 @@ async def test_classify_retries_then_succeeds() -> None:
 
 def test_classify_rejects_invalid_label_via_parser() -> None:
     """Malformed response (invalid label) raises ValueError inside
-    _parse_result — the adapter catches and retries."""
+    _parse_result - the adapter catches and retries."""
     from adapters.nli_openai_gpt54 import _parse_result
     bad_json = '{"label": "maybe", "supporting_score": 0.5, "refuting_score": 0.5, "neutral_score": 0.0}'
     import pytest

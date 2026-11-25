@@ -1,7 +1,7 @@
 """Tree-Reweighted Belief Propagation (Wainwright-Jaakkola-Willsky 2005).
 
 TRW-BP gives a **convex upper bound** on the log-partition function of
-an arbitrary pairwise MRF — unlike LBP, it is guaranteed to converge
+an arbitrary pairwise MRF - unlike LBP, it is guaranteed to converge
 for a suitable choice of edge-appearance probabilities ``ρ_e ∈ (0, 1]``
 (spanning-tree-cover constraint: each edge appears in some tree of a
 convex combination of spanning trees).
@@ -16,7 +16,7 @@ production (tracked in the adapter's handoff).
 This module:
 * Computes a spanning-tree cover via successive-MST (Prim's on the
   edge-weight = binary-factor-strength graph, plus a second MST on
-  the residual — gives us a 2-tree cover when the graph has cycles).
+  the residual - gives us a 2-tree cover when the graph has cycles).
 * Runs TRW-BP message-passing on the resulting ``ρ_e``.
 * Returns marginals + the log-partition-bound.
 
@@ -62,7 +62,7 @@ def _mst_prim(n: int, edges: list[tuple[int, int]], weights: list[float]) -> lis
     """Prim's algorithm, maximum-spanning-tree variant (pick heaviest
     edge at each step). Returns indices into ``edges`` forming the MST.
     Works on a forest if the graph is disconnected (returns a
-    spanning-forest's edges — still a valid cover seed).
+    spanning-forest's edges - still a valid cover seed).
     """
     if n == 0 or not edges:
         return []
@@ -81,7 +81,7 @@ def _mst_prim(n: int, edges: list[tuple[int, int]], weights: list[float]) -> lis
                     best_w = weights[k]
                     best_k = k
         if best_k < 0:
-            break  # disconnected — partial forest is fine
+            break  # disconnected - partial forest is fine
         chosen.append(best_k)
         i, j = edges[best_k]
         in_tree[i] = True

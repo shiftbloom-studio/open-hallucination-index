@@ -169,7 +169,7 @@ export function FeedbackSheet({ requestId, claim, open, onClose }: FeedbackSheet
           </p>
         )}
         {mutation.isSuccess && (
-          <p className="mb-2 text-xs text-[color:var(--brand-success)]">Thanks — queued.</p>
+          <p className="mb-2 text-xs text-[color:var(--brand-success)]">Thanks - queued.</p>
         )}
 
         <div className="flex justify-end gap-2">

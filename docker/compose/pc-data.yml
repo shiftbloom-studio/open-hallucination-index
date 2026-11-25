@@ -1,5 +1,5 @@
 # Base compose for OHI v2 PC-side data stack (prod profile).
-# - No host ports exposed — only the cloudflared container reaches services.
+# - No host ports exposed - only the cloudflared container reaches services.
 # - Services run in the `pc-prod` profile; local-dev profile is in
 #   pc-data.local-dev.yml (host ports bound on 127.0.0.1, no tunnel).
 #

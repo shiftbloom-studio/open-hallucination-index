@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — lifecycle machinery (SIGUSR1 pause + DLQ + progress).
+"""Wave 3 Stream C - lifecycle machinery (SIGUSR1 pause + DLQ + progress).
 
 Shared infrastructure consumed by each ingestion pass:
 
@@ -8,16 +8,16 @@ Shared infrastructure consumed by each ingestion pass:
   and exits cleanly with code 0. SIGKILL (kill -9) loses the
   in-flight batch but the last committed checkpoint stays valid
   (resume re-writes idempotently).
-* **Dead-letter queue** — JSON-lined file at ``/tmp/ohi-ingestion-dlq.jsonl``
+* **Dead-letter queue** - JSON-lined file at ``/tmp/ohi-ingestion-dlq.jsonl``
   (overridable). Records that fail after ``CORPUS_MAX_RECORD_RETRIES``
   retries land here with full error context. ``--retry-dlq`` reruns
   only the DLQ; successful re-ingestion clears the entry.
-* **Progress events** — every ``PROGRESS_EVERY`` records, emits a
+* **Progress events** - every ``PROGRESS_EVERY`` records, emits a
   JSON line to stdout with ``{pass, processed, total_estimate,
   rate_per_sec, eta_hours, dlq_size}``. Greppable for external
   monitoring (the operator's PC during long runs).
 
-Unix-only for SIGUSR1 — on Windows the pause signal silently degrades
+Unix-only for SIGUSR1 - on Windows the pause signal silently degrades
 to a "poll the checkpoint store for status==paused" check every batch.
 The orchestrator runs on a Windows workstation for Stream I but
 SIGUSR1 ↔ signal semantic is handled via a file-based flag
@@ -93,8 +93,8 @@ def install_pause_handler() -> PauseController:
     event = asyncio.Event()
     controller = PauseController(event=event)
 
-    def _handler(signum: Any, frame: Any) -> None:  # noqa: ARG001 — standard signal handler sig
-        logger.info("SIGUSR1 received — requesting graceful pause at next batch boundary")
+    def _handler(signum: Any, frame: Any) -> None:  # noqa: ARG001 - standard signal handler sig
+        logger.info("SIGUSR1 received - requesting graceful pause at next batch boundary")
         event.set()
 
     if hasattr(__import__("signal"), "SIGUSR1"):
@@ -105,7 +105,7 @@ def install_pause_handler() -> PauseController:
             logger.info("SIGUSR1 pause handler installed")
         except ValueError:
             # Raised when the current thread isn't the main thread (e.g.
-            # under pytest). Not fatal — the flag-file path still works.
+            # under pytest). Not fatal - the flag-file path still works.
             logger.info("SIGUSR1 handler not installed (non-main thread); flag-file watcher active")
     else:
         logger.info("No SIGUSR1 on this platform; using flag-file watcher only")

@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — Pass 3: integrity report.
+"""Wave 3 Stream C - Pass 3: integrity report.
 
 Runs after Passes 1/1b/2 complete. Emits
 ``docs/benchmarks/v2.0-corpus-integrity.md`` as a committed artifact
@@ -10,7 +10,7 @@ Thresholds verified (fail-the-gate if any breach):
 * Neo4j largest SCC ≥ 10 % of entity total (sanity: graph isn't
   completely disconnected).
 * QID resolution rate on the golden-claim set ≥ 80% (cheap
-  sanity — PCG entity-overlap short-circuit depends on this).
+  sanity - PCG entity-overlap short-circuit depends on this).
 """
 
 from __future__ import annotations
@@ -115,17 +115,17 @@ def write_integrity_report(report: IntegrityReport, *, out_path: Path | None = N
 ## Counts
 | Stat                           | Value                          | Threshold | Status |
 |--------------------------------|--------------------------------|-----------|--------|
-| Aura entities                  | {report.aura_entity_count:,}   | —         | info   |
-| Aura passages                  | {report.aura_passage_count:,}  | —         | info   |
-| Qdrant passages                | {report.qdrant_passage_count:,}| —         | info   |
+| Aura entities                  | {report.aura_entity_count:,}   | -         | info   |
+| Aura passages                  | {report.aura_passage_count:,}  | -         | info   |
+| Qdrant passages                | {report.qdrant_passage_count:,}| -         | info   |
 | Passage-count mismatch ratio   | {report.passage_mismatch_ratio:.4f} | ≤ 0.01 | {"PASS" if passage_ok else "FAIL"} |
-| Entity vectors written         | {report.entity_vectors_written:,} | —      | info   |
+| Entity vectors written         | {report.entity_vectors_written:,} | -      | info   |
 | Golden claim QID resolution    | {report.golden_resolution_rate:.1%} | ≥ 80% | {"PASS" if resolution_ok else "FAIL"} |
 
 ## Decision-K split
 
 Passage TEXT + metadata live in Aura (``:Passage`` nodes). Qdrant carries
-vector-only points with payload ``{{passage_id, qid}}`` — no duplicated
+vector-only points with payload ``{{passage_id, qid}}`` - no duplicated
 text. Passage-count parity between the two stores is the sanity check;
 any ratio > 1% indicates one of the passes dropped writes silently.
 

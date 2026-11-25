@@ -37,7 +37,7 @@ def assemble_document_verdict(
     """Aggregate claim verdicts into the public document verdict.
 
     When ``correlation_matrix_R`` is None, the identity matrix is used
-    — appropriate for Phase 1 (no claim↔claim edges available). The
+    - appropriate for Phase 1 (no claim↔claim edges available). The
     copula aggregator returns ``∏_i p_i`` exactly in that case.
 
     Intervals are aggregated by applying the same copula construction to
@@ -48,7 +48,7 @@ def assemble_document_verdict(
     n = len(claim_verdicts)
 
     if n == 0:
-        # Empty document — nothing to verify, max trust, coherent, fast.
+        # Empty document - nothing to verify, max trust, coherent, fast.
         return DocumentVerdict(
             document_score=1.0,
             document_interval=(1.0, 1.0),

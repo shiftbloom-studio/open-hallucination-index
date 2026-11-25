@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — lifecycle unit tests (DLQ + retry)."""
+"""Wave 3 Stream C - lifecycle unit tests (DLQ + retry)."""
 
 from __future__ import annotations
 

@@ -8,7 +8,7 @@ Usage (from repo root):
 
 The v1 engine adapter is implemented in `scripts.benchmark.v1_engine_adapter`
 (Task 0.3); this module is the CLI that drives it. In Phase 0 this file is
-intentionally thin — actual v1 integration is done as part of Task 0.3.
+intentionally thin - actual v1 integration is done as part of Task 0.3.
 """
 
 from __future__ import annotations

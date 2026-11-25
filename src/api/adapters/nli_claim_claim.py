@@ -1,31 +1,31 @@
-"""Claim-claim NLI dispatcher — Wave 3 Stream P, Decision H.
+"""Claim-claim NLI dispatcher - Wave 3 Stream P, Decision H.
 
 Orchestrates the primary ``NliOpenAIGpt54Adapter`` and fallback
 ``NliGeminiAdapter`` for the claim-claim NLI channel, applying:
 
-* **Entity-overlap short-circuit** — only pairs sharing
+* **Entity-overlap short-circuit** - only pairs sharing
   ≥ ``entity_overlap_threshold`` resolved entity IDs survive. Bounds
   the O(n²) pair cost for large claim-count documents. Entity IDs
   come from the decomposition stage (``Claim.entity_qids``), which in
   Wave 3 is populated by the corpus-ingestion entity resolver
-  (Decision K — Aura entity vector index); pre-corpus it's an empty
+  (Decision K - Aura entity vector index); pre-corpus it's an empty
   dict, which means *every* pair passes the overlap filter (the
   dispatcher uses the conservative "no overlap data → assume
   overlap" policy so Stream P is not blocked by Stream C ingestion
   completing).
-* **Hard cap** (``claim_claim_max_pairs``) — even with the overlap
+* **Hard cap** (``claim_claim_max_pairs``) - even with the overlap
   filter, a malicious long document with many shared entities could
   fan out OpenAI cost. We truncate deterministically (first N pairs
   in ``(claim_a, claim_b)`` sorted order) and log the truncation so
   it's visible in verdict observability.
-* **Primary → fallback failover** — when the primary's terminal-
+* **Primary → fallback failover** - when the primary's terminal-
   failure sentinel fires (``reasoning="nli_unavailable"``,
   ``confidence=0.0``), re-run that specific pair through the fallback
   adapter exactly once. Count fallback firings in the returned
   metrics so ``PCGObservability.cc_nli_fallback_fired_count`` can be
   set on each claim verdict.
 
-The dispatcher is async-concurrent — pairs run under a
+The dispatcher is async-concurrent - pairs run under a
 ``Semaphore(max_concurrency)`` so we don't serialise K OpenAI calls
 (GPT-5.4 xhigh latency is high; serialising would blow past the
 Lambda timeout for graphs with many edges).
@@ -56,13 +56,13 @@ _NLI_UNAVAILABLE_REASON = "nli_unavailable"
 class DispatchResult:
     """Per-verify batch output from :class:`ClaimClaimNliDispatcher`.
 
-    * ``distributions`` — keyed by ``(claim_a.id, claim_b.id)`` with
+    * ``distributions`` - keyed by ``(claim_a.id, claim_b.id)`` with
       ``claim_a.id < claim_b.id`` in lex order. Empty for pairs the
       overlap filter dropped (nothing to classify → no edge).
-    * ``fallback_fired_count`` — number of pairs that fell through
+    * ``fallback_fired_count`` - number of pairs that fell through
       primary → fallback. Surfaces cost + drift concerns on the
       verdict JSON.
-    * ``truncated_pair_count`` — pairs dropped by the hard cap. Zero
+    * ``truncated_pair_count`` - pairs dropped by the hard cap. Zero
       under normal load; non-zero indicates a large-document or
       entity-overlap saturation situation worth flagging.
     """
@@ -114,7 +114,7 @@ class ClaimClaimNliDispatcher:
             )
             pairs = pairs[: self._max_pairs]
 
-        # Primary pass — concurrent fan-out.
+        # Primary pass - concurrent fan-out.
         async def _primary_task(ca: Claim, cb: Claim) -> tuple[UUID, UUID, NliResult]:
             async with self._sem:
                 result = await self._primary.classify(ca.text, cb.text)
@@ -122,7 +122,7 @@ class ClaimClaimNliDispatcher:
 
         primary_results = await asyncio.gather(*[_primary_task(ca, cb) for ca, cb in pairs])
 
-        # Fallback pass — only for primary sentinels. One shot, no retries.
+        # Fallback pass - only for primary sentinels. One shot, no retries.
         fallback_fired = 0
         final_results: dict[tuple[UUID, UUID], NliResult] = {}
         fallback_pairs: list[tuple[UUID, UUID, Claim, Claim]] = []
@@ -183,7 +183,7 @@ class ClaimClaimNliDispatcher:
                     ca, cb = cb, ca
                 if self._pair_passes_overlap(ca, cb):
                     pairs.append((ca, cb))
-        # Deterministic ordering for the hard cap — sort by pair UUIDs.
+        # Deterministic ordering for the hard cap - sort by pair UUIDs.
         pairs.sort(key=lambda pair: (str(pair[0].id), str(pair[1].id)))
         return pairs
 
@@ -221,7 +221,7 @@ def _nli_result_to_distribution(
     The field rename is deliberate: the LLM port reuses support/refute
     language because it originated in D1's claim-evidence channel,
     while the PCG layer speaks classical NLI vocabulary (entail /
-    contradict). Semantics are identical — entail = support,
+    contradict). Semantics are identical - entail = support,
     contradict = refute.
 
     Variance is zero for single-shot (K=1) adapters; a future
@@ -229,7 +229,7 @@ def _nli_result_to_distribution(
     """
     total = result.supporting_score + result.refuting_score + result.neutral_score
     if total <= 0:
-        # Degenerate — use uniform. NLIDistribution's model validator
+        # Degenerate - use uniform. NLIDistribution's model validator
         # requires sum ≈ 1.
         return NLIDistribution(
             entail=1.0 / 3.0,

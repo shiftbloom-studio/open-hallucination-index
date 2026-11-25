@@ -2,10 +2,10 @@
 
 Two concrete contracts live here:
 
-* ``NLIService`` — the cross-encoder-style port (DeBERTa-MNLI + self-
+* ``NLIService`` - the cross-encoder-style port (DeBERTa-MNLI + self-
   consistency wrapper). Predates Phase 2; referenced from the pipeline
   orchestrator. Left intact for the eventual cross-encoder deployment.
-* ``NliAdapter`` — the LLM-based 3-way classifier port (Phase 2 Task 2.1
+* ``NliAdapter`` - the LLM-based 3-way classifier port (Phase 2 Task 2.1
   / plan §4.2). Implemented by ``adapters.nli_gemini.NliGeminiAdapter``
   against Gemini 3 Pro with ``thinkingLevel=HIGH`` and
   ``safetySettings=BLOCK_NONE``.
@@ -44,7 +44,7 @@ class NliResult:
 
     The terminal-failure fallback produced by the adapter is
     ``NliResult(label="neutral", supporting_score=0.0, refuting_score=0.0,
-    neutral_score=1.0, reasoning="nli_unavailable", confidence=0.0)`` —
+    neutral_score=1.0, reasoning="nli_unavailable", confidence=0.0)`` -
     callers can detect it by either ``confidence == 0.0`` or
     ``reasoning == "nli_unavailable"``.
     """
@@ -63,7 +63,7 @@ class NliAdapter(Protocol):
 
     One ``classify()`` call handles one (claim, evidence) pair. Concrete
     implementations own prompting, JSON parsing, retry, and self-
-    consistency sampling. Batching is the caller's responsibility —
+    consistency sampling. Batching is the caller's responsibility -
     the pipeline gathers calls under a ``Semaphore(N)`` in Phase 2 D1.
 
     The adapter must never raise from ``classify``; any transport, JSON,

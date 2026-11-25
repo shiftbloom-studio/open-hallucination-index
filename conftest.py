@@ -1,4 +1,4 @@
-"""Root-level conftest — prepends the repo root to sys.path so tests under
+"""Root-level conftest - prepends the repo root to sys.path so tests under
 `tests/` can import `scripts.*` without needing a packaged install.
 
 The src/api package has its own pyproject.toml + editable install for its

@@ -7,7 +7,7 @@ populates per-domain calibration sets via the adjudicator-labeling
 sprint; at that point this module's conditional branches light up and
 emit real conformal intervals.
 
-The full split-conformal algorithm is still implemented here — only
+The full split-conformal algorithm is still implemented here - only
 the calibration set is empty. That keeps Phase 1 and Phase 3 one
 config change apart instead of a rewrite.
 """

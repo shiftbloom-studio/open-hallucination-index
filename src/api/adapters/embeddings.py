@@ -1,5 +1,5 @@
 """
-Embedding adapter — tri-mode (local sentence-transformers, remote HTTP, or Bedrock).
+Embedding adapter - tri-mode (local sentence-transformers, remote HTTP, or Bedrock).
 
 The public name `LocalEmbeddingAdapter` is kept unchanged so the DI
 container in `config/dependencies.py` doesn't need to know which mode is
@@ -10,7 +10,7 @@ active. Mode is selected by env var at construction time:
     OHI_EMBEDDING_BACKEND=bedrock           → Amazon Bedrock Titan Text Embeddings V2
 
 Remote mode exists so Lambda doesn't have to carry torch + a sentence
-transformer model — those live on the PC embed container, reached via the
+transformer model - those live on the PC embed container, reached via the
 CF tunnel (embed.ohi.shiftbloom.studio).
 """
 
@@ -120,7 +120,7 @@ class _RemoteEmbeddingAdapter:
     """
 
     def __init__(self, settings: EmbeddingSettings) -> None:
-        import httpx  # local import — keeps the module importable on bare images
+        import httpx  # local import - keeps the module importable on bare images
 
         base_url = os.environ.get("OHI_EMBEDDING_REMOTE_URL")
         if not base_url:
@@ -154,7 +154,7 @@ class _RemoteEmbeddingAdapter:
     def embedding_dimension(self) -> int:
         if self._dim_cache is None:
             raise RuntimeError(
-                "Embedding dimension unknown until first call — call "
+                "Embedding dimension unknown until first call - call "
                 "generate_embedding() once or await warmup()."
             )
         return self._dim_cache

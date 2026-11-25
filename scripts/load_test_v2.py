@@ -1,4 +1,4 @@
-"""Wave 3 Stream G.1 — light load test for /api/v2/verify.
+"""Wave 3 Stream G.1 - light load test for /api/v2/verify.
 
 Fires N concurrent POST+poll cycles, tracks p50/p95/p99 end-to-end
 latency, and the fraction of requests that converged (PCG algorithm

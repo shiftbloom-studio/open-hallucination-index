@@ -108,7 +108,7 @@ async def test_run_benchmark_captures_engine_errors(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_run_benchmark_atomic_write(tmp_path: Path) -> None:
-    """The runner writes to a temp file then renames — so a crashed run
+    """The runner writes to a temp file then renames - so a crashed run
     never leaves a half-complete output file at the target path."""
     examples = [
         BenchmarkExample(id=str(i), text=f"c{i}", expected_label="true", metadata={})

@@ -1,4 +1,4 @@
-"""Wave 3 Stream P — factor-graph data structure for PCG inference.
+"""Wave 3 Stream P - factor-graph data structure for PCG inference.
 
 Ising-style binary nodes (one per claim, state ∈ {F=0, T=1}) with
 
@@ -14,7 +14,7 @@ dense numpy arrays (rather than e.g. a pgmpy FactorGraph) keeps Lambda
 cold-starts tight and avoids pulling a heavy pinned-version dependency
 for one function.
 
-Node / edge construction is deterministic in input order — callers can
+Node / edge construction is deterministic in input order - callers can
 rely on the node-index → claim-id mapping (``claim_ids[i]``) when
 reading marginals back out.
 
@@ -23,7 +23,7 @@ Factor convention (critical for the solvers):
 * **Unary** ``u[i] = [log φ(x_i=0), log φ(x_i=1)]`` in log space. For a
   claim with evidence NLI mass `(entail, contradict, neutral)`,
   ``φ(x=T) ∝ entail + 0.5·neutral`` and
-  ``φ(x=F) ∝ contradict + 0.5·neutral`` — neutral mass is split
+  ``φ(x=F) ∝ contradict + 0.5·neutral`` - neutral mass is split
   evenly so it adds no signal in either direction (matches the Stream
   P spec semantic that neutrals are treated as no-signal; see Hebel A
   on the Beta-posterior path for the equivalent rule at the
@@ -98,7 +98,7 @@ def _unary_log_factor_from_evidence_nli(
     ``[log φ(F), log φ(T)]`` unary factor pair.
 
     Per-evidence contributions multiply (add in log space). Neutral
-    mass is split 50/50 so off-topic evidence adds zero net signal —
+    mass is split 50/50 so off-topic evidence adds zero net signal -
     matches the Phase-2 Hebel-A rule for neutral-label skip at the
     posterior layer. The ``min_unary_tilt`` floor prevents a single
     extreme (entail=1.0, contradict=0.0) from collapsing the log
@@ -183,7 +183,7 @@ def build_factor_graph(
 ) -> FactorGraph:
     """Build a ``FactorGraph`` from decomposed claims + NLI tables.
 
-    ``nli_claim_evidence[claim_id]`` may be missing or empty — that
+    ``nli_claim_evidence[claim_id]`` may be missing or empty - that
     claim gets a uniform unary factor (nothing to say).
 
     ``nli_claim_claim`` keys are **ordered** tuples ``(id_a, id_b)``
@@ -240,11 +240,11 @@ def log_normalize_2d(log_marginal: np.ndarray) -> np.ndarray:
     probability distribution over {F, T}.
 
     Guards against all-``-inf`` inputs (shouldn't happen with the
-    ``min_unary_tilt`` floor, but be defensive — the conformal layer
+    ``min_unary_tilt`` floor, but be defensive - the conformal layer
     downstream will reject invalid probabilities anyway)."""
     m = np.max(log_marginal)
     if not np.isfinite(m):
-        # Degenerate input — fall back to uniform.
+        # Degenerate input - fall back to uniform.
         return np.array([0.5, 0.5], dtype=np.float64)
     lse = m + float(np.log(np.sum(np.exp(log_marginal - m))))
     return cast("np.ndarray", np.exp(log_marginal - lse))

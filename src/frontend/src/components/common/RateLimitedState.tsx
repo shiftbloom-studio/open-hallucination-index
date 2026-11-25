@@ -26,7 +26,7 @@ export function RateLimitedState({ retryAfterSec, onRetry, className }: RateLimi
         <code className="font-mono text-[color:var(--brand-accent)]">/verify</code>.
       </p>
       <p className="mt-2 max-w-prose text-sm text-brand-muted">
-        Rate limits keep OHI sustainable for everyone. No action needed — try again in a moment.
+        Rate limits keep OHI sustainable for everyone. No action needed - try again in a moment.
       </p>
       <div className="mt-4">
         <RetryCountdown retryAfterSec={retryAfterSec ?? 60} onRetry={onRetry} />

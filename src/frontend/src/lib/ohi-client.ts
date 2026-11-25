@@ -105,7 +105,7 @@ export interface JobStatus {
 export const ohi = {
   /**
    * Submit a verification job. Post-D2 this no longer blocks on the
-   * pipeline — it returns 202 with a job_id; poll `.verifyStatus(id)`
+   * pipeline - it returns 202 with a job_id; poll `.verifyStatus(id)`
    * until the status transitions to "done" or "error".
    */
   verify: async (req: VerifyRequest, opts: RequestOptions = {}): Promise<JobAccepted> => {
