@@ -71,7 +71,7 @@ async def test_bedrock_embedding_adapter_invokes_titan_with_expected_payload(
     assert fake_client.calls[0]["modelId"] == "amazon.titan-embed-text-v2:0"
     assert fake_client.calls[0]["accept"] == "application/json"
     assert fake_client.calls[0]["contentType"] == "application/json"
-    assert json.loads(fake_client.calls[0]["body"]) == {
+    assert json.loads(fake_client.calls[0]["body"]) == {  # type: ignore[arg-type]
         "inputText": "hello from titan",
         "dimensions": 256,
         "normalize": False,

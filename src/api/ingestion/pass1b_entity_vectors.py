@@ -18,6 +18,7 @@ resolution.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from ingestion.checkpoint_store import CheckpointStore
 from ingestion.lifecycle import (
@@ -79,8 +80,8 @@ class Pass1bEntityVectorWriter:
     def __init__(
         self,
         *,
-        graph_store,
-        embedding_adapter,
+        graph_store: Any,
+        embedding_adapter: Any,
         checkpoint_store: CheckpointStore,
         dlq: DLQWriter,
         pause_controller: PauseController,

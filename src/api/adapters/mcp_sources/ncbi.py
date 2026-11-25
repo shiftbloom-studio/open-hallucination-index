@@ -9,7 +9,7 @@ https://www.ncbi.nlm.nih.gov/books/NBK25500/
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from xml.etree import ElementTree
 
 from adapters.mcp_sources.base import (
@@ -148,6 +148,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
     async def _search_pubmed(self, query: str, limit: int = 5) -> list[str]:
         """Search PubMed and return PMIDs."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/esearch.fcgi",
                 params=self._get_params(
@@ -161,7 +162,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
             data = response.json()
 
             result = data.get("esearchresult", {})
-            return result.get("idlist", [])
+            return cast("list[str]", result.get("idlist", []))
         except Exception as e:
             logger.warning(f"PubMed search error: {e}")
             return []
@@ -172,6 +173,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
             return []
 
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/esummary.fcgi",
                 params=self._get_params(
@@ -197,6 +199,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
     async def get_abstract(self, pmid: str) -> str:
         """Fetch full abstract for a PMID."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/efetch.fcgi",
                 params=self._get_params(
@@ -221,6 +224,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
         """Search NCBI Gene database."""
         try:
             # Search
+            assert self._client is not None
             search_resp = await self._client.get(
                 "/esearch.fcgi",
                 params=self._get_params(
@@ -237,6 +241,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
                 return []
 
             # Fetch summaries
+            assert self._client is not None
             summary_resp = await self._client.get(
                 "/esummary.fcgi",
                 params=self._get_params(

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ RETURN p.id AS id, p.text AS text, p.article_title AS article_title,
 class AuraPassageFetch:
     """Batched ``MATCH`` for passage text + metadata by id."""
 
-    def __init__(self, *, graph_store) -> None:
+    def __init__(self, *, graph_store: Any) -> None:
         self._graph = graph_store
 
     async def fetch_many(self, passage_ids: list[str]) -> list[PassageFetchResult]:

@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,8 @@ class EntityResolver:
     def __init__(
         self,
         *,
-        graph_store,
-        embedding_adapter,
+        graph_store: Any,
+        embedding_adapter: Any,
         vector_top_k: int = 5,
         similarity_threshold: float = 0.55,
     ) -> None:
@@ -137,7 +138,7 @@ class EntityResolver:
                 )
         return out
 
-    async def _vector_lookup(self, vec) -> list[ResolvedEntity]:
+    async def _vector_lookup(self, vec: Any) -> list[ResolvedEntity]:
         try:
             rows = await self._graph.run_cypher(
                 _VECTOR_CYPHER,

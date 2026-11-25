@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
 from ingestion.checkpoint_store import CheckpointStore
 from ingestion.dump_parsers import WikidataEntity, WikidataJsonDumpParser
@@ -103,7 +104,7 @@ class Pass1EntityWriter:
     def __init__(
         self,
         *,
-        graph_store,
+        graph_store: Any,
         checkpoint_store: CheckpointStore,
         dlq: DLQWriter,
         pause_controller: PauseController,

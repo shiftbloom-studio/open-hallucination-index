@@ -43,7 +43,7 @@ polarised edges that NLI produces (e.g. entail=0.98, contradict=0.01).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from uuid import UUID
 
 import numpy as np
@@ -247,7 +247,7 @@ def log_normalize_2d(log_marginal: np.ndarray) -> np.ndarray:
         # Degenerate input — fall back to uniform.
         return np.array([0.5, 0.5], dtype=np.float64)
     lse = m + float(np.log(np.sum(np.exp(log_marginal - m))))
-    return np.exp(log_marginal - lse)
+    return cast("np.ndarray", np.exp(log_marginal - lse))
 
 
 __all__ = [

@@ -9,7 +9,7 @@ https://europepmc.org/RestfulWebService
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from adapters.mcp_sources.base import (
     HTTPKnowledgeSource,
@@ -135,6 +135,7 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
     async def _search_articles(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for articles."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/search",
                 params={
@@ -147,7 +148,7 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("resultList", {}).get("result", [])
+            return cast("list[dict[str, Any]]", data.get("resultList", {}).get("result", []))
         except Exception as e:
             logger.warning(f"Europe PMC search error: {e}")
             return []
@@ -155,6 +156,7 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
     async def get_article_by_pmid(self, pmid: str) -> dict[str, Any] | None:
         """Get article by PubMed ID."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/search",
                 params={
@@ -183,13 +185,16 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
             limit: Maximum citations to return
         """
         try:
+            assert self._client is not None
             response = await self._client.get(
                 f"/{source}/{identifier}/citations",
                 params={"page": 1, "pageSize": limit, "format": "json"},
             )
             if response.status_code == 200:
                 data = response.json()
-                return data.get("citationList", {}).get("citation", [])
+                return cast(
+                    "list[dict[str, Any]]", data.get("citationList", {}).get("citation", [])
+                )
             return []
         except Exception:
             return []

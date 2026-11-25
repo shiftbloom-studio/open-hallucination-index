@@ -229,8 +229,8 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 vectors_params = config.config.params.vectors
 
                 # Case 1: Simple vector config (has .size directly)
-                if hasattr(vectors_params, "size") and vectors_params.size:
-                    existing_size = vectors_params.size
+                if hasattr(vectors_params, "size") and vectors_params.size:  # type: ignore[union-attr]
+                    existing_size = vectors_params.size  # type: ignore[union-attr]
                     self._use_named_vectors = False
                 # Case 2: Named vectors (dict with vector names like "dense", "sparse")
                 elif isinstance(vectors_params, dict):
@@ -444,7 +444,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
         try:
             # Build filter from metadata (supports ingestion structure)
             query_filter = None
-            must_conditions: list[dict] = []
+            must_conditions: list[dict[str, Any]] = []
 
             # Basic metadata filters
             if query.filter_metadata:
@@ -529,7 +529,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 must_conditions.append({"key": "is_redirect", "match": {"value": False}})
 
             if must_conditions:
-                query_filter = Filter(must=must_conditions)  # type: ignore[arg-type]
+                query_filter = Filter(must=must_conditions)
 
             # Use hybrid search if sparse vectors provided, otherwise dense only
             if query.sparse_indices and query.sparse_values:
@@ -1111,7 +1111,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
                 {"key": "has_coordinates", "match": {"value": True}},
                 {"key": "is_disambiguation", "match": {"value": False}},
             ]
-        )  # type: ignore[arg-type]
+        )
 
         using_vector = "dense" if self._use_named_vectors else None
 

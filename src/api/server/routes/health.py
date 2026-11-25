@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
@@ -82,7 +82,7 @@ async def readiness() -> ReadinessStatus:
     settings = get_settings()
 
     async def check_service(
-        getter,
+        getter: Any,
         *,
         enabled: bool = True,
     ) -> tuple[dict[str, bool | str], bool]:
@@ -194,7 +194,7 @@ async def deep_health(
     # Simple probes for the infra layers (graph / vector / llm / trace).
     async def probe(
         name: str,
-        getter,
+        getter: Any,
         *,
         enabled: bool = True,
     ) -> None:

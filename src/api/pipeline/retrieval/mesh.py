@@ -88,7 +88,7 @@ class KnowledgeMeshBuilder:
         depth = max(1, min(5, depth))
 
         # Start with basic mesh from trace store
-        mesh = await self._trace_store.build_mesh(claim_id, depth)
+        mesh = await self._trace_store.build_mesh(claim_id, depth)  # type: ignore[union-attr]
         if mesh is None:
             return None
 

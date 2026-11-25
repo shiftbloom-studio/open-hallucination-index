@@ -107,11 +107,11 @@ class CheckpointStore:
             if row is None:
                 return None
             return CheckpointRow(
-                pass_name=row[0],  # type: ignore[arg-type]
+                pass_name=row[0],
                 last_committed_id=row[1],
                 started_at=row[2],
                 updated_at=row[3],
-                status=row[4],  # type: ignore[arg-type]
+                status=row[4],
                 records_processed=int(row[5]),
                 dlq_size=int(row[6]),
                 notes=row[7],
@@ -125,11 +125,11 @@ class CheckpointStore:
             ).fetchall()
         return [
             CheckpointRow(
-                pass_name=r[0],  # type: ignore[arg-type]
+                pass_name=r[0],
                 last_committed_id=r[1],
                 started_at=r[2],
                 updated_at=r[3],
-                status=r[4],  # type: ignore[arg-type]
+                status=r[4],
                 records_processed=int(r[5]),
                 dlq_size=int(r[6]),
                 notes=r[7],

@@ -14,6 +14,7 @@ document comes in via multiple retrieval adapters (Neo4j + Qdrant + MCP).
 from __future__ import annotations
 
 import hashlib
+from typing import cast
 
 # ---------------------------------------------------------------------------
 # Default credibility priors per spec §3. Per-domain adapters override
@@ -62,7 +63,7 @@ def temporal_decay(
     """
     if evidence_age_days < 0:
         return 1.0
-    return 0.5 ** (evidence_age_days / half_life_days)
+    return cast("float", 0.5 ** (evidence_age_days / half_life_days))
 
 
 def fingerprint(source_uri: str, content: str) -> str:

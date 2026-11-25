@@ -88,7 +88,7 @@ class OpenAILLMAdapter(LLMProvider):
             api_key=self._settings.api_key.get_secret_value(),
             timeout=self._settings.timeout_seconds,
             max_retries=self._settings.max_retries,
-            http_client=http_client,
+            http_client=http_client,  # type: ignore[arg-type]
         )
         self._model = settings.model
 
@@ -168,7 +168,7 @@ class OpenAILLMAdapter(LLMProvider):
             if json_mode:
                 kwargs["response_format"] = {"type": "json_object"}
 
-            response = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
+            response = await self._client.chat.completions.create(**kwargs)  # type: ignore[call-overload]
 
             choice = response.choices[0]
             usage = None
@@ -231,7 +231,7 @@ class OpenAILLMAdapter(LLMProvider):
             if max_tokens is not None:
                 kwargs["max_tokens"] = max_tokens
 
-            stream = await self._client.chat.completions.create(**kwargs)  # type: ignore[arg-type]
+            stream = await self._client.chat.completions.create(**kwargs)  # type: ignore[call-overload]
 
             async for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:

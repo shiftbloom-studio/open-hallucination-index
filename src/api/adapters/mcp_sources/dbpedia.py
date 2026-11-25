@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from adapters.mcp_sources.base import (
     SPARQLKnowledgeSource,
@@ -71,7 +71,7 @@ class DBpediaAdapter(SPARQLKnowledgeSource):
             headers={"Accept": "application/sparql-results+json"},
         )
         response.raise_for_status()
-        return response.json()
+        return cast("dict[str, Any]", response.json())
 
     async def find_evidence(self, claim: Claim) -> list[Evidence]:
         """Find DBpedia evidence for a claim."""

@@ -414,9 +414,9 @@ def _build_mcp_sources(settings: Any) -> list[MCPKnowledgeSource]:
     # MediaWiki (live Wikipedia Action API) — Phase 2 Wave 1 cheap-evidence
     # source. Default ON via MCPSettings.wikipedia_enabled.
     if getattr(mcp_cfg, "wikipedia_enabled", True) and not in_test_env:
-        sources.append(MediaWikiAdapter())
-        sources.append(WikidataAdapter())
-        sources.append(DBpediaAdapter())
+        sources.append(MediaWikiAdapter())  # type: ignore[arg-type]
+        sources.append(WikidataAdapter())  # type: ignore[arg-type]
+        sources.append(DBpediaAdapter())  # type: ignore[arg-type]
 
     # OHI unified MCP server. Default URL http://ohi-mcp-server:8080 is
     # unresolvable in prod; require explicit MCP_OHI_ENABLED=true at the
@@ -438,17 +438,17 @@ async def _cleanup_adapters() -> None:
     """Close connections during lifespan shutdown."""
     if _graph_store is not None:
         try:
-            await _graph_store.close()
+            await _graph_store.close()  # type: ignore[attr-defined]
         except Exception as e:
             logger.warning(f"Graph store close failed: {e}")
     if _vector_store is not None:
         try:
-            await _vector_store.close()
+            await _vector_store.close()  # type: ignore[attr-defined]
         except Exception as e:
             logger.warning(f"Vector store close failed: {e}")
     if _trace_store is not None:
         try:
-            await _trace_store.close()
+            await _trace_store.close()  # type: ignore[attr-defined]
         except Exception as e:
             logger.warning(f"Trace store close failed: {e}")
     for _src in _mcp_sources:

@@ -31,6 +31,7 @@ import os
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import Any
 
 from ingestion.checkpoint_store import CheckpointStore
 from ingestion.dump_parsers import EnwikiPage, EnwikiXmlDumpParser
@@ -128,14 +129,14 @@ class Pass2PassageWriter:
     def __init__(
         self,
         *,
-        graph_store,
-        vector_store,
-        embedding_adapter,
+        graph_store: Any,
+        vector_store: Any,
+        embedding_adapter: Any,
         checkpoint_store: CheckpointStore,
         dlq: DLQWriter,
         pause_controller: PauseController,
         progress: ProgressReporter,
-        sitelink_resolver,  # maps wikipedia_title → qid (from Pass 1 index)
+        sitelink_resolver: Any,  # maps wikipedia_title → qid (from Pass 1 index)
         batch_size: int = 64,
     ) -> None:
         self._graph = graph_store
@@ -394,7 +395,7 @@ class Pass2PassageWriter:
             total += tokens
         return tail
 
-    def _extract_mention_titles(self, wikilinks) -> list[str]:
+    def _extract_mention_titles(self, wikilinks: Any) -> list[str]:
         """Extract normalized Wikipedia article titles from section wikilinks."""
         titles: list[str] = []
         seen: set[str] = set()
@@ -450,7 +451,7 @@ class Pass2PassageWriter:
         resolved: dict[str, str] = {}
         for row in rows or []:
             if isinstance(row, dict):
-                title = row.get("title")
+                title = row.get("title")  # type: ignore[assignment]
                 qid = row.get("qid")
             else:
                 title = row[0]

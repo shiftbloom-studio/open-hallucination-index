@@ -93,7 +93,7 @@ def install_pause_handler() -> PauseController:
     event = asyncio.Event()
     controller = PauseController(event=event)
 
-    def _handler(signum, frame) -> None:  # noqa: ARG001 — standard signal handler sig
+    def _handler(signum: Any, frame: Any) -> None:  # noqa: ARG001 — standard signal handler sig
         logger.info("SIGUSR1 received — requesting graceful pause at next batch boundary")
         event.set()
 
@@ -148,7 +148,7 @@ class DLQWriter:
 
     def iter_records(self) -> Iterable[dict[str, Any]]:
         if not self.path.exists():
-            return iter([])
+            return
         with self.path.open("r", encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
@@ -209,7 +209,7 @@ class ProgressReporter:
 
 async def retry_record(
     *,
-    fn,
+    fn: Any,
     record_id: str,
     max_retries: int = _MAX_RECORD_RETRIES,
     base_delay_s: float = 0.5,

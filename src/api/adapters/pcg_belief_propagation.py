@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
 from adapters._pcg_gibbs import max_marginal_delta, run_gibbs
@@ -212,8 +212,8 @@ class PCGBeliefPropagationAdapter:
 
     def _run_gibbs_sanity(
         self,
-        graph,
-        reference_marginals,
+        graph: Any,
+        reference_marginals: Any,
         *,
         rigor: RigorTier,
     ) -> None:
@@ -273,8 +273,8 @@ def _deterministic_seed_from_uuids(uuids: list[UUID]) -> int:
 
 
 def _wrap_marginals(
-    graph,
-    marginals,
+    graph: Any,
+    marginals: Any,
     *,
     algorithm: str,
     converged: bool,
@@ -300,7 +300,7 @@ def _wrap_marginals(
             p_true=p_true,
             p_false=p_false,
             converged=converged,
-            algorithm=algorithm,  # type: ignore[arg-type]  # narrowed by dispatch
+            algorithm=algorithm,  # narrowed by dispatch
             iterations=iterations,
             edge_count=graph.n_edges,
             log_partition_bound=log_partition_bound,

@@ -31,7 +31,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from adapters.mcp_client import HTTPMCPAdapter
 from interfaces.mcp import MCPQueryError
@@ -115,7 +115,7 @@ class OHIMCPAdapter(HTTPMCPAdapter):
         Returns:
             List of Evidence objects from multiple sources.
         """
-        return await self.search_for_evidence(claim, max_results=5, search_type="all")
+        return await self.search_for_evidence(claim, max_results=5, search_type="all")  # type: ignore[attr-defined, no-any-return]
 
 
 class TargetedOHISource(OHIMCPAdapter):
@@ -220,7 +220,7 @@ class TargetedOHISource(OHIMCPAdapter):
         )
 
         try:
-            results = await self.call_tool(tool_name, arguments)
+            results = await self.call_tool(tool_name, arguments)  # type: ignore[arg-type]
 
             evidence_list: list[Evidence] = []
             default_source = TOOL_TO_SOURCE.get(tool_name, EvidenceSource.KNOWLEDGE_GRAPH)
@@ -274,7 +274,7 @@ class TargetedOHISource(OHIMCPAdapter):
             results = await self.call_tool("get_doi_metadata", {"doi": doi})
             if results:
                 ev = self._create_evidence(results[0], EvidenceSource.ACADEMIC, "get_doi_metadata")
-                ev.source_uri = f"https://doi.org/{doi}"
+                ev.source_uri = f"https://doi.org/{doi}"  # type: ignore[misc]
                 return ev
             return None
         except Exception as e:
@@ -450,7 +450,7 @@ class TargetedOHISource(OHIMCPAdapter):
                 # Extract library ID from result
                 result = results[0]
                 if isinstance(result, dict) and "library_id" in result:
-                    return result["library_id"]
+                    return cast("str | None", result["library_id"])
                 if isinstance(result, dict) and "text" in result:
                     # Parse from text response
                     import re
@@ -494,9 +494,9 @@ class TargetedOHISource(OHIMCPAdapter):
             # Enrich with library metadata
             for ev in evidences:
                 if ev.structured_data is None:
-                    ev.structured_data = {}
+                    ev.structured_data = {}  # type: ignore[misc]
                 ev.structured_data["library_id"] = library_id
-                ev.source_uri = f"https://context7.com{library_id}"
+                ev.source_uri = f"https://context7.com{library_id}"  # type: ignore[misc]
             return evidences
         except Exception as e:
             logger.warning(f"Context7 query-docs failed for '{library_id}': {e}")

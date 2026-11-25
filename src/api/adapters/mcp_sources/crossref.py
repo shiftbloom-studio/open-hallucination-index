@@ -9,7 +9,7 @@ https://www.crossref.org/documentation/retrieve-metadata/rest-api/
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
 
 from adapters.mcp_sources.base import (
@@ -134,6 +134,7 @@ class CrossrefAdapter(HTTPKnowledgeSource):
     async def _search_works(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for works via Crossref."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/works",
                 params={
@@ -144,7 +145,7 @@ class CrossrefAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("message", {}).get("items", [])
+            return cast("list[dict[str, Any]]", data.get("message", {}).get("items", []))
         except Exception as e:
             logger.warning(f"Crossref search error: {e}")
             return []
@@ -153,10 +154,11 @@ class CrossrefAdapter(HTTPKnowledgeSource):
         """Get work metadata by DOI."""
         try:
             encoded_doi = quote(doi, safe="/")
+            assert self._client is not None
             response = await self._client.get(f"/works/{encoded_doi}")
             if response.status_code == 200:
                 data = response.json()
-                return data.get("message", {})
+                return cast("dict[str, Any] | None", data.get("message", {}))
             return None
         except Exception:
             return None
@@ -166,7 +168,7 @@ class CrossrefAdapter(HTTPKnowledgeSource):
         titles = work.get("title", [])
         return titles[0] if titles else ""
 
-    def _format_authors(self, authors: list[dict]) -> str:
+    def _format_authors(self, authors: list[dict[str, Any]]) -> str:
         """Format author list."""
         names = []
         for author in authors[:5]:

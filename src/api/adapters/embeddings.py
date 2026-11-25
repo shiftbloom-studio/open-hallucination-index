@@ -23,7 +23,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from config.settings import EmbeddingSettings
@@ -38,7 +38,7 @@ _model_load_lock = Lock()
 
 
 @lru_cache(maxsize=1)
-def _get_model(model_name: str):
+def _get_model(model_name: str) -> Any:
     """Load and cache the sentence transformer model."""
     import torch
     from sentence_transformers import SentenceTransformer
@@ -71,13 +71,13 @@ class _InProcessEmbeddingAdapter:
 
     @property
     def embedding_dimension(self) -> int:
-        return self._model.get_sentence_embedding_dimension()
+        return cast("int", self._model.get_sentence_embedding_dimension())
 
     def _embed_sync(self, text: str) -> list[float]:
         vec = self._model.encode(
             text, normalize_embeddings=self._normalize, show_progress_bar=False
         )
-        return vec.tolist()
+        return cast("list[float]", vec.tolist())
 
     def _embed_batch_sync(self, texts: list[str]) -> list[list[float]]:
         vecs = self._model.encode(
@@ -86,7 +86,7 @@ class _InProcessEmbeddingAdapter:
             normalize_embeddings=self._normalize,
             show_progress_bar=False,
         )
-        return vecs.tolist()
+        return cast("list[list[float]]", vecs.tolist())
 
     async def generate_embedding(self, text: str) -> list[float]:
         loop = asyncio.get_running_loop()
@@ -168,7 +168,7 @@ class _RemoteEmbeddingAdapter:
         payload = resp.json()
         vec = payload["vector"]
         self._dim_cache = payload.get("dim", len(vec))
-        return vec
+        return cast("list[float]", vec)
 
     async def generate_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
         if not texts:
@@ -179,7 +179,7 @@ class _RemoteEmbeddingAdapter:
         vecs = payload["vectors"]
         if vecs:
             self._dim_cache = payload.get("dim", len(vecs[0]))
-        return vecs
+        return cast("list[list[float]]", vecs)
 
     async def health_check(self) -> bool:
         try:

@@ -17,8 +17,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-import boto3  # type: ignore[import-untyped]
-from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+import boto3
+from botocore.exceptions import ClientError
 
 
 class ConfigurationError(RuntimeError):

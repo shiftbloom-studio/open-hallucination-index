@@ -17,7 +17,7 @@ import json
 import logging
 from abc import abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 import httpx
@@ -212,14 +212,14 @@ class HTTPMCPAdapter(MCPKnowledgeSource):
 
             if cache is not None and cache_key is not None:
                 cache[cache_key] = results
-            return results
+            return cast("list[dict[str, Any]]", results)
 
         except httpx.TimeoutException:
             raise MCPQueryError(f"Timeout calling {tool_name} on {self.source_name}") from None
         except httpx.HTTPStatusError as e:
             raise MCPQueryError(f"HTTP error calling {tool_name}: {e}") from e
 
-    async def search(self, query: str, limit: int = 5) -> list[dict]:
+    async def search(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """
         Perform a general search using the search_all tool.
 
