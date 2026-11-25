@@ -3,3 +3,5 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+overrides:
+  '@modelcontextprotocol/sdk': 1.32.2
