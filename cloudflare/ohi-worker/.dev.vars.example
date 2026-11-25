@@ -1,0 +1,8 @@
+# Copy to .dev.vars for `wrangler dev`. In production these are Worker secrets
+# (`wrangler secret put <NAME>`), never committed.
+
+# Bearer token for /api/v2/admin/* (corpus runs, stats). Unset = admin routes return 503.
+ADMIN_TOKEN=change-me
+
+# Turnstile secret for POST /api/v2/verify. Unset = the Turnstile check is skipped locally.
+# TURNSTILE_SECRET_KEY=<your-turnstile-secret>

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { OperatorAddress } from "@/components/layout/operator-address";
+import { operator } from "@/lib/operator";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -18,13 +20,8 @@ export default function PrivacyPolicyPage() {
             <p>
               The data controller within the meaning of the General Data Protection Regulation (GDPR) is:
               <br />
-              shiftbloom studio.<br />
-              shiftbloom studio<br />
-              Example Street 1, 12345 Example Town, Germany<br />
-              Email: hi@shiftbloom.studio
-            </p>
-            <p>
-              (Note: If a Data Protection Officer has been appointed, please add the contact details.)
+              <OperatorAddress />
+              Email: {operator.email}
             </p>
           </section>
 

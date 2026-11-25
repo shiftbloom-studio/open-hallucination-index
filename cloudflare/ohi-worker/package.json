@@ -19,5 +19,9 @@
     "@types/node": "^25.0.8",
     "typescript": "^5.9.3",
     "wrangler": "^4.107.0"
+  },
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=26"
   }
 }

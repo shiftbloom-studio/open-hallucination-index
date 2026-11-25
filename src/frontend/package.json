@@ -76,5 +76,9 @@
     "@babel/core": "$@babel/core",
     "esbuild": ">=0.27.2",
     "postcss": "$postcss"
+  },
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=26"
   }
 }

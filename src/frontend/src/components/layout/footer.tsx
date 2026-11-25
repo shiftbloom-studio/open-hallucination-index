@@ -43,10 +43,10 @@ export function Footer() {
                 intentionally inspectable.
               </p>
               <a
-                href="mailto:hello@shiftbloom.studio"
+                href="mailto:hi@shiftbloom.studio"
                 className="mt-6 inline-flex rounded-full border border-white/14 px-6 py-3 text-base font-semibold text-white transition-colors hover:border-[color:var(--brand-primary)]/60 hover:text-[color:var(--brand-primary)]"
               >
-                hello@shiftbloom.studio
+                hi@shiftbloom.studio
               </a>
             </div>
           </div>
@@ -75,8 +75,8 @@ export function Footer() {
               <h3 className="mb-5 text-sm font-semibold uppercase tracking-[0.18em] text-white/78">Contact</h3>
               <ul className="space-y-3 text-white/45">
                 <li>
-                  <a href="mailto:fabian@shiftbloom.studio" className="hover:text-[color:var(--brand-primary)]">
-                    fabian@shiftbloom.studio
+                  <a href="mailto:hi@shiftbloom.studio" className="hover:text-[color:var(--brand-primary)]">
+                    hi@shiftbloom.studio
                   </a>
                 </li>
                 <li>Hamburg, Germany</li>

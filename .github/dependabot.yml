@@ -1,6 +1,18 @@
 version: 2
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: npm
+    directory: /src/frontend
     schedule:
-      interval: "weekly"
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /cloudflare/ohi-worker
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /src/ohi-mcp-server
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

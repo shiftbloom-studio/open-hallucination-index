@@ -1,10 +1,14 @@
+// Open Hallucination Index: Cloudflare Worker config.
+// The account comes from CLOUDFLARE_ACCOUNT_ID and the D1 id below is a
+// placeholder. CI swaps in the real id from the OHI_D1_DATABASE_ID secret;
+// for your own deploy, run `wrangler d1 create ohi-prod` and paste its id.
+// Self-hosting on another domain? Change "routes" and SITE_ORIGIN.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "ohi-cloudflare",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-05",
   "compatibility_flags": ["nodejs_compat"],
-  "account_id": "<cloudflare-account-id>",
   "routes": [
     {
       "pattern": "ohi.shiftbloom.studio",

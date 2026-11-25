@@ -2,7 +2,7 @@ import type { FallbackKind } from "@/lib/ohi-types";
 import { cn } from "@/lib/utils";
 
 // Labels are display strings — DO NOT rename or reorder.
-// "general fallback" is load-bearing (the maintainer's hard-rule: signals calibration
+// "general fallback" is load-bearing (project rule: signals calibration
 // state to operators reading the UI).
 const label: Record<FallbackKind, string> = {
   domain: "domain fallback",

@@ -1,32 +1,31 @@
-# Security Policy
+# Security policy
 
-## Supported Versions
+## Supported versions
 
-We only provide security updates for the latest version of Open Hallucination Index.
+Only the current `main` branch and the live deployment at
+<https://ohi.shiftbloom.studio> receive security fixes.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.0.0   | :white_check_mark: |
-| < 1.0.0 | :x:                |
+## Reporting a vulnerability
 
-## Reporting a Vulnerability
+Please do not open a public issue for security problems.
 
-We take security seriously. If you discover a security vulnerability within Open Hallucination Index, please help us by reporting it responsibly.
+Email **safety@shiftbloom.studio** with:
 
-**Please do not open a public GitHub issue for security vulnerabilities.**
+1. what you found and where,
+2. steps or a request that reproduces it,
+3. what an attacker could do with it.
 
-Instead, please send an email to **security@shiftbloom.studio** with the following information:
+You can also use GitHub's private vulnerability reporting on this repository.
 
-1.  **Description**: A detailed description of the vulnerability.
-2.  **Reproduction**: Steps to reproduce the issue (including sample code/requests).
-3.  **Impact**: What could an attacker achieve with this vulnerability?
-4.  **Versions**: Which versions of OHI are affected?
+We reply within 3 working days and aim to ship a fix within 30 days of
+confirming the issue. We are happy to credit you once the fix is live.
 
-We will acknowledge your report within 48 hours and provide a timeline for a fix. We follow a 90-day disclosure policy from the time the vulnerability is confirmed.
+## Scope
 
-## Security Practices in OHI
+In scope: the Worker in `cloudflare/ohi-worker`, the frontend in
+`src/frontend`, the MCP server in `src/ohi-mcp-server`, and the public
+endpoints `/api/v2/*`, `/mcp` and `/health/*`.
 
--   **API Key Auth**: Required by default for all data-modifying or costly operations.
--   **Dependency Scanning**: Automated scans via GitHub Actions.
--   **Environment Isolation**: Designed to run in isolated Docker containers.
--   **Secret Management**: Never commit `.env` files; use CI/CD secrets.
+Out of scope: rate limit or Turnstile challenges working as intended,
+reports from automated scanners without a working proof, and attacks on
+Cloudflare itself.

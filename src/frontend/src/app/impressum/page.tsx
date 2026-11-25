@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { OperatorAddress } from "@/components/layout/operator-address";
+import { operator } from "@/lib/operator";
 
 export const metadata: Metadata = {
   title: "Legal Notice",
@@ -15,35 +17,17 @@ export default function LegalNoticePage() {
 
           <h2 className="text-2xl font-semibold text-neutral-100 pt-4">Information pursuant to § 5 TMG (German Telemedia Act)</h2>
           <p>
-            shiftbloom studio.<br />
-            shiftbloom studio<br />
-            Example Street 1<br />
-            12345 Example Town<br />
-            Germany
+            <OperatorAddress />
           </p>
 
           <h2 className="text-2xl font-semibold text-neutral-100 pt-4">Contact</h2>
           <p>
-            Email: hi@shiftbloom.studio
-            <br />
-            Phone: (please add if desired)
-          </p>
-
-          <h2 className="text-2xl font-semibold text-neutral-100 pt-4">VAT Information</h2>
-          <p>
-            VAT Identification Number pursuant to § 27a of the German VAT Act: (please add if applicable)
-          </p>
-
-          <h2 className="text-2xl font-semibold text-neutral-100 pt-4">Commercial Register Entry</h2>
-          <p>
-            Entry in the Commercial Register: (please add if applicable)<br />
-            Register Court: (please add if applicable)<br />
-            Registration Number: (please add if applicable)
+            Email: {operator.email}
           </p>
 
           <h2 className="text-2xl font-semibold text-neutral-100 pt-4">Responsible for Content pursuant to § 18 Sec. 2 MStV</h2>
           <p>
-            shiftbloom studio, Example Street 1, 12345 Example Town, Germany
+            <OperatorAddress inline />
           </p>
 
           <h2 className="text-2xl font-semibold text-neutral-100 pt-4">EU Online Dispute Resolution / Consumer Dispute Resolution</h2>

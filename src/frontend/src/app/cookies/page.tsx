@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { OperatorAddress } from "@/components/layout/operator-address";
+import { operator } from "@/lib/operator";
 
 export const metadata: Metadata = {
   title: "Cookie Policy",
@@ -242,12 +244,8 @@ export default function CookiePolicyPage() {
               If you have any questions about our use of cookies, please contact us at:
             </p>
             <p>
-              shiftbloom studio.<br />
-              shiftbloom studio<br />
-              Example Street 1<br />
-              12345 Example Town<br />
-              Germany<br />
-              Email: hi@shiftbloom.studio
+              <OperatorAddress />
+              Email: {operator.email}
             </p>
           </section>
 

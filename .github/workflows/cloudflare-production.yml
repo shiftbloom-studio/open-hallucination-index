@@ -3,27 +3,26 @@ name: Cloudflare production
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
-  group: cloudflare-production
-  cancel-in-progress: false
+  group: cloudflare-production-${{ github.event_name == 'pull_request' && github.event.number || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
   verify:
-    runs-on:
-      group: Default
-      labels: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26
 
       - name: Enable pnpm
         run: corepack enable pnpm
@@ -62,18 +61,16 @@ jobs:
 
   deploy:
     needs: verify
-    runs-on:
-      group: Default
-      labels: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     environment: production
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 26
 
       - name: Enable pnpm
         run: corepack enable pnpm
@@ -86,29 +83,44 @@ jobs:
         working-directory: src/frontend
         env:
           NEXT_PUBLIC_API_BASE: https://ohi.shiftbloom.studio/api/v2
-          NEXT_PUBLIC_TURNSTILE_SITE_KEY: 0x4AAAAAADvvKi5_WG_Kkvkq
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_OPERATOR_NAME: ${{ secrets.OPERATOR_NAME }}
+          NEXT_PUBLIC_OPERATOR_STREET: ${{ secrets.OPERATOR_STREET }}
+          NEXT_PUBLIC_OPERATOR_CITY: ${{ secrets.OPERATOR_CITY }}
+          NEXT_PUBLIC_OPERATOR_COUNTRY: ${{ vars.OPERATOR_COUNTRY || 'Germany' }}
         run: pnpm run build
 
       - name: Install Worker dependencies
         working-directory: cloudflare/ohi-worker
         run: pnpm install --frozen-lockfile
 
+      - name: Fill in resource ids
+        working-directory: cloudflare/ohi-worker
+        env:
+          OHI_D1_DATABASE_ID: ${{ secrets.OHI_D1_DATABASE_ID }}
+        run: |
+          test -n "$OHI_D1_DATABASE_ID" || { echo "::error::OHI_D1_DATABASE_ID secret is not set"; exit 1; }
+          sed -i "s/<your-d1-database-id>/${OHI_D1_DATABASE_ID}/" wrangler.jsonc
+
       - name: Generate Worker binding types
         working-directory: cloudflare/ohi-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm run types
 
       - name: Apply D1 migrations
         working-directory: cloudflare/ohi-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm wrangler d1 migrations apply ohi-prod --remote
 
       - name: Configure admin token secret
         working-directory: cloudflare/ohi-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           OHI_ADMIN_TOKEN: ${{ secrets.OHI_ADMIN_TOKEN }}
         run: |
           if [ -n "${OHI_ADMIN_TOKEN:-}" ]; then
@@ -121,6 +133,7 @@ jobs:
         working-directory: cloudflare/ohi-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
         run: |
           if [ -n "${TURNSTILE_SECRET_KEY:-}" ]; then
@@ -133,6 +146,7 @@ jobs:
         working-directory: cloudflare/ohi-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm run deploy
 
       - name: Production health probes

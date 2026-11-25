@@ -18,12 +18,11 @@ import type {
  * record.
  *
  * Polling mechanics, calibrated with E1's observed latency (~5 s for a
- * 2-claim doc) and the 180 s Lambda timeout:
+ * 2-claim doc) and the queue consumer's retry budget:
  * - 1 s interval by default (phases typically change every 2–10 s).
  * - Exponential backoff to 5 s on transient network errors.
- * - Hard 3 min absolute cap — well past the 180 s Lambda timeout so
- *   hung Lambdas surface as a terminal error in the UI rather than a
- *   perpetual spinner.
+ * - Hard 3 min absolute cap so a stuck job surfaces as a terminal error
+ *   in the UI rather than a perpetual spinner.
  */
 
 export type VerifyStatus =

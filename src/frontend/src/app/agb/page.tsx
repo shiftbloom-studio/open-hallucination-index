@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { OperatorAddress } from "@/components/layout/operator-address";
+import { operator } from "@/lib/operator";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -28,12 +30,8 @@ export default function TermsOfServicePage() {
             <p>
               The contracting party and provider of the Service is:
               <br />
-              shiftbloom studio.<br />
-              shiftbloom studio<br />
-              Example Street 1<br />
-              12345 Example Town<br />
-              Germany<br />
-              Email: hi@shiftbloom.studio
+              <OperatorAddress />
+              Email: {operator.email}
             </p>
           </section>
 

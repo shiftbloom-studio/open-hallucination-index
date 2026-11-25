@@ -23,8 +23,8 @@ body:
       label: Steps to Reproduce
       description: Minimal steps to reproduce the behavior.
       placeholder: |
-        1. Start the API with `docker compose up`
-        2. Send a POST request to `/api/v1/verify`
+        1. Open https://ohi.shiftbloom.studio/verify
+        2. Paste this text: ...
         3. See error...
     validations:
       required: true
@@ -58,11 +58,11 @@ body:
       label: Environment
       description: How are you running OHI?
       options:
-        - Docker Compose (recommended)
-        - Docker (manual)
-        - Local Python
-        - Kubernetes
-        - Other
+        - Live site (ohi.shiftbloom.studio)
+        - MCP endpoint (/mcp)
+        - Local wrangler dev
+        - Own Cloudflare deployment
+        - Standalone MCP server
     validations:
       required: true
 
@@ -70,15 +70,8 @@ body:
     id: version
     attributes:
       label: Version
-      description: What version of OHI are you running?
-      placeholder: "0.1.0"
-
-  - type: input
-    id: python-version
-    attributes:
-      label: Python Version
-      description: If running locally, what Python version?
-      placeholder: "3.11.5"
+      description: Commit or release, if you run your own copy.
+      placeholder: "main @ abc1234"
 
   - type: input
     id: os

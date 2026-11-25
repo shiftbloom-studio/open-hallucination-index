@@ -1,35 +1,36 @@
-# Cloudflare API Token — Scopes + Rotation
+# Cloudflare API token: scopes and rotation
 
-## Required scopes (on the CF dashboard → My Profile → API Tokens → Create Token)
+The deploy workflow (`.github/workflows/cloudflare-production.yml`) needs one
+API token stored as the `CLOUDFLARE_API_TOKEN` secret of the `production`
+environment, plus `CLOUDFLARE_ACCOUNT_ID` and `OHI_D1_DATABASE_ID`.
 
-### Account-scoped:
-- `Account:Cloudflare Tunnel:Edit`
-- `Account:Access: Apps and Policies:Edit`
-- `Account:Account Settings:Read`
+## Scopes
 
-### Zone-scoped (to `ohi.shiftbloom.studio`):
-- `Zone:Read`
-- `Zone:Zone Settings:Edit`
-- `Zone:DNS:Edit`
-- `Zone:Zone WAF:Edit`
-- `Zone:Page Rules:Edit` (for Transform Rules)
+Account scoped:
 
-## Create the token
+- Workers Scripts: Edit
+- Workers AI: Read
+- D1: Edit
+- Vectorize: Edit
+- Queues: Edit
+- Workers R2 Storage: Edit
+- Account Settings: Read
 
-1. Create token in CF dashboard.
-2. Save the token value (shown ONCE).
-3. Update GitHub repo secret `CLOUDFLARE_API_TOKEN`:
-   ```bash
-   gh secret set CLOUDFLARE_API_TOKEN < /tmp/token.txt
-   ```
-4. Verify:
-   ```bash
-   curl -H "Authorization: Bearer $(cat /tmp/token.txt)" \
+Zone scoped (the zone that serves the Worker):
+
+- Workers Routes: Edit
+- Zone: Read
+
+## Create or rotate
+
+1. Create the token in the Cloudflare dashboard under My Profile, API Tokens.
+2. Store it as the `CLOUDFLARE_API_TOKEN` environment secret in GitHub.
+3. Check it:
+   ```sh
+   curl -H "Authorization: Bearer $TOKEN" \
         https://api.cloudflare.com/client/v4/user/tokens/verify
    ```
-   Expect `"status":"active"`.
+   The response should say `"status":"active"`.
+4. Revoke the old token in the dashboard.
 
-## Rotation
-
-Same as creation, then revoke the old token from the CF dashboard.
-Never commit the token to any file. Store exclusively in GH secrets.
+Never commit a token to the repository.

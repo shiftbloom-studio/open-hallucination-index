@@ -1,258 +1,30 @@
-# ==============================================================================
-# Python
-# ==============================================================================
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
+# Dependencies and build output
+node_modules/
 dist/
-downloads/
-eggs/
-.eggs/
-/lib/
-!src/frontend/src/lib/
-!src/frontend/src/lib/**
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+out/
+.next/
+.wrangler/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
 
-# ==============================================================================
-# Virtual Environments
-# ==============================================================================
-.venv/
-venv/
-ENV/
-env/
-.conda/
-.venv-gpu/
+# Test output
+playwright-report/
+test-results/
 
-# ==============================================================================
-# IDE and Editors
-# ==============================================================================
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-*.sublime-project
-*.sublime-workspace
-.spyderproject
-.spyproject
-
-# ==============================================================================
-# Testing
-# ==============================================================================
-.pytest_cache/
-.coverage
-coverage.xml
-htmlcov/
-.tox/
-.nox/
-.hypothesis/
-nosetests.xml
-
-# ==============================================================================
-# Type Checking
-# ==============================================================================
-.mypy_cache/
-.dmypy.json
-dmypy.json
-.pytype/
-.pyre/
-
-# ==============================================================================
-# Linting
-# ==============================================================================
-.ruff_cache/
-
-# ==============================================================================
-# Environment & Secrets
-# ==============================================================================
+# Local config and secrets
 .env
-.env.local
-.env.*.local
-.env.production
-docker/compose/.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 *.pem
 *.key
 
-secrets/
-.secrets/
-# Infrastructure Terraform layer `infra/terraform/secrets/` holds empty
-# Secrets Manager entries managed by Terraform — only ARNs, no actual values.
-!infra/terraform/secrets/
-!infra/terraform/secrets/**
-
-# ==============================================================================
-# Logs
-# ==============================================================================
-*.log
-logs/
-*.log.*
-log/
-
-# ==============================================================================
-# OS Files
-# ==============================================================================
+# Editors and OS
+.vscode/
+.idea/
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-desktop.ini
-
-# ==============================================================================
-# Jupyter Notebooks
-# ==============================================================================
-.ipynb_checkpoints/
-*.ipynb_checkpoints
-
-# ==============================================================================
-# Data & Cache (local development)
-# ==============================================================================
-data/
-*.db
-*.sqlite
-*.sqlite3
-.cache/
-cache/
-
-# ==============================================================================
-# Lock Files (users generate their own)
-# ==============================================================================
-uv.lock
-
-# ============================================================================== 
-# Docker (local data only)
-# ==============================================================================
-docker/data/
-docker-data/
-neo4j-data/
-qdrant-data/
-redis-data/
-data/neo4j/
-data/qdrant/
-data/redis/
-data/certbot/
-
-# OHI v2 local dev stack volumes (Phase 0)
-infra/local/data/
-
-# ==============================================================================
-# Model Files (too large for git)
-# ==============================================================================
-models/
-!src/api/models/
-!tests/api/models/
-*.onnx
-*.pt
-*.pth
-*.bin
-*.safetensors
-*.gguf
-
-# ==============================================================================
-# Wikipedia Import (local data)
-# ==============================================================================
-wikipedia-knowledge/
-wikipedia_import.log
-wikipedia_import_progress.json
-
-# ==============================================================================
-# Build Artifacts
-# ==============================================================================
-*.tar
-*.tar.gz
-*.zip
-node_modules/
-
-# ==============================================================================
-# Temporary Files
-# ==============================================================================
-tmp/
-temp/
-*.tmp
-*.temp
-*.bak
-*.backup
-
-
-
-
-# ============================================================================== 
-# Ingestion checkpoints / dumps (local only)
-# ==============================================================================
-.ingest_checkpoint.json
-/.wiki_dumps/
-
-*.tex
-
-# Benchmark output: keep the dir and the .gitkeep; keep committed baseline
-# summary files (v1_baseline_*.summary.json) as Phase 0 acceptance
-# artifacts; ignore raw JSONL + smoke-test outputs.
-/benchmark_results/*
-!/benchmark_results/.gitkeep
-!/benchmark_results/v1_baseline_*.summary.json
-!/benchmark_results/v2_*.summary.json
-
-# ==============================================================================
-# Internal design + planning docs (local only, not pushed)
-# ==============================================================================
-# Brainstorming specs, implementation plans, and checkpoint handoffs for the
-# ongoing redesign are kept out of the remote while the work is in progress.
-# If and when the design stabilizes, selected sections can be re-introduced
-# (e.g., copied into README.md or docs/) under a separate explicit commit.
-/docs/superpowers/
-
-/gui_ingestion_app/.wiki_dumps/
-# Terraform working dirs + state (provider binaries etc.)
-.terraform/
-*.tfstate
-*.tfstate.*
-*.tfplan
-bootstrap.plan
-storage.plan
-secrets.plan
-compute.plan
-cloudflare.plan
-vercel.plan
-observability.plan
-
-.vercel
-
-# ==============================================================================
-# Local tooling / harness (not pushed)
-# ==============================================================================
-.claude/
-.superpowers/
-.tools/
-research/
-artifacts/
-nul
-
-# ==============================================================================
-# Orphaned stubs kept locally only (no importer in src/; revive via explicit
-# commit when the NEO4J_ENABLED=false path gets wired)
-# ==============================================================================
-src/api/adapters/null_graph.py
-
-# ==============================================================================
-# Additional terraform plan artifacts not caught by the named list above
-# ==============================================================================
-cf.plan
-
-# ==============================================================================
-# Local environment files (specific variants that escape the .env.* patterns)
-# ==============================================================================
-docker/compose/.env.pc-data
+*.log

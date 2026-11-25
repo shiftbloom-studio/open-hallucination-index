@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { OperatorAddress } from "@/components/layout/operator-address";
+import { operator, operatorLabel } from "@/lib/operator";
 
 export const metadata: Metadata = {
   title: "End User License Agreement (EULA)",
@@ -17,7 +19,7 @@ export default function EulaPage() {
           <section className="space-y-3">
             <h2 className="text-2xl font-semibold text-neutral-100">IMPORTANT – READ CAREFULLY</h2>
             <p>
-              This End User License Agreement (&quot;Agreement&quot; or &quot;EULA&quot;) is a legally binding contract between you (&quot;User,&quot; &quot;you,&quot; or &quot;your&quot;) and shiftbloom studio., operated by shiftbloom studio (&quot;Company,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;), governing your access to and use of the Open Hallucination Index software, platform, application programming interfaces (APIs), and related services (collectively, the &quot;Software&quot; or &quot;Service&quot;).
+              This End User License Agreement (&quot;Agreement&quot; or &quot;EULA&quot;) is a legally binding contract between you (&quot;User,&quot; &quot;you,&quot; or &quot;your&quot;) and {operatorLabel} (&quot;Company,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;), governing your access to and use of the Open Hallucination Index software, platform, application programming interfaces (APIs), and related services (collectively, the &quot;Software&quot; or &quot;Service&quot;).
             </p>
             <p>
               BY ACCESSING, DOWNLOADING, INSTALLING, OR USING THE SOFTWARE, YOU ACKNOWLEDGE THAT YOU HAVE READ, UNDERSTOOD, AND AGREE TO BE BOUND BY THE TERMS AND CONDITIONS OF THIS AGREEMENT. IF YOU DO NOT AGREE TO THESE TERMS, DO NOT ACCESS OR USE THE SOFTWARE.
@@ -266,12 +268,8 @@ export default function EulaPage() {
               If you have any questions about this Agreement, please contact us at:
             </p>
             <p>
-              shiftbloom studio.<br />
-              shiftbloom studio<br />
-              Example Street 1<br />
-              12345 Example Town<br />
-              Germany<br />
-              Email: hi@shiftbloom.studio
+              <OperatorAddress />
+              Email: {operator.email}
             </p>
           </section>
 

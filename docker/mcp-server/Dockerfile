@@ -3,7 +3,7 @@
 #
 # High-performance MCP server aggregating 13+ knowledge sources.
 
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ COPY src/ohi-mcp-server/src ./src
 RUN npm run build
 
 # Production image
-FROM node:24-alpine AS production
+FROM node:26-alpine AS production
 
 WORKDIR /app
 

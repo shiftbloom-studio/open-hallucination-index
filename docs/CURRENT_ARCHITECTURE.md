@@ -1,28 +1,17 @@
 # Current Architecture
 
-**Single Source of Truth (SSoT)** for the OHI production and local-dev topology. If another doc contradicts this file, this file wins and the other doc should be updated.
-
-**Last verified against prod:** 2026-07-05 (cost-tiered Rigor profiles deploy)
+This file is the reference for how OHI runs in production. If another doc
+disagrees with it, this file wins.
 
 - Public URL: `https://ohi.shiftbloom.studio`
 - Worker: `ohi-cloudflare`
-- Latest verified Worker version: `420ff05d-97ad-4cab-902a-64b846143046` (deployed via `wrangler deploy` directly — GitHub Actions still cannot run because the `shiftbloom-studio` GitHub account is billing-locked; `main` and prod matched at deploy time)
-- Health:
-  - `GET /health/live`: healthy
-  - `GET /health/ready`: D1, Durable Objects, Queue, Workers AI, and Vectorize healthy/configured
-  - `GET /health/deep`: `status=ok`, `corpus_store=cloudflare-vectorize+d1+r2`. `L3.nli` latency varies a lot run-to-run (seen ~60ms up to ~5.4s) because the health probe's fixed test claim/evidence pair is Workers AI Gateway-cached for 1 hour (`cacheTtl: 3600`) — a fast reading means a cache hit, not a broken ensemble; a cold reading (~5s) confirms both ensemble models actually ran.
-- Verified end-to-end probe:
-  - `/verify` renders the Cloudflare Turnstile widget.
-  - Direct `POST /api/v2/verify` without `turnstile_token` returns `403 turnstile_required`.
-  - `POST /api/v2/verify` and `POST /mcp` both trip the zone WAF's scripted-client challenge for non-browser clients (curl) even with a valid admin token — this is by design (bot mitigation) and could not be bypassed to run a curl-based false-claim probe against `/verify` this session, including via `wrangler dev --remote` (still proxies through the same zone edge). `GET/POST /api/v2/admin/*` is not behind that challenge and was used for the checks below. A manual false-claim check through a real browser at `/verify` is still recommended as a final sanity check, across all three rigor tiers.
-- Verified MCP:
-  - `POST /mcp` initialize succeeds.
-  - `tools/list` returns 25 tools: OHI tools plus the migrated multi-source knowledge tools from `src/ohi-mcp-server`.
-- Verified corpus seed (via `GET /api/v2/admin/corpus`):
-  - Vectorize `ohi-evidence-bge-m3`: 1024 dimensions, cosine metric.
-  - D1 corpus: 2,295 documents / 4,743 chunks / 25 Wikidata entities / 1,263 graph edges — up from 987 docs / 3,366 chunks after a `strategy=random, limit=2000` Wikipedia seed run (`run_id 8d411151-c5c1-47da-975e-bdb24ea17bc0`) completed cleanly: 80/80 batches, 1,308 newly indexed documents, zero errors.
-  - R2 bucket `ohi-corpus-prod`: raw corpus JSON objects archived per run.
-  - `ADMIN_TOKEN` Worker secret was rotated this session (old value unknown/unreadable, GitHub Actions will overwrite it again from the `OHI_ADMIN_TOKEN` repo secret on the next successful CI deploy if one is configured).
+- Health probes:
+  - `GET /health/live`: process is up, no bindings needed
+  - `GET /health/ready`: D1, Durable Objects, Queue, Workers AI and Vectorize are bound
+  - `GET /health/deep`: runs a real claim through Workers AI, Wikipedia and Vectorize. The probe pair is cached by AI Gateway for an hour, so a fast reading is a cache hit and a slow one (around 5 s) means both ensemble models ran.
+- Abuse protection: `/verify` and `POST /api/v2/verify` require a Turnstile token, and the zone WAF challenges scripted clients on `/api/v2/verify` and `/mcp`. Admin routes under `/api/v2/admin/*` use `ADMIN_TOKEN` instead.
+- MCP: `POST /mcp` exposes 25 tools, the OHI tools plus the multi-source knowledge tools from `src/ohi-mcp-server`.
+- Corpus: Vectorize index `ohi-evidence-bge-m3` (1024 dimensions, cosine), document and chunk metadata plus a Wikidata entity graph in D1, raw documents archived in R2 bucket `ohi-corpus-prod`. Check the live numbers with `GET /api/v2/admin/corpus`.
 
 **Evidence-evaluation rework (deployed, `cloudflare/ohi-worker/src/index.ts`):** fixes basic false claims scoring as high as ~70% true due to a single topically-adjacent but non-entailing "support" classification dominating `p_true` with no penalty for how loosely related the evidence actually was.
 - NLI classification is now an ensemble of two Workers AI models (`@cf/google/gemma-3-12b-it` via `guided_json` + `@cf/meta/llama-3.3-70b-instruct-fp8-fast` via `response_format`/`json_schema`) run concurrently per evidence item, with disagreement downgrading toward neutral/refute instead of trusting a single model's "support" call.
@@ -98,13 +87,13 @@ flowchart LR
    - evidence retrieval from Vectorize, Wikipedia, and Wikidata
    - embedding with Workers AI `@cf/baai/bge-m3`
    - reranking with Workers AI `@cf/baai/bge-reranker-base`
-   - NLI classification with Workers AI plus deterministic fallback (see the pending evidence-evaluation rework noted above — not yet deployed)
+   - NLI classification with Workers AI plus deterministic fallback
 6. The job Durable Object stores live status and the final verdict; D1 mirrors durable history, feedback, evidence cache, corpus documents/chunks, Wikidata entities, and graph edges.
 7. Corpus ingestion is started through admin endpoints, orchestrated by the `ohi-corpus-ingestion` Workflow, fanned out through `ohi-corpus-ingest`, embedded with Workers AI, stored in D1, archived as raw JSON in R2, and upserted into Vectorize. Queue completion is idempotent per `(run_id, batch)` to tolerate at-least-once delivery.
 8. MCP is served at `/mcp` by the `OhiMCP` Agents SDK Durable Object binding named `MCP_OBJECT`.
 9. Public verification is protected by Cloudflare Turnstile, a `RateLimitObject` Durable Object, and zone WAF/rate-limit rules. The dedicated Turnstile widget is `Open Hallucination Index Verify`.
 
-No production path depends on local tunnels, local GPUs, local databases, Vercel, AWS Lambda, API Gateway, DynamoDB, Bedrock, Neo4j, Qdrant, or a PC-hosted service.
+Everything in the request path runs on Cloudflare. There are no tunnels, local GPUs or self-hosted databases.
 
 ## 2. Cloudflare Resources
 
@@ -161,8 +150,6 @@ Cloudflare CI/CD is defined in `.github/workflows/cloudflare-production.yml`.
 
 ## 4. Local Development
 
-The legacy FastAPI, Docker Compose, GUI ingestion, GUI benchmark, and standalone MCP packages remain in the repo for local development and migration work. They are not in the production path.
-
 Recommended local frontend loop:
 
 ```bash
@@ -179,4 +166,4 @@ pnpm install
 pnpm run dev
 ```
 
-Use full Docker only when you explicitly need to test the legacy local stack.
+The earlier Python/AWS stack (FastAPI on Lambda, Neo4j, Qdrant, Terraform) was retired in favour of this Worker. It is still in the git history before the v3 cleanup if you want to dig into it.
