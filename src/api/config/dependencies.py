@@ -438,17 +438,17 @@ async def _cleanup_adapters() -> None:
     """Close connections during lifespan shutdown."""
     if _graph_store is not None:
         try:
-            await _graph_store.close()  # type: ignore[attr-defined]
+            await _graph_store.disconnect()
         except Exception as e:
             logger.warning(f"Graph store close failed: {e}")
     if _vector_store is not None:
         try:
-            await _vector_store.close()  # type: ignore[attr-defined]
+            await _vector_store.disconnect()
         except Exception as e:
             logger.warning(f"Vector store close failed: {e}")
     if _trace_store is not None:
         try:
-            await _trace_store.close()  # type: ignore[attr-defined]
+            await _trace_store.disconnect()
         except Exception as e:
             logger.warning(f"Trace store close failed: {e}")
     for _src in _mcp_sources:

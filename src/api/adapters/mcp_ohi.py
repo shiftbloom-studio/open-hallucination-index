@@ -115,29 +115,7 @@ class OHIMCPAdapter(HTTPMCPAdapter):
         Returns:
             List of Evidence objects from multiple sources.
         """
-        return await self.search_for_evidence(claim, max_results=5, search_type="all")  # type: ignore[attr-defined, no-any-return]
-
-
-class TargetedOHISource(OHIMCPAdapter):
-    """
-    Targeted adapter for a specific OHI MCP source.
-    Allows routing to specific knowledge domains (e.g. PubMed, Wiki).
-    """
-
-    def __init__(self, settings: MCPSettings, search_type: str, source_name: str) -> None:
-        super().__init__(settings)
-        self._search_type = search_type
-        self._source_name_override = source_name
-
-    @property
-    def source_name(self) -> str:
-        return self._source_name_override
-
-    async def find_evidence(self, claim: Claim) -> list[Evidence]:
-        logger.debug(
-            f"TargetedOHISource.find_evidence for {self._source_name_override}, search_type={self._search_type}"
-        )
-        return await self.search_for_evidence(claim, max_results=5, search_type=self._search_type)
+        return await self.search_for_evidence(claim, max_results=5, search_type="all")
 
     def _map_string_to_source(self, source_str: str) -> EvidenceSource:
         """Map string source name to EvidenceSource enum."""
@@ -274,8 +252,7 @@ class TargetedOHISource(OHIMCPAdapter):
             results = await self.call_tool("get_doi_metadata", {"doi": doi})
             if results:
                 ev = self._create_evidence(results[0], EvidenceSource.ACADEMIC, "get_doi_metadata")
-                ev.source_uri = f"https://doi.org/{doi}"  # type: ignore[misc]
-                return ev
+                return ev.model_copy(update={"source_uri": f"https://doi.org/{doi}"})
             return None
         except Exception as e:
             logger.warning(f"Failed to get DOI metadata for '{doi}': {e}")
@@ -492,12 +469,15 @@ class TargetedOHISource(OHIMCPAdapter):
                 for r in results[:max_results]
             ]
             # Enrich with library metadata
-            for ev in evidences:
-                if ev.structured_data is None:
-                    ev.structured_data = {}  # type: ignore[misc]
-                ev.structured_data["library_id"] = library_id
-                ev.source_uri = f"https://context7.com{library_id}"  # type: ignore[misc]
-            return evidences
+            return [
+                ev.model_copy(
+                    update={
+                        "structured_data": {**(ev.structured_data or {}), "library_id": library_id},
+                        "source_uri": f"https://context7.com{library_id}",
+                    }
+                )
+                for ev in evidences
+            ]
         except Exception as e:
             logger.warning(f"Context7 query-docs failed for '{library_id}': {e}")
             return []
@@ -523,3 +503,25 @@ class TargetedOHISource(OHIMCPAdapter):
             logger.debug(f"Could not resolve library ID for: {library_name}")
             return []
         return await self.query_library_docs(library_id, query, max_results=max_results)
+
+
+class TargetedOHISource(OHIMCPAdapter):
+    """
+    Targeted adapter for a specific OHI MCP source.
+    Allows routing to specific knowledge domains (e.g. PubMed, Wiki).
+    """
+
+    def __init__(self, settings: MCPSettings, search_type: str, source_name: str) -> None:
+        super().__init__(settings)
+        self._search_type = search_type
+        self._source_name_override = source_name
+
+    @property
+    def source_name(self) -> str:
+        return self._source_name_override
+
+    async def find_evidence(self, claim: Claim) -> list[Evidence]:
+        logger.debug(
+            f"TargetedOHISource.find_evidence for {self._source_name_override}, search_type={self._search_type}"
+        )
+        return await self.search_for_evidence(claim, max_results=5, search_type=self._search_type)
