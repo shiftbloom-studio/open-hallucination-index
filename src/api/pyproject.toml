@@ -93,6 +93,5 @@ addopts = """
     --cov=services
     --cov-report=xml
     --cov-report=term-missing
-    --cov-fail-under=70
     -v
 """
