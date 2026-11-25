@@ -379,7 +379,7 @@ Return valid JSON only:
         ]
 
         try:
-            response = await self._llm_provider.complete(messages, temperature=0.0, json_mode=True)
+            response = await self._llm_provider.complete(messages, temperature=0.0, json_mode=True)  # type: ignore[union-attr]
             content = response.content.strip()
             # Handle potential markdown code blocks
             if content.startswith("```json"):

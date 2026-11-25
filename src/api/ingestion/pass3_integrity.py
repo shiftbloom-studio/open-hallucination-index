@@ -19,6 +19,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +49,10 @@ def _now_iso() -> str:
 
 async def generate_integrity_report(
     *,
-    graph_store,
-    vector_store,
+    graph_store: Any,
+    vector_store: Any,
     golden_claim_set: list[str],
-    entity_resolver,
+    entity_resolver: Any,
 ) -> IntegrityReport:
     """Run the integrity queries and return the report object."""
     # Counts from Aura.
@@ -87,7 +88,7 @@ async def generate_integrity_report(
     )
 
 
-def _first(rows) -> int:
+def _first(rows: Any) -> int:
     rows = list(rows or [])
     if not rows:
         return 0

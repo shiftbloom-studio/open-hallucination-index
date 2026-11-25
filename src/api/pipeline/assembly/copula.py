@@ -22,6 +22,7 @@ can log it to ``DocumentVerdict.model_versions`` for auditability.
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import numpy as np
 
@@ -32,7 +33,7 @@ _EPS = 1e-6
 
 
 def _clip_probs(p: np.ndarray) -> np.ndarray:
-    return np.clip(p, _EPS, 1.0 - _EPS)
+    return cast("np.ndarray", np.clip(p, _EPS, 1.0 - _EPS))
 
 
 def nearest_psd(matrix: np.ndarray, *, eps: float = 1e-4) -> tuple[np.ndarray, float]:

@@ -11,7 +11,7 @@ from __future__ import annotations
 import html
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from adapters.mcp_sources.base import (
     HTTPKnowledgeSource,
@@ -266,6 +266,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
     async def _search(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Execute search query via Action API."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 self._api_path,
                 params={
@@ -279,7 +280,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("query", {}).get("search", [])
+            return cast("list[dict[str, Any]]", data.get("query", {}).get("search", []))
         except Exception as e:
             logger.warning(f"MediaWiki search error: {e}")
             return []
@@ -287,6 +288,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
     async def _get_extract(self, title: str, sentences: int = 5) -> str:
         """Get article extract/summary."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 self._api_path,
                 params={
@@ -304,7 +306,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
 
             pages = data.get("query", {}).get("pages", {})
             for page in pages.values():
-                return page.get("extract", "")
+                return cast("str", page.get("extract", ""))
             return ""
         except Exception:
             return ""
@@ -312,6 +314,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
     async def get_page_info(self, title: str) -> dict[str, Any]:
         """Get detailed page information."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 self._api_path,
                 params={
@@ -328,7 +331,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
 
             pages = data.get("query", {}).get("pages", {})
             for page in pages.values():
-                return page
+                return cast("dict[str, Any]", page)
             return {}
         except Exception:
             return {}

@@ -43,7 +43,7 @@ polarised edges that NLI produces (e.g. entail=0.98, contradict=0.01).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from uuid import UUID
 
 import numpy as np
@@ -90,7 +90,7 @@ class FactorGraph:
 
 
 def _unary_log_factor_from_evidence_nli(
-    nli_list: list["NLIDistribution"],
+    nli_list: list[NLIDistribution],
     *,
     min_unary_tilt: float = 1e-3,
 ) -> np.ndarray:
@@ -127,7 +127,7 @@ def _uniform_unary_log_factor() -> np.ndarray:
 
 
 def _binary_log_factor_from_cc_nli(
-    nli: "NLIDistribution",
+    nli: NLIDistribution,
     *,
     edge_weight_scale: float = 1.0,
     min_binary_tilt: float = 1e-3,
@@ -175,9 +175,9 @@ def _binary_log_factor_from_cc_nli(
 
 
 def build_factor_graph(
-    claims: list["Claim"],
-    nli_claim_evidence: dict[UUID, list["NLIDistribution"]],
-    nli_claim_claim: dict[tuple[UUID, UUID], "NLIDistribution"],
+    claims: list[Claim],
+    nli_claim_evidence: dict[UUID, list[NLIDistribution]],
+    nli_claim_claim: dict[tuple[UUID, UUID], NLIDistribution],
     *,
     edge_weight_scale: float = 1.0,
 ) -> FactorGraph:
@@ -247,7 +247,7 @@ def log_normalize_2d(log_marginal: np.ndarray) -> np.ndarray:
         # Degenerate input — fall back to uniform.
         return np.array([0.5, 0.5], dtype=np.float64)
     lse = m + float(np.log(np.sum(np.exp(log_marginal - m))))
-    return np.exp(log_marginal - lse)
+    return cast("np.ndarray", np.exp(log_marginal - lse))
 
 
 __all__ = [

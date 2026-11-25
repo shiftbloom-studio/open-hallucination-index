@@ -9,7 +9,7 @@ Reads from environment variables with sensible defaults.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -46,7 +46,7 @@ class LLMSettings(BaseSettings):
         extra="ignore",
     )
 
-    def __init__(self, **kwargs: object) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         import os
 
         # Allow OPENAI_API_KEY to be read directly
@@ -269,7 +269,7 @@ class MCPSettings(BaseSettings):
         description="URL of unified OHI MCP server",
     )
 
-    def __init__(self, **kwargs: object) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         import os
 
         # Read CONTEXT7_API_KEY from environment
@@ -382,7 +382,7 @@ class CCNliSettings(BaseSettings):
         ),
     )
 
-    def __init__(self, **kwargs: object) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         import os
 
         # TF injects the raw key value as OHI_OPENAI_API_KEY at runtime

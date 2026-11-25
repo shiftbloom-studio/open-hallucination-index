@@ -21,6 +21,7 @@ false-positive pattern.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
@@ -47,7 +48,7 @@ def _node_conditional(
     """Log-probability of node ``i`` taking each state given all others fixed."""
     log_prob = graph.unary_log_factors[i].copy()
     if graph.binary_log_factors is None:
-        return log_prob
+        return cast("np.ndarray", log_prob)
     for k, (a, b) in enumerate(graph.edges):
         if a == i:
             other_state = state[b]
@@ -55,7 +56,7 @@ def _node_conditional(
         elif b == i:
             other_state = state[a]
             log_prob += graph.binary_log_factors[k, other_state, :]
-    return log_prob
+    return cast("np.ndarray", log_prob)
 
 
 def _sample_from_log(log_prob: np.ndarray, rng: np.random.Generator) -> int:

@@ -58,7 +58,7 @@ class RedisTraceAdapter(KnowledgeTracker):
             settings: Redis connection settings.
         """
         self._settings = settings
-        self._client: redis.Redis | None = None  # type: ignore[type-arg]
+        self._client: redis.Redis | None = None
         self._default_ttl = DEFAULT_TRACE_TTL
 
     async def connect(self) -> None:
@@ -111,7 +111,7 @@ class RedisTraceAdapter(KnowledgeTracker):
                     decode_responses=False,
                 )
 
-                await self._client.ping()  # type: ignore[misc]
+                await self._client.ping()
 
                 if self._settings.socket_path:
                     logger.info(
@@ -156,7 +156,7 @@ class RedisTraceAdapter(KnowledgeTracker):
         if self._client is None:
             return False
         try:
-            await self._client.ping()  # type: ignore[misc]
+            await self._client.ping()
             return True
         except Exception as e:
             logger.warning(f"Redis trace health check failed: {e}")
@@ -229,7 +229,7 @@ class RedisTraceAdapter(KnowledgeTracker):
             if data is None:
                 return None
 
-            return self._deserialize_trace(data)
+            return self._deserialize_trace(data)  # type: ignore[arg-type]
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to deserialize trace: {e}")
@@ -246,7 +246,7 @@ class RedisTraceAdapter(KnowledgeTracker):
 
         try:
             key = self._make_key(claim_id)
-            return await self._client.exists(key) > 0  # type: ignore[misc]
+            return await self._client.exists(key) > 0
         except Exception as e:
             logger.error(f"Failed to check trace existence: {e}")
             return False
@@ -280,7 +280,7 @@ class RedisTraceAdapter(KnowledgeTracker):
             for claim_id, data in zip(claim_ids, results, strict=True):
                 if data is not None:
                     try:
-                        output[claim_id] = self._deserialize_trace(data)
+                        output[claim_id] = self._deserialize_trace(data)  # type: ignore[arg-type]
                     except Exception:
                         output[claim_id] = None
                 else:

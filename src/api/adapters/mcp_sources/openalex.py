@@ -9,7 +9,7 @@ https://docs.openalex.org/
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote
 
 from adapters.mcp_sources.base import (
@@ -137,6 +137,7 @@ class OpenAlexAdapter(HTTPKnowledgeSource):
     async def _search_works(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for academic works."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/works",
                 params=self._get_params(
@@ -147,7 +148,7 @@ class OpenAlexAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("results", [])
+            return cast("list[dict[str, Any]]", data.get("results", []))
         except Exception as e:
             logger.warning(f"OpenAlex works search error: {e}")
             return []
@@ -155,13 +156,14 @@ class OpenAlexAdapter(HTTPKnowledgeSource):
     async def search_authors(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for authors."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/authors",
                 params=self._get_params(search=query, per_page=limit),
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("results", [])
+            return cast("list[dict[str, Any]]", data.get("results", []))
         except Exception:
             return []
 
@@ -169,12 +171,13 @@ class OpenAlexAdapter(HTTPKnowledgeSource):
         """Get work by DOI."""
         try:
             encoded_doi = quote(doi, safe="")
+            assert self._client is not None
             response = await self._client.get(
                 f"/works/https://doi.org/{encoded_doi}",
                 params=self._get_params(),
             )
             if response.status_code == 200:
-                return response.json()
+                return cast("dict[str, Any] | None", response.json())
             return None
         except Exception:
             return None
@@ -194,7 +197,7 @@ class OpenAlexAdapter(HTTPKnowledgeSource):
         words.sort(key=lambda x: x[0])
         return " ".join(w[1] for w in words)
 
-    def _format_authors(self, authorships: list[dict]) -> str:
+    def _format_authors(self, authorships: list[dict[str, Any]]) -> str:
         """Format author list."""
         authors = []
         for authorship in authorships[:5]:  # Limit to first 5

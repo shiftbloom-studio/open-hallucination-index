@@ -25,6 +25,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
+from typing import Any, cast
 
 from ingestion.checkpoint_store import CheckpointStore
 from ingestion.lifecycle import (
@@ -168,7 +169,7 @@ async def run(argv: list[str] | None = None) -> int:
         await _cleanup_adapters()
 
 
-async def _run_pass1(args: RunArgs, store, dlq, pause, graph_store) -> None:
+async def _run_pass1(args: RunArgs, store: Any, dlq: Any, pause: Any, graph_store: Any) -> None:
     from ingestion.pass1_entities import Pass1EntityWriter  # noqa: PLC0415
 
     progress = ProgressReporter("pass1", total_estimate=None)
@@ -180,10 +181,12 @@ async def _run_pass1(args: RunArgs, store, dlq, pause, graph_store) -> None:
         progress=progress,
     )
     start_from = args.only_range[0] or _existing_high_water(store, "pass1")
-    await writer.run(args.wikidata_path, start_from=start_from)
+    await writer.run(args.wikidata_path, start_from=start_from)  # type: ignore[arg-type]
 
 
-async def _run_pass1b(args: RunArgs, store, dlq, pause, graph_store, embedding_adapter) -> None:
+async def _run_pass1b(
+    args: RunArgs, store: Any, dlq: Any, pause: Any, graph_store: Any, embedding_adapter: Any
+) -> None:
     from ingestion.pass1b_entity_vectors import Pass1bEntityVectorWriter  # noqa: PLC0415
 
     embedding_dim = int(getattr(embedding_adapter, "embedding_dimension", 384))
@@ -214,7 +217,13 @@ async def _run_pass1b(args: RunArgs, store, dlq, pause, graph_store, embedding_a
 
 
 async def _run_pass2(
-    args: RunArgs, store, dlq, pause, graph_store, vector_store, embedding_adapter
+    args: RunArgs,
+    store: Any,
+    dlq: Any,
+    pause: Any,
+    graph_store: Any,
+    vector_store: Any,
+    embedding_adapter: Any,
 ) -> None:
     from ingestion.pass2_passages import Pass2PassageWriter  # noqa: PLC0415
 
@@ -231,7 +240,7 @@ async def _run_pass2(
         first = row[0]
         if isinstance(first, dict):
             return first.get("qid")
-        return first[0]
+        return cast("str | None", first[0])
 
     writer = Pass2PassageWriter(
         graph_store=graph_store,
@@ -244,10 +253,10 @@ async def _run_pass2(
         sitelink_resolver=_resolve_sitelink,
     )
     start_from = args.only_range[0] or _existing_high_water(store, "pass2")
-    await writer.run(args.enwiki_path, start_from=start_from)
+    await writer.run(args.enwiki_path, start_from=start_from)  # type: ignore[arg-type]
 
 
-async def _run_pass3(args: RunArgs, store, dlq, pause) -> int:
+async def _run_pass3(args: RunArgs, store: Any, dlq: Any, pause: Any) -> int:
     from adapters.entity_resolver import EntityResolver  # noqa: PLC0415
     from config.dependencies import get_graph_store, get_vector_store  # noqa: PLC0415
     from ingestion.pass3_integrity import (  # noqa: PLC0415
@@ -277,7 +286,7 @@ async def _run_pass3(args: RunArgs, store, dlq, pause) -> int:
     return 0
 
 
-def _existing_high_water(store: CheckpointStore, pass_name) -> str | None:
+def _existing_high_water(store: CheckpointStore, pass_name: Any) -> str | None:
     row = store.get(pass_name)
     if row is None:
         return None

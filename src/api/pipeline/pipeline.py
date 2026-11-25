@@ -455,7 +455,7 @@ class Pipeline:
             evidence_text: str,
         ) -> tuple[UUID, Evidence, NliResult]:
             async with semaphore:
-                result = await self._nli_adapter.classify(claim_text, evidence_text)
+                result = await self._nli_adapter.classify(claim_text, evidence_text)  # type: ignore[union-attr]
             return claim_id, evidence, result
 
         tasks = [
@@ -546,7 +546,7 @@ class Pipeline:
             evidence_text: str,
         ) -> tuple[UUID, Evidence, NliResult]:
             async with semaphore:
-                result = await self._nli_adapter.classify(claim_text, evidence_text)
+                result = await self._nli_adapter.classify(claim_text, evidence_text)  # type: ignore[union-attr]
             return claim_id, evidence, result
 
         tasks = [

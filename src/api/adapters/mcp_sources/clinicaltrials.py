@@ -9,7 +9,7 @@ https://clinicaltrials.gov/data-api/api
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from adapters.mcp_sources.base import (
     HTTPKnowledgeSource,
@@ -143,6 +143,7 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
     async def _search_studies(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for clinical studies."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/studies",
                 params={
@@ -153,7 +154,7 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("studies", [])
+            return cast("list[dict[str, Any]]", data.get("studies", []))
         except Exception as e:
             logger.warning(f"ClinicalTrials search error: {e}")
             return []
@@ -161,9 +162,10 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
     async def get_study(self, nct_id: str) -> dict[str, Any] | None:
         """Get study by NCT ID."""
         try:
+            assert self._client is not None
             response = await self._client.get(f"/studies/{nct_id}")
             if response.status_code == 200:
-                return response.json()
+                return cast("dict[str, Any] | None", response.json())
             return None
         except Exception:
             return None
@@ -171,6 +173,7 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
     async def search_by_condition(self, condition: str, limit: int = 10) -> list[dict[str, Any]]:
         """Search studies by medical condition."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/studies",
                 params={
@@ -181,7 +184,7 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("studies", [])
+            return cast("list[dict[str, Any]]", data.get("studies", []))
         except Exception:
             return []
 
@@ -190,6 +193,7 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
     ) -> list[dict[str, Any]]:
         """Search studies by intervention (drug, device, etc.)."""
         try:
+            assert self._client is not None
             response = await self._client.get(
                 "/studies",
                 params={
@@ -199,6 +203,6 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("studies", [])
+            return cast("list[dict[str, Any]]", data.get("studies", []))
         except Exception:
             return []

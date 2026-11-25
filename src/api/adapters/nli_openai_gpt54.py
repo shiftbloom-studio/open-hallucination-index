@@ -250,7 +250,7 @@ def _parse_result(raw: str) -> NliResult:
     refuting /= total
     neutral /= total
     return NliResult(
-        label=label,  # type: ignore[arg-type]
+        label=label,
         supporting_score=supporting,
         refuting_score=refuting,
         neutral_score=neutral,

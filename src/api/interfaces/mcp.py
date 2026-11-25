@@ -76,7 +76,7 @@ class MCPKnowledgeSource(ABC):
         ...
 
     @abstractmethod
-    async def search(self, query: str, limit: int = 5) -> list[dict]:
+    async def search(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """
         Perform a general search on this MCP source.
 

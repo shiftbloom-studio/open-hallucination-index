@@ -15,12 +15,13 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from typing import Any
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
 
-class LogLevel(str, Enum):
+class LogLevel(str, Enum):  # noqa: UP042 - keep str() behaviour
     """Log severity levels."""
 
     DEBUG = "debug"
@@ -29,7 +30,7 @@ class LogLevel(str, Enum):
     ERROR = "error"
 
 
-class LogType(str, Enum):
+class LogType(str, Enum):  # noqa: UP042 - keep str() behaviour
     """Types of log entries."""
 
     REQUEST = "request"
@@ -55,9 +56,9 @@ class LogEntry:
     user_id: str | None = None
     key_prefix: str | None = None
     message: str = ""
-    details: dict | None = None
+    details: dict[str, Any] | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "id": self.id,
@@ -112,6 +113,8 @@ class LiveLogService:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
+
+    _initialized: bool
 
     def __init__(self) -> None:
         if self._initialized:
@@ -185,7 +188,7 @@ class LiveLogService:
         """Get recent logs from buffer."""
         return list(self._log_buffer)[-limit:]
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> dict[str, Any]:
         """Get logging statistics."""
         uptime = (datetime.now(UTC) - self._start_time).total_seconds()
         return {
@@ -251,7 +254,7 @@ class LiveLogService:
         self,
         message: str,
         path: str = "",
-        details: dict | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Log an error."""
         entry = LogEntry(

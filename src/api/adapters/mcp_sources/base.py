@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 import httpx
@@ -162,7 +162,7 @@ class HTTPKnowledgeSource(ABC):
         if not self._client:
             raise HTTPKnowledgeSourceError("Client not connected")
 
-        response = await self._client.post(path, data=data, json=json, headers=headers)
+        response = await self._client.post(path, data=data, json=json, headers=headers)  # type: ignore[arg-type]
         response.raise_for_status()
         return response
 
@@ -251,7 +251,7 @@ class SPARQLKnowledgeSource(HTTPKnowledgeSource):
             headers=headers,
         )
         response.raise_for_status()
-        return response.json()
+        return cast("dict[str, Any]", response.json())
 
     async def health_check(self) -> bool:
         """Check SPARQL endpoint health with simple query."""

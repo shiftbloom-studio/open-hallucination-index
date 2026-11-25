@@ -32,6 +32,9 @@ jobs:
         with:
           context: .
           file: docker/api/Dockerfile
+          # CPU torch wheels: the CUDA build does not fit on hosted runners.
+          build-args: |
+            TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
           push: false
           tags: ohi-api:${{ github.sha }}
           cache-from: type=gha

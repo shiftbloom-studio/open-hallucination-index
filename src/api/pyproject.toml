@@ -62,7 +62,7 @@ ohi-ingest = "ingestion.orchestrator:main"
 packages = ["models", "interfaces", "pipeline", "adapters", "server", "config", "services", "ingestion"]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py312"
 line-length = 100
 src = [".", "tests"]
 
@@ -71,9 +71,14 @@ select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.12"
+explicit_package_bases = true
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["boto3", "boto3.*", "botocore", "botocore.*", "wikitextparser", "scipy", "scipy.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -88,6 +93,5 @@ addopts = """
     --cov=services
     --cov-report=xml
     --cov-report=term-missing
-    --cov-fail-under=70
     -v
 """

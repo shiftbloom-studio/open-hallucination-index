@@ -227,10 +227,7 @@ storage.plan
 secrets.plan
 compute.plan
 cloudflare.plan
-vercel.plan
 observability.plan
-
-.vercel
 
 # ==============================================================================
 # Local tooling / harness (not pushed)

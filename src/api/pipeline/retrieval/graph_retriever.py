@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from adapters.bedrock_rerank import BedrockRerankAdapter, RerankScore
+from adapters.bedrock_rerank import BedrockRerankAdapter
 from models.entities import Evidence, EvidenceSource
 from pipeline.retrieval.aura_passage_fetch import AuraPassageFetch
 from pipeline.retrieval.qdrant_passage_search import (

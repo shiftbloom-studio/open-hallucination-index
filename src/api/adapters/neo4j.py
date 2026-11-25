@@ -507,7 +507,7 @@ class Neo4jGraphAdapter(GraphKnowledgeStore):
 
         try:
             async with self._driver.session(database=self._settings.database) as session:
-                result = await session.run(query, {"subject": subject, "obj": obj})  # type: ignore[arg-type]
+                result = await session.run(query, {"subject": subject, "obj": obj})
                 records = await result.data()
 
                 evidence = []
