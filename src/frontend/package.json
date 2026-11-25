@@ -58,19 +58,19 @@
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.187.0",
     "@vitejs/plugin-react": "^5.1.2",
-    "@vitest/coverage-v8": "^4.0.17",
+    "@vitest/coverage-v8": "^4.1.12",
     "autoprefixer": "^10.4.23",
     "esbuild": ">=0.27.2",
     "eslint": "^9.39.2",
     "eslint-config-next": "16.2.10",
     "jsdom": "^27.4.0",
     "msw": "^2.12.7",
-    "postcss": "^8.5.16",
+    "postcss": "^8.5.33",
     "prettier": "^3.8.0",
     "sharp": "^0.35.5",
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.17"
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "@babel/core": "$@babel/core",
