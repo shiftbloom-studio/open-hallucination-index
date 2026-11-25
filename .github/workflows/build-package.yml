@@ -79,7 +79,7 @@ jobs:
             -x "*.egg"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gui-benchmark-app
           path: gui_benchmark_app.zip
@@ -106,7 +106,7 @@ jobs:
             -x "build/*"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gui-ingestion-app
           path: gui_ingestion_app.zip
@@ -131,7 +131,7 @@ jobs:
             -x "coverage/*"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend
           path: frontend.zip
