@@ -45,7 +45,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan_manager,
     )
 
-    # CORS — prod locks down to the Vercel-hosted frontend origin via the
+    # CORS — prod locks down to the frontend origin via the
     # OHI_CORS_ORIGINS env var (set by infra compute layer). Falls back to
     # settings.api.cors_origins (defaults to ["*"]) for local dev.
     from config.infra_env import cors_origins as _infra_cors_origins

@@ -36,7 +36,7 @@ The live service is at **<https://ohi.shiftbloom.studio>**.
 
 OHI is live as a **Cloudflare-native deployment** at
 <https://ohi.shiftbloom.studio>. The production path is fully hosted on
-Cloudflare and does not depend on local tunnels, local compute, Vercel,
+Cloudflare and does not depend on local tunnels, local compute,
 AWS Lambda, API Gateway, DynamoDB, Bedrock, Neo4j, or Qdrant.
 
 **Live today:**

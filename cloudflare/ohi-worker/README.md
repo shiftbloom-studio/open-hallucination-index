@@ -4,7 +4,7 @@ Cloudflare-native deployment for Open Hallucination Index at
 `https://ohi.shiftbloom.studio`.
 
 The Worker serves the static Next.js export and handles `/api/v2/*`,
-`/health/*`, and `/mcp` without AWS, Vercel, local tunnels, or local
+`/health/*`, and `/mcp` without AWS, local tunnels, or local
 compute.
 
 ## Products
