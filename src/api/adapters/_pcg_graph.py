@@ -90,7 +90,7 @@ class FactorGraph:
 
 
 def _unary_log_factor_from_evidence_nli(
-    nli_list: list["NLIDistribution"],
+    nli_list: list[NLIDistribution],
     *,
     min_unary_tilt: float = 1e-3,
 ) -> np.ndarray:
@@ -127,7 +127,7 @@ def _uniform_unary_log_factor() -> np.ndarray:
 
 
 def _binary_log_factor_from_cc_nli(
-    nli: "NLIDistribution",
+    nli: NLIDistribution,
     *,
     edge_weight_scale: float = 1.0,
     min_binary_tilt: float = 1e-3,
@@ -175,9 +175,9 @@ def _binary_log_factor_from_cc_nli(
 
 
 def build_factor_graph(
-    claims: list["Claim"],
-    nli_claim_evidence: dict[UUID, list["NLIDistribution"]],
-    nli_claim_claim: dict[tuple[UUID, UUID], "NLIDistribution"],
+    claims: list[Claim],
+    nli_claim_evidence: dict[UUID, list[NLIDistribution]],
+    nli_claim_claim: dict[tuple[UUID, UUID], NLIDistribution],
     *,
     edge_weight_scale: float = 1.0,
 ) -> FactorGraph:

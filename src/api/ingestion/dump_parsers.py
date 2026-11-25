@@ -26,7 +26,6 @@ itself is unreadable.
 from __future__ import annotations
 
 import bz2
-import io
 import json
 import logging
 import xml.etree.ElementTree as ET

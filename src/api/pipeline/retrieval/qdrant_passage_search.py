@@ -34,8 +34,8 @@ class QdrantPassageSearch:
     def __init__(
         self,
         *,
-        vector_store: "QdrantVectorAdapter",
-        embedding_adapter: "LocalEmbeddingAdapter",
+        vector_store: QdrantVectorAdapter,
+        embedding_adapter: LocalEmbeddingAdapter,
         collection_name: str = "ohi_passages_titan1024",
         score_threshold: float = 0.4,
     ) -> None:

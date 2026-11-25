@@ -20,7 +20,7 @@ from uuid import uuid4
 logger = logging.getLogger(__name__)
 
 
-class LogLevel(str, Enum):
+class LogLevel(str, Enum):  # noqa: UP042 - keep str() behaviour
     """Log severity levels."""
 
     DEBUG = "debug"
@@ -29,7 +29,7 @@ class LogLevel(str, Enum):
     ERROR = "error"
 
 
-class LogType(str, Enum):
+class LogType(str, Enum):  # noqa: UP042 - keep str() behaviour
     """Types of log entries."""
 
     REQUEST = "request"

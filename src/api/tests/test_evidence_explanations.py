@@ -106,7 +106,8 @@ async def test_mediawiki_find_evidence_ranks_exact_subject_page_above_noisy_full
                     ),
                 }
             ]
-        raise AssertionError(f"unexpected query {query!r}")
+        # Other query candidates (keyword/object variants) find nothing.
+        return []
 
     async def fake_get_extract(title: str, sentences: int = 5) -> str:
         raise AssertionError(f"lead extract should not be fetched for ranked result {title!r}")

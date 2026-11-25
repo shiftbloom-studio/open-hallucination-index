@@ -94,11 +94,11 @@ class PCGBeliefPropagationAdapter:
 
     async def infer(
         self,
-        claims: list["Claim"],
-        evidence_per_claim: dict[UUID, list["Evidence"]],
-        nli_claim_evidence: dict[UUID, list["NLIDistribution"]],
-        nli_claim_claim: dict[tuple[UUID, UUID], "NLIDistribution"],
-        adapter_per_claim: dict[UUID, "DomainAdapter"],
+        claims: list[Claim],
+        evidence_per_claim: dict[UUID, list[Evidence]],
+        nli_claim_evidence: dict[UUID, list[NLIDistribution]],
+        nli_claim_claim: dict[tuple[UUID, UUID], NLIDistribution],
+        adapter_per_claim: dict[UUID, DomainAdapter],
         *,
         rigor: RigorTier = "balanced",
     ) -> dict[UUID, PosteriorBelief]:

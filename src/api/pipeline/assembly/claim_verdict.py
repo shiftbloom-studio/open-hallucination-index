@@ -23,7 +23,7 @@ def assemble_claim_verdict(
     supporting_evidence: list[Evidence],
     refuting_evidence: list[Evidence],
     pcg_neighbors: list[ClaimEdge],
-    pcg: "PCGObservability | None" = None,
+    pcg: PCGObservability | None = None,
     nli_self_consistency_variance: float,
     bp_validated: bool | None,
     information_gain: float,

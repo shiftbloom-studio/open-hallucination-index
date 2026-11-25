@@ -78,8 +78,8 @@ class ClaimClaimNliDispatcher:
     def __init__(
         self,
         *,
-        primary: "NliAdapter",
-        fallback: "NliAdapter",
+        primary: NliAdapter,
+        fallback: NliAdapter,
         entity_overlap_threshold: int = 1,
         claim_claim_max_pairs: int = 200,
         max_concurrency: int = 10,
@@ -96,7 +96,7 @@ class ClaimClaimNliDispatcher:
         self._max_pairs = claim_claim_max_pairs
         self._sem = asyncio.Semaphore(max_concurrency)
 
-    async def classify_pairs(self, claims: list["Claim"]) -> DispatchResult:
+    async def classify_pairs(self, claims: list[Claim]) -> DispatchResult:
         """Build the pair set, fan out primary calls, fall back on
         sentinels, return the dispatch result."""
         if len(claims) < 2:
@@ -115,7 +115,7 @@ class ClaimClaimNliDispatcher:
             pairs = pairs[: self._max_pairs]
 
         # Primary pass — concurrent fan-out.
-        async def _primary_task(ca: "Claim", cb: "Claim") -> tuple[UUID, UUID, NliResult]:
+        async def _primary_task(ca: Claim, cb: Claim) -> tuple[UUID, UUID, NliResult]:
             async with self._sem:
                 result = await self._primary.classify(ca.text, cb.text)
             return ca.id, cb.id, result
@@ -125,7 +125,7 @@ class ClaimClaimNliDispatcher:
         # Fallback pass — only for primary sentinels. One shot, no retries.
         fallback_fired = 0
         final_results: dict[tuple[UUID, UUID], NliResult] = {}
-        fallback_pairs: list[tuple[UUID, UUID, "Claim", "Claim"]] = []
+        fallback_pairs: list[tuple[UUID, UUID, Claim, Claim]] = []
         claim_by_id = {c.id: c for c in claims}
         for id_a, id_b, result in primary_results:
             if _is_sentinel(result):
@@ -136,7 +136,7 @@ class ClaimClaimNliDispatcher:
                 final_results[(id_a, id_b)] = result
 
         async def _fallback_task(
-            id_a: UUID, id_b: UUID, ca: "Claim", cb: "Claim"
+            id_a: UUID, id_b: UUID, ca: Claim, cb: Claim
         ) -> tuple[UUID, UUID, NliResult]:
             async with self._sem:
                 result = await self._fallback.classify(ca.text, cb.text)
@@ -163,7 +163,7 @@ class ClaimClaimNliDispatcher:
             truncated_pair_count=truncated,
         )
 
-    def _build_pair_set(self, claims: list["Claim"]) -> list[tuple["Claim", "Claim"]]:
+    def _build_pair_set(self, claims: list[Claim]) -> list[tuple[Claim, Claim]]:
         """Generate all unique pairs with ``id_a < id_b`` that pass
         the entity-overlap short-circuit.
 
@@ -172,7 +172,7 @@ class ClaimClaimNliDispatcher:
         non-empty qids, the intersection must have ≥ threshold
         elements.
         """
-        pairs: list[tuple["Claim", "Claim"]] = []
+        pairs: list[tuple[Claim, Claim]] = []
         n = len(claims)
         for i in range(n):
             for j in range(i + 1, n):
@@ -187,7 +187,7 @@ class ClaimClaimNliDispatcher:
         pairs.sort(key=lambda pair: (str(pair[0].id), str(pair[1].id)))
         return pairs
 
-    def _pair_passes_overlap(self, ca: "Claim", cb: "Claim") -> bool:
+    def _pair_passes_overlap(self, ca: Claim, cb: Claim) -> bool:
         """Entity-overlap check. Threshold is inclusive."""
         qa = set(getattr(ca, "entity_qids", {}).values() if ca.entity_qids else [])
         qb = set(getattr(cb, "entity_qids", {}).values() if cb.entity_qids else [])

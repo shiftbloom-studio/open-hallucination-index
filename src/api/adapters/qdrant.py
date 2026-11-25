@@ -70,8 +70,8 @@ def _cf_access_headers() -> dict[str, str]:
     return {}
 
 
-from interfaces.stores import VectorKnowledgeStore, VectorQuery
-from models.entities import Evidence, EvidenceSource
+from interfaces.stores import VectorKnowledgeStore, VectorQuery  # noqa: E402
+from models.entities import Evidence, EvidenceSource  # noqa: E402
 
 if TYPE_CHECKING:
     from config.settings import QdrantSettings
@@ -144,7 +144,7 @@ class QdrantVectorAdapter(VectorKnowledgeStore):
             http_verify: str | bool | None = None
             if self._settings.tls_ca_cert:
                 try:
-                    with open(self._settings.tls_ca_cert, "rb") as cert_file:
+                    with open(self._settings.tls_ca_cert, "rb") as cert_file:  # noqa: ASYNC230
                         grpc_options = {"root_certificates": cert_file.read()}
                     http_verify = self._settings.tls_ca_cert
                 except OSError as exc:

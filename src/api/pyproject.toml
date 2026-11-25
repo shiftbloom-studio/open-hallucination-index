@@ -62,7 +62,7 @@ ohi-ingest = "ingestion.orchestrator:main"
 packages = ["models", "interfaces", "pipeline", "adapters", "server", "config", "services", "ingestion"]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py312"
 line-length = 100
 src = [".", "tests"]
 
@@ -71,7 +71,8 @@ select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.12"
+explicit_package_bases = true
 strict = true
 plugins = ["pydantic.mypy"]
 

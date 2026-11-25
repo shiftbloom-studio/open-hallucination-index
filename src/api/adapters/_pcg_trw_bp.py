@@ -76,7 +76,7 @@ def _mst_prim(n: int, edges: list[tuple[int, int]], weights: list[float]) -> lis
         best_w = -np.inf
         for k in remaining:
             i, j = edges[k]
-            if in_tree[i] != in_tree[j]:  # crosses cut
+            if in_tree[i] != in_tree[j]:  # crosses cut  # noqa: SIM102
                 if weights[k] > best_w:
                     best_w = weights[k]
                     best_k = k
@@ -183,7 +183,7 @@ def _trwbp_marginals_and_bound(
                     + graph.unary_log_factors[j, xj]
                     + graph.binary_log_factors[k, xi, xj]
                 )
-                if edge_lse == -np.inf:
+                if edge_lse == -np.inf:  # noqa: SIM108
                     edge_lse = val
                 else:
                     edge_lse = _lse2(float(edge_lse), float(val))

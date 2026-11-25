@@ -31,7 +31,7 @@ class RerankScore:
 class BedrockRerankAdapter:
     """Thin async facade over Bedrock agent-runtime `rerank`."""
 
-    def __init__(self, settings: "RetrievalSettings") -> None:
+    def __init__(self, settings: RetrievalSettings) -> None:
         self._enabled = settings.bedrock_rerank_enabled
         self._region = settings.bedrock_rerank_region
         self._model_id = settings.bedrock_rerank_model_id
