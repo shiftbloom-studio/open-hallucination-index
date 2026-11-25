@@ -1,186 +1,345 @@
 <h1 align="center">Open Hallucination Index</h1>
 
 <p align="center">
-  <strong>Fact-checking for LLM output, claim by claim, with the evidence attached.</strong>
+  <strong>Grounded fact-checking for LLM outputs — with calibrated uncertainty.</strong>
 </p>
 
 <p align="center">
-  <a href="https://ohi.shiftbloom.studio">Live</a> ·
-  <a href="docs/API.md">API</a> ·
-  <a href="docs/CURRENT_ARCHITECTURE.md">Architecture</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="#current-status">Status</a> •
+  <a href="#how-it-works">How It Works</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#getting-started">Getting Started</a> •
+  <a href="#documentation">Docs</a> •
+  <a href="#contributing">Contributing</a>
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/python-3.14+-blue.svg" alt="Python 3.14+" />
   <img src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg" alt="AGPL-3.0-or-later" />
-  <a href="https://github.com/shiftbloom-studio/open-hallucination-index/actions/workflows/cloudflare-production.yml"><img src="https://github.com/shiftbloom-studio/open-hallucination-index/actions/workflows/cloudflare-production.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/shiftbloom-studio/open-hallucination-index/actions"><img src="https://github.com/shiftbloom-studio/open-hallucination-index/workflows/CI/badge.svg" alt="CI Status" /></a>
 </p>
 
 ---
 
-Paste a paragraph that a model wrote. OHI splits it into single factual
-claims, looks for real sources on each one, and tells you how likely each
-claim is to be true (`p_true` between 0 and 1, with an interval). Every
-number links back to the passages it came from, so you can check the
-check.
+**Open Hallucination Index (OHI)** decomposes LLM output into atomic
+claims, retrieves real evidence for each, and returns a calibrated
+`p_true ∈ [0, 1]` with a confidence interval. The goal is a traceable,
+reproducible, open-source alternative to black-box "trust scores" — one
+where every verdict is backed by citable evidence and every number has
+a published calibration methodology.
 
-It runs at **<https://ohi.shiftbloom.studio>** and as an MCP server at
-`https://ohi.shiftbloom.studio/mcp`, so an agent can verify its own drafts
-before it answers.
+The live service is at **<https://ohi.shiftbloom.studio>**.
 
-## How a request flows
+---
 
-1. **Decompose.** Workers AI breaks the text into atomic claims.
-2. **Retrieve.** The Worker pulls candidates from its Vectorize evidence
-   cache and live from Wikipedia, Wikidata and up to nine other open sources
-   (Crossref, OpenAlex, Europe PMC, ClinicalTrials.gov and more), picked by
-   the claim's domain.
-3. **Rerank.** A BGE reranker keeps the passages that address the claim.
-4. **Classify.** Two models judge each passage as support, refute or
-   neutral, and score how relevant it is. When they disagree, the verdict
-   moves toward neutral.
-5. **Assemble.** Each claim gets `p_true`, an interval and its evidence; the
-   document gets an overall score.
+## Current status
 
-Three rigor tiers trade cost for depth: `fast` (4 claims, one model),
-`balanced` (7 claims, two models, the default) and `maximum` (13 claims,
-more evidence per claim, with a cooldown per IP). Numbers and cost ceilings
-are in [docs/CURRENT_ARCHITECTURE.md](docs/CURRENT_ARCHITECTURE.md).
+OHI is live as a **Cloudflare-native deployment** at
+<https://ohi.shiftbloom.studio>. The production path is fully hosted on
+Cloudflare and does not depend on local tunnels, local compute, Vercel,
+AWS Lambda, API Gateway, DynamoDB, Bedrock, Neo4j, or Qdrant.
 
-Calibration is honest about itself: until a labeled calibration set ships,
-responses carry `fallback_used: "general"` and the interval width is a
-heuristic, not a coverage guarantee.
+**Live today:**
 
-## What it runs on
+- Same-origin frontend, API, health checks, and MCP server on one
+  Cloudflare Worker custom domain.
+- Next.js 16 static export served by Cloudflare Worker Static Assets.
+- Async verify flow: `POST /api/v2/verify` returns `202 + job_id`;
+  clients poll `/api/v2/verify/status/{job_id}` until `done` or `error`.
+- Cloudflare Queue consumer runs the hosted verification pipeline.
+- Durable Objects hold per-job live state and the MCP server.
+- D1 stores job mirrors, feedback, and evidence cache rows.
+- Vectorize stores/retrieves evidence vectors.
+- Workers AI handles claim decomposition, NLI, embeddings, and reranking.
+- Public MCP endpoint at `/mcp` exposes `verify_text`, `job_status`, and
+  `search_evidence`.
 
-Everything is one Cloudflare Worker on one domain:
+---
 
-| Piece | Cloudflare product |
-|---|---|
-| Frontend (Next.js static export) | Workers Static Assets |
-| `/api/v2/*`, `/health/*` | Worker |
-| `/mcp` | Agents SDK on a Durable Object |
-| Async verification | Queues with a dead-letter queue |
-| Per-job live state, rate limits | Durable Objects |
-| Job history, feedback, corpus metadata | D1 |
-| Evidence vectors (BGE-M3, 1024 dims) | Vectorize |
-| Raw corpus archive | R2 |
-| Corpus seeding | Workflows |
-| Decomposition, NLI, embeddings, reranking | Workers AI |
-| Bot protection on `/verify` | Turnstile and WAF rules |
+## How it works
 
-## Repository
+For every verify request:
+
+1. **Decomposition.** Workers AI breaks input text into atomic factual
+   claims.
+2. **Evidence retrieval.** The Worker combines Vectorize evidence cache
+   hits with live Wikipedia and Wikidata retrieval.
+3. **Reranking.** Workers AI BGE reranker orders candidate evidence.
+4. **Natural-Language Inference (NLI).** Workers AI classifies evidence
+   as SUPPORT / REFUTE / NEUTRAL, with a deterministic fallback for
+   debunking cues and lexical overlap.
+5. **Verdict assembly.** The Worker returns per-claim `p_true`,
+   confidence intervals, supporting/refuting evidence, and a document
+   score. Current calibration is marked with `fallback_used: "general"`
+   until a larger calibration set is shipped.
+
+See [docs/API.md](docs/API.md) for the complete API surface and response
+schemas.
+
+---
+
+## Architecture
 
 ```
-cloudflare/ohi-worker/   Production Worker: API, queue consumer, MCP, corpus Workflow, D1 migrations
-src/frontend/            Next.js 16 frontend, built to a static export
-src/api/                 Python research pipeline (FastAPI): probabilistic claim graph with
-                         belief propagation, Gibbs and TRW-BP, split conformal calibration,
-                         copula document assembly, NLI adapters, ingestion passes
-src/ohi-mcp-server/      Standalone MCP server with the knowledge-source connectors
-gui_benchmark_app/       Benchmark suite comparing OHI with other hallucination detectors
-gui_ingestion_app/       Wikipedia ingestion into Neo4j and Qdrant (CLI and GUI)
-scripts/                 Benchmark harness, ingestion runner, probes, load test
-tests/                   pytest suites for the Python pipeline and benchmark
-docker/                  Images and Compose stacks for running the Python stack locally
-infra/local/             Postgres and MinIO for the local infra tests
-docs/                    API reference, architecture, runbooks
+Browser
+   │
+   │  https://ohi.shiftbloom.studio
+   ▼
+Cloudflare Worker custom domain
+   ├─► Worker Static Assets (Next.js export)
+   ├─► /api/v2/* verification API
+   ├─► /health/* probes
+   ├─► /mcp streamable HTTP MCP server
+   ├─► Durable Objects (jobs + MCP)
+   ├─► Queues (async verification + DLQ)
+   ├─► D1 (jobs, feedback, evidence cache)
+   ├─► Vectorize (BGE-M3 evidence vectors)
+   ├─► Workers AI (Gemma 3, BGE-M3, BGE reranker)
+   └─► Wikimedia APIs (Wikipedia + Wikidata evidence)
 ```
 
-The live service runs the Worker. The Python pipeline is the fuller
-research implementation of the method (claim graph inference and
-calibration) and runs locally against Neo4j and Qdrant; parts of it were
-ported to the Worker.
+See [docs/CURRENT_ARCHITECTURE.md](docs/CURRENT_ARCHITECTURE.md) for
+the production SSoT.
 
-## Run it locally
+---
 
-You need Node 26 and pnpm (`corepack enable pnpm`).
+## Repository structure
 
-```sh
-# Worker on http://localhost:8787
-cd cloudflare/ohi-worker
-pnpm install
-cp .dev.vars.example .dev.vars
-pnpm run dev
+```
+open-hallucination-index/
+├── src/
+│   ├── api/                   # FastAPI verification service (v2 rework active)
+│   │   ├── adapters/          # Gemini, OpenAI, Qdrant, Neo4j, MediaWiki,
+│   │   │                      #   NLI, embeddings, conformal calibrator
+│   │   ├── pipeline/          # Decomposer → evidence → NLI → PCG → assembly
+│   │   ├── server/            # FastAPI app, routes, middleware
+│   │   ├── interfaces/        # Ports (NliAdapter, PcgInferenceService, …)
+│   │   └── config/            # Settings, DI container, infra env
+│   ├── frontend/              # Next.js 16 static export (Cloudflare assets)
+│   │   ├── src/app/           # App Router pages
+│   │   ├── src/components/    # UI (shadcn/ui + Tailwind)
+│   │   └── src/lib/           # ohi-client, verify-controller, types
+│   └── ohi-mcp-server/        # Legacy standalone MCP package
+├── cloudflare/
+│   └── ohi-worker/            # Production Cloudflare Worker/API/MCP deployment
+├── gui_ingestion_app/         # (legacy v1) Wikipedia ingestion pipeline.
+│                              #   v2 Wave 3 replaces with src/api/ingestion
+├── gui_benchmark_app/         # Benchmark suite (Part 3)
+├── infra/local/               # Postgres + MinIO for the local infra tests
+├── docker/
+│   ├── compose/pc-data.yml    # Legacy/local data stack
+│   └── pc-embed/              # Local MiniLM embedding service
+├── tests/                     # pytest: unit/, integration/, infra/
+├── docs/
+│   ├── API.md                 # Current API surface (v2)
+│   ├── FRONTEND.md            # Frontend architecture (polling)
+│   ├── runbooks/              # Deploy, rollback, token rotation, local stack
+├── .github/workflows/         # CI: Worker deploy, Python tests, Docker builds
+├── AGENTS.md                  # Operational knowledge for agents + humans
+└── LICENSE                    # AGPL-3.0-or-later
+```
 
-# Frontend on http://localhost:3000, talking to the local Worker
+---
+
+## Getting started
+
+### Prerequisites
+
+- **Python 3.14+** (API + benchmark suite)
+- **Node.js 26+** (frontend, Worker, MCP server)
+- **pnpm** (frontend and Cloudflare Worker packages)
+- **Wrangler** (installed as a dev dependency in `cloudflare/ohi-worker`)
+- **Docker Desktop** only for the legacy/local data stack
+
+### Run the backend locally
+
+```bash
+cd src/api
+python -m venv .venv
+source .venv/bin/activate       # Windows Git Bash: source .venv/Scripts/activate
+pip install -e ".[dev]"
+
+# Runs FastAPI on http://localhost:8080
+ohi-server
+```
+
+Tests:
+
+```bash
+pytest -q tests -m "not infra" --no-cov   # canonical runline (skips infra tests)
+```
+
+### Run the frontend locally
+
+```bash
 cd src/frontend
 pnpm install
-NEXT_PUBLIC_API_BASE=http://localhost:8787/api/v2 pnpm run dev
+pnpm run dev        # http://localhost:3000
+pnpm run test:run   # vitest
+pnpm run build      # production static export
 ```
 
-Local `wrangler dev` simulates D1, R2, Queues, Durable Objects and
-Workflows. Vectorize has no local mode, and Workers AI calls go to
-Cloudflare when you are logged in, so `/health/deep` reports `degraded`
-offline. [CONTRIBUTING.md](CONTRIBUTING.md) lists which commands are safe
-and which touch production.
+### Local Docker stack (PC data services)
 
-The Python pipeline needs Python 3.12+ and, for the full graph, Docker:
+Neo4j, Qdrant, Postgres, Redis (disabled in prod but available locally),
+and `pc-embed` embedding service:
 
-```sh
-docker compose -f docker/compose/pc-data.yml -f docker/compose/pc-data.local-dev.yml --profile local-dev up -d
-pip install -e "src/api[dev]"
-ohi-server                       # http://localhost:8080
-pytest -q tests -m "not infra"
+```bash
+docker compose -f docker/compose/pc-data.yml --profile pc-prod up -d
 ```
 
-## Deploy your own
+See [docs/runbooks/pc-compose-start.md](docs/runbooks/pc-compose-start.md)
+for the PC stack's bring-up details.
 
-1. Create the resources on your Cloudflare account:
-   ```sh
-   cd cloudflare/ohi-worker
-   pnpm wrangler d1 create ohi-prod
-   pnpm wrangler r2 bucket create ohi-corpus-prod
-   pnpm wrangler vectorize create ohi-evidence-bge-m3 --dimensions=1024 --metric=cosine
-   pnpm wrangler queues create ohi-verify
-   pnpm wrangler queues create ohi-verify-dlq
-   pnpm wrangler queues create ohi-corpus-ingest
-   pnpm wrangler queues create ohi-corpus-ingest-dlq
-   ```
-2. Put the D1 id into `wrangler.jsonc` (or into the `OHI_D1_DATABASE_ID`
-   secret for CI), and change `routes` and `SITE_ORIGIN` to your domain.
-3. Set the Worker secrets `ADMIN_TOKEN` and `TURNSTILE_SECRET_KEY`.
-4. Build the frontend, then deploy:
-   ```sh
-   cd src/frontend && pnpm install && pnpm run build
-   cd ../../cloudflare/ohi-worker
-   pnpm wrangler d1 migrations apply ohi-prod --remote
-   pnpm run deploy
-   ```
+### Deploy to Cloudflare
 
-The GitHub workflow in `.github/workflows/cloudflare-production.yml` does
-the same on every push to `main`. It reads `CLOUDFLARE_API_TOKEN`,
-`CLOUDFLARE_ACCOUNT_ID`, `OHI_D1_DATABASE_ID`, `OHI_ADMIN_TOKEN`,
-`TURNSTILE_SECRET_KEY` and the `OPERATOR_*` legal-page values from the
-`production` environment. Required token scopes are in
-[docs/runbooks/cloudflare-api-token-rotate.md](docs/runbooks/cloudflare-api-token-rotate.md).
+Production deployment lives in `cloudflare/ohi-worker/`.
 
-## API
+```bash
+cd src/frontend
+NEXT_PUBLIC_API_BASE=https://ohi.shiftbloom.studio/api/v2 \
+NEXT_PUBLIC_SITE_URL=https://ohi.shiftbloom.studio \
+pnpm run build
+
+cd ../../cloudflare/ohi-worker
+pnpm install
+pnpm run types
+pnpm run check
+pnpm run build
+pnpm run deploy
+```
+
+Apply D1 migrations when `cloudflare/ohi-worker/migrations/` changes:
+
+```bash
+cd cloudflare/ohi-worker
+pnpm exec wrangler d1 migrations apply ohi-prod --remote
+```
+
+---
+
+## Configuration
+
+Cloudflare production bindings and variables are in
+`cloudflare/ohi-worker/wrangler.jsonc`.
+
+- `ENVIRONMENT=production`
+- `SITE_ORIGIN=https://ohi.shiftbloom.studio`
+- `VERIFY_MAX_CLAIMS=8`
+- `AI` binding for Workers AI
+- `OHI_DB` binding for D1 `ohi-prod`
+- `OHI_VECTOR` binding for Vectorize `ohi-evidence-bge-m3`
+- `VERIFY_QUEUE` binding for Queue `ohi-verify`
+- Durable Object bindings `JOBS` and `MCP_OBJECT`
+
+`wrangler.jsonc` carries no account id, and its D1 `database_id` is a
+placeholder. The deploy workflow reads `CLOUDFLARE_ACCOUNT_ID` and
+`OHI_D1_DATABASE_ID` from the `production` environment; for a manual
+deploy, run `wrangler d1 create ohi-prod` and paste the id. Worker secrets
+`ADMIN_TOKEN` and `TURNSTILE_SECRET_KEY` come from `OHI_ADMIN_TOKEN` and
+`TURNSTILE_SECRET_KEY` (see `cloudflare/ohi-worker/.dev.vars.example`).
+
+Frontend production public env:
+
+```env
+NEXT_PUBLIC_API_BASE=https://ohi.shiftbloom.studio/api/v2
+NEXT_PUBLIC_SITE_URL=https://ohi.shiftbloom.studio
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=<from repo variable TURNSTILE_SITE_KEY>
+# Legal pages: operator details from deploy secrets, never from source
+NEXT_PUBLIC_OPERATOR_NAME=...
+NEXT_PUBLIC_OPERATOR_STREET=...
+NEXT_PUBLIC_OPERATOR_CITY=...
+```
+
+---
+
+## API reference
+
+Full specification with request/response schemas, error codes, and
+examples: **[docs/API.md](docs/API.md)**.
+
+Summary:
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/v2/verify` | Submit text, get `202` and a `job_id` |
-| `GET /api/v2/verify/status/{job_id}` | Poll until `done` or `error` |
-| `GET /api/v2/calibration/report` | Calibration report |
-| `POST /api/v2/feedback` | Feedback on a single claim |
-| `GET /health/live`, `/health/ready`, `/health/deep` | Health probes |
-| `POST /mcp` | MCP over streamable HTTP: `verify_text`, `job_status`, `search_evidence` and the knowledge tools |
+| `POST /api/v2/verify` | Submit text, receive `202 Accepted` + `job_id` |
+| `GET /api/v2/verify/status/{job_id}` | Poll for pipeline progress + final verdict |
+| `GET /api/v2/calibration/report` | Public calibration report |
+| `POST /api/v2/feedback` | Submit claim feedback |
+| `GET /health/live` | Liveness probe |
+| `GET /health/ready` | Binding readiness probe |
+| `GET /health/deep` | Per-layer health for decomposition, Wikimedia, Vectorize, and NLI |
+| `POST /mcp` | Streamable HTTP MCP endpoint |
 
-Schemas, errors and examples: [docs/API.md](docs/API.md).
+The public Cloudflare deployment currently does not require API keys for
+the verification endpoints. Add rate limiting or Turnstile before
+opening high-volume public traffic.
 
-## History
+---
 
-OHI started in January 2026 as a Python service on AWS Lambda with Neo4j
-and Qdrant. In July 2026 production moved completely to Cloudflare. The
-AWS deployment (Terraform, Lambda image, its workflows) was removed from
-this repository; the Python pipeline itself stays here.
+## Documentation
+
+- [docs/API.md](docs/API.md) — v2 API reference (endpoints, schemas,
+  polling flow, rigor tiers)
+- [docs/FRONTEND.md](docs/FRONTEND.md) — frontend architecture (static
+  Next.js export, polling state machine, design system)
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — contribution process
+- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — community standards
+- [docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md) — public access framework
+- [docs/runbooks/](docs/runbooks/) — legacy and operational runbooks
+- [AGENTS.md](AGENTS.md) — operational knowledge (gotchas, agent instructions)
+
+
+---
+
+## Benchmarking
+
+A research-grade benchmark suite comparing OHI against hallucination-
+detection baselines is in `gui_benchmark_app/`. The Wave 3 E2E gate adds
+an automated FEVER slice run that commits `docs/benchmarks/v2.0-*.md`
+per release. Once v2.0 ships, full benchmark methodology and results
+will be published there.
+
+---
+
+## Contributing
+
+Contributions welcome. Please read
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the review process and
+conventions, and [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md).
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feat/your-feature`)
+3. Commit with Conventional Commits + "end state verified by" lines
+   (see AGENTS.md)
+4. Open a pull request against `main` (v2 development lands directly
+   on `main` since commit `c5010cc`)
+
+Security issues: see [SECURITY.md](SECURITY.md).
+
+---
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE). If you run a modified version as a service,
-publish your changes under the same license.
+AGPL-3.0-or-later — see [LICENSE](LICENSE). If you run a modified version as a
+network service, publish your changes under the same license.
 
-Security reports go to safety@shiftbloom.studio, see [SECURITY.md](SECURITY.md).
-General contact: hi@shiftbloom.studio.
+---
 
-Made by [shiftbloom studio.](https://shiftbloom.studio)
+## Acknowledgments
+
+- [**FastAPI**](https://fastapi.tiangolo.com/) — Python API framework
+- [**Next.js**](https://nextjs.org/) — React framework for the frontend
+- [**Cloudflare Workers**](https://developers.cloudflare.com/workers/) — hosted frontend, API, health, and MCP runtime
+- [**Cloudflare Workers AI**](https://developers.cloudflare.com/workers-ai/) — decomposer, NLI, embeddings, and reranker
+- [**Cloudflare D1**](https://developers.cloudflare.com/d1/) — job mirror, feedback, and evidence cache
+- [**Cloudflare Vectorize**](https://developers.cloudflare.com/vectorize/) — evidence vector index
+- [**Cloudflare Queues**](https://developers.cloudflare.com/queues/) — async verification jobs
+- [**MCP** (Anthropic)](https://modelcontextprotocol.io/) — Model
+  Context Protocol for knowledge-source aggregation
+
+---
+
+<p align="center">
+  <em>Knowledge as a graph, not a list.</em>
+</p>
