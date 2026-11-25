@@ -115,11 +115,11 @@ def write_integrity_report(report: IntegrityReport, *, out_path: Path | None = N
 ## Counts
 | Stat                           | Value                          | Threshold | Status |
 |--------------------------------|--------------------------------|-----------|--------|
-| Aura entities                  | {report.aura_entity_count:,}   | - | info   |
-| Aura passages                  | {report.aura_passage_count:,}  | - | info   |
-| Qdrant passages                | {report.qdrant_passage_count:,}| - | info   |
+| Aura entities                  | {report.aura_entity_count:,}   | -         | info   |
+| Aura passages                  | {report.aura_passage_count:,}  | -         | info   |
+| Qdrant passages                | {report.qdrant_passage_count:,}| -         | info   |
 | Passage-count mismatch ratio   | {report.passage_mismatch_ratio:.4f} | ≤ 0.01 | {"PASS" if passage_ok else "FAIL"} |
-| Entity vectors written         | {report.entity_vectors_written:,} | - | info   |
+| Entity vectors written         | {report.entity_vectors_written:,} | -      | info   |
 | Golden claim QID resolution    | {report.golden_resolution_rate:.1%} | ≥ 80% | {"PASS" if resolution_ok else "FAIL"} |
 
 ## Decision-K split

@@ -69,7 +69,7 @@ if _cached_iface is None or str(_SRC_API) not in _cached_iface_file:
 import asyncio  # noqa: E402
 from uuid import uuid4  # noqa: E402
 
-# ruff: noqa: I001 - ordering below is deliberate; must follow the
+# ruff: noqa: I001  - ordering below is deliberate; must follow the
 # sys.path insert above.
 from interfaces.nli import NliResult  # noqa: E402
 from models.domain import DomainAssignment  # noqa: E402

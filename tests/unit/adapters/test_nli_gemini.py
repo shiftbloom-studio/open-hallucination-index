@@ -47,7 +47,7 @@ from adapters.nli_gemini import NliGeminiAdapter  # noqa: E402
 from interfaces.llm import LLMMessage, LLMProvider, LLMResponse  # noqa: E402
 from interfaces.nli import NliAdapter, NliResult  # noqa: E402
 
-# ruff: noqa: I001 - the block above is deliberately ordered after the
+# ruff: noqa: I001  - the block above is deliberately ordered after the
 # sys.path insert so `from interfaces.*` resolves to THIS worktree's
 # src/api tree, not any installed editable-install from a sibling checkout.
 

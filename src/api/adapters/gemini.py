@@ -13,8 +13,8 @@ reasoning.
 The adapter implements the LLMProvider port so it swaps in for
 OpenAILLMAdapter without any caller-side changes. The LLMSettings fields
 it uses are:
-- api_key - Gemini API key (AIza...)
-- model - e.g. "gemini-3-flash-preview"
+- api_key  - Gemini API key (AIza...)
+- model    - e.g. "gemini-3-flash-preview"
 - timeout_seconds - request timeout
 
 base_url is ignored; the Gemini endpoint is baked in.

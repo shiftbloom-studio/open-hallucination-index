@@ -4,11 +4,11 @@ D2's async handler runs ``pipeline.verify()`` and needs to advance the
 DynamoDB job record's ``phase`` field at each of the five natural
 boundaries D1 identified in §5 of its handoff:
 
-  1. decomposing - entering L1 decomposition
+  1. decomposing         - entering L1 decomposition
   2. retrieving_evidence - entering L1 evidence retrieval
-  3. classifying - entering L3/L4 NLI posteriors
-  4. calibrating - entering the L5 per-claim conformal loop
-  5. assembling - entering L7 document assembly
+  3. classifying         - entering L3/L4 NLI posteriors
+  4. calibrating         - entering the L5 per-claim conformal loop
+  5. assembling          - entering L7 document assembly
 
 The brief is explicit: phase callbacks fire AROUND the phases, not
 inside them. So the contract is:

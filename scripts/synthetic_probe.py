@@ -13,9 +13,9 @@ Used by:
   behaviour.
 
 Reads configuration from env:
-* ``OHI_API_URL`` - base URL (default ``https://ohi-api.shiftbloom.studio``)
-* ``OHI_EDGE_SECRET`` - X-OHI-Edge-Secret header value (required)
-* ``PROBE_CLAIM_TEXT`` - override the default Marie-Curie claim text
+* ``OHI_API_URL``       - base URL (default ``https://ohi-api.shiftbloom.studio``)
+* ``OHI_EDGE_SECRET``   - X-OHI-Edge-Secret header value (required)
+* ``PROBE_CLAIM_TEXT``  - override the default Marie-Curie claim text
 
 CLI:
 * ``--duration``  total seconds to run (default 600 = 10 min)
