@@ -35,7 +35,7 @@ class DatasetNotAvailable(RuntimeError):
 async def _not_yet_implemented(name: str) -> AsyncIterator[BenchmarkExample]:
     raise DatasetNotAvailable(
         f"Dataset '{name}' loader is not yet implemented. This is a Phase 0 "
-        f"placeholder — fill in when the phase that needs it begins."
+        f"placeholder - fill in when the phase that needs it begins."
     )
     # unreachable; keeps type checker happy
     yield  # type: ignore[unreachable]
@@ -46,7 +46,7 @@ async def load_factscore(
 ) -> AsyncIterator[BenchmarkExample]:
     """Atomic-fact factuality benchmark (Min et al., 2023).
 
-    Phase 0 stub — returns a small synthetic fixture so the runner can be
+    Phase 0 stub - returns a small synthetic fixture so the runner can be
     wired end-to-end without a HF token. Real loader (downloading the
     FActScore atomic-fact split) lands alongside the v1 baseline run.
     """
@@ -71,19 +71,19 @@ async def load_factscore(
 async def load_truthfulqa(
     *, limit: int | None = None
 ) -> AsyncIterator[BenchmarkExample]:
-    """TruthfulQA (Lin et al., 2022) — adversarial-prompt truthfulness."""
+    """TruthfulQA (Lin et al., 2022) - adversarial-prompt truthfulness."""
     async for ex in _not_yet_implemented("truthfulqa"):
         yield ex
 
 
 async def load_halueval(*, limit: int | None = None) -> AsyncIterator[BenchmarkExample]:
-    """HaluEval — general hallucination detection."""
+    """HaluEval - general hallucination detection."""
     async for ex in _not_yet_implemented("halueval"):
         yield ex
 
 
 async def load_pubmedqa(*, limit: int | None = None) -> AsyncIterator[BenchmarkExample]:
-    """PubMedQA — biomedical factoid Q&A."""
+    """PubMedQA - biomedical factoid Q&A."""
     async for ex in _not_yet_implemented("pubmedqa"):
         yield ex
 
@@ -91,13 +91,13 @@ async def load_pubmedqa(*, limit: int | None = None) -> AsyncIterator[BenchmarkE
 async def load_legalbench_entailment(
     *, limit: int | None = None
 ) -> AsyncIterator[BenchmarkExample]:
-    """LegalBench entailment subset — contract/statute entailment."""
+    """LegalBench entailment subset - contract/statute entailment."""
     async for ex in _not_yet_implemented("legalbench-entailment"):
         yield ex
 
 
 async def load_liar(*, limit: int | None = None) -> AsyncIterator[BenchmarkExample]:
-    """LIAR — political claim truthfulness (social domain benchmark)."""
+    """LIAR - political claim truthfulness (social domain benchmark)."""
     async for ex in _not_yet_implemented("liar"):
         yield ex
 

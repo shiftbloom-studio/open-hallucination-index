@@ -1,9 +1,9 @@
-"""Wave 3 Stream C — Pass 2: enwiki passages (Decision K split).
+"""Wave 3 Stream C - Pass 2: enwiki passages (Decision K split).
 
 Per Decision K:
 * **Aura** holds passage **text + metadata** (single source of truth).
 * **Qdrant** holds the passage **vector only**, payload reduced to
-  ``{passage_id, qid}`` — no duplicated text.
+  ``{passage_id, qid}`` - no duplicated text.
 
 This pass:
 1. Streams enwiki main-namespace articles via
@@ -170,7 +170,7 @@ class Pass2PassageWriter:
                 logger.warning("Sitelink resolve failed for %r: %s", page.title, exc)
                 qid = None
             if qid is None:
-                # Article without Wikidata sitelink — skip (post-corpus
+                # Article without Wikidata sitelink - skip (post-corpus
                 # freshness fallback via MediaWiki MCP covers these).
                 continue
             try:
@@ -539,7 +539,7 @@ class Pass2PassageWriter:
             self._ckpt.increment_dlq("pass2", n=len(batch))
             return False
 
-        # Qdrant: vector-only payload (Decision K — no text duplication).
+        # Qdrant: vector-only payload (Decision K - no text duplication).
         points = [
             {
                 "id": c.passage_id,

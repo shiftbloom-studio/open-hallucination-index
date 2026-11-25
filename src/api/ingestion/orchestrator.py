@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — ingestion orchestrator CLI.
+"""Wave 3 Stream C - ingestion orchestrator CLI.
 
 Coordinates the four passes with shared lifecycle, checkpoint, and
 progress infrastructure. Entry point for :mod:`scripts.ingest.run_full_ingestion`.
@@ -12,7 +12,7 @@ CLI (delegate from the scripts/ wrapper):
     --retry-dlq
     --force-restart       clear checkpoint state before running
 
-Runtime orchestrator is **async-first** — each pass is a coroutine that
+Runtime orchestrator is **async-first** - each pass is a coroutine that
 takes shared lifecycle helpers and yields back control at batch
 boundaries so SIGUSR1 pause can flush cleanly.
 """
@@ -128,11 +128,11 @@ async def run(argv: list[str] | None = None) -> int:
     if args.dry_run:
         logger.info("--dry-run enabled; parsers will enumerate but not write")
 
-    # Dependencies wired via DI later in this file — keep imports lazy.
+    # Dependencies wired via DI later in this file - keep imports lazy.
     from config.dependencies import (  # noqa: PLC0415
         _cleanup_adapters,
         _initialize_adapters,
-        get_evidence_collector,  # noqa: F401 — triggers lifespan init
+        get_evidence_collector,  # noqa: F401 - triggers lifespan init
         get_graph_store,
         get_vector_store,
     )

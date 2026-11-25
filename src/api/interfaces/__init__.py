@@ -40,7 +40,7 @@ __all__ = [
     "DomainRouter",
     # L3 NLI
     "NLIService",
-    # L3 NLI (LLM-based — Phase 2 Task 2.1)
+    # L3 NLI (LLM-based - Phase 2 Task 2.1)
     "NliAdapter",
     "NliResult",
     "NliLabel",

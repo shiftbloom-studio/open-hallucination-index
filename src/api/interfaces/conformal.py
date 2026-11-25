@@ -22,7 +22,7 @@ class CalibratedVerdict:
     - ``calibration_set_id`` is ``None`` when fallback_used == 'general'
       (no real calibration set was consulted).
     - ``interval`` is ``(0.0, 1.0)`` when fallback_used == 'non_converged'
-      (uninformative by design — see §7).
+      (uninformative by design - see §7).
     """
 
     p_true: float

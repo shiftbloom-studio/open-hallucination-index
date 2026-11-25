@@ -1,4 +1,4 @@
-# Small embedding service — runs on the PC alongside neo4j/qdrant/pg/redis,
+# Small embedding service - runs on the PC alongside neo4j/qdrant/pg/redis,
 # exposed to Lambda via the existing cloudflared tunnel as
 # embed.ohi.shiftbloom.studio. Exists so the Lambda image doesn't need torch
 # or sentence-transformers (which bloat the image to ~2GB and blow Lambda's

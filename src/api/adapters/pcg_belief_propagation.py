@@ -1,4 +1,4 @@
-"""Main PCG adapter — Wave 3 Stream P.
+"""Main PCG adapter - Wave 3 Stream P.
 
 Satisfies :class:`~interfaces.pcg.PCGInferenceService`. Orchestrates
 the three inference paths (TRW-BP primary, damped LBP fallback, Gibbs
@@ -8,7 +8,7 @@ NLI tables.
 Rigor tier decides what runs:
 
 * ``fast``: damped LBP only, no Gibbs, binary-factor layer omitted.
-  Matches the port's "fast-means-fast" contract — skip everything
+  Matches the port's "fast-means-fast" contract - skip everything
   that a user might wait on for a cached / exploratory query.
 * ``balanced`` (default): TRW-BP primary. On non-convergence, fall
   back to damped LBP. If that also fails, return the last-iter
@@ -21,14 +21,14 @@ Rigor tier decides what runs:
 
 Output: ``dict[UUID, PosteriorBelief]`` keyed by claim id. Observability
 goes into each :class:`PosteriorBelief`'s fields (algorithm, iterations,
-edge_count, log_partition_bound) — the pipeline layer reads these and
+edge_count, log_partition_bound) - the pipeline layer reads these and
 packs a :class:`~models.verdict_extensions.PCGObservability` block onto
 each :class:`ClaimVerdict` downstream. ``gibbs_mismatch`` is surfaced
 through the adapter's :attr:`last_gibbs_mismatch` attribute (set during
 ``infer``) because ``PosteriorBelief`` is frozen without that field.
 
 Deterministic: Gibbs seed is derived from the UUIDs of the claims so
-repeat verifies produce identical sanity verdicts — integration tests
+repeat verifies produce identical sanity verdicts - integration tests
 would flake otherwise.
 """
 
@@ -62,7 +62,7 @@ class PCGBeliefPropagationAdapter:
     Constructor args tune the inference paths; defaults match the Wave
     3 spec and the env vars wired through ``settings.py`` /
     ``dependencies.py``. The cc-NLI adapter is passed here but only
-    used to record fallback-firing counts — the dispatcher runs
+    used to record fallback-firing counts - the dispatcher runs
     upstream in the pipeline and hands pre-resolved NLI tables to
     ``infer``.
     """
@@ -117,7 +117,7 @@ class PCGBeliefPropagationAdapter:
             self.last_gibbs_mismatch = None
             return {}
 
-        # Fast rigor skips the binary-factor layer entirely — produces
+        # Fast rigor skips the binary-factor layer entirely - produces
         # per-claim independent marginals from evidence unaries only.
         cc_table = {} if rigor == "fast" else nli_claim_claim
         graph = build_factor_graph(
@@ -235,7 +235,7 @@ class PCGBeliefPropagationAdapter:
                 burn_in=burn,
                 seed=seed,
             )
-        except Exception as exc:  # noqa: BLE001 — sanity must not break verdict
+        except Exception as exc:  # noqa: BLE001 - sanity must not break verdict
             logger.warning("Gibbs sanity failed to run: %s", exc)
             self.last_gibbs_mismatch = None
             return
@@ -253,7 +253,7 @@ class PCGBeliefPropagationAdapter:
             self.last_gibbs_mismatch = None
 
     async def health_check(self) -> bool:
-        """Pure-python adapter, no external deps — always healthy
+        """Pure-python adapter, no external deps - always healthy
         provided numpy imports (ctor succeeded)."""
         return True
 

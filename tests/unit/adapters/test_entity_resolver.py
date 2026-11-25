@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — entity resolver unit tests.
+"""Wave 3 Stream C - entity resolver unit tests.
 
 Stubbed graph + embedding adapters; asserts exact-label short-circuit
 beats the vector hop, and that disjoint claims yield empty results.

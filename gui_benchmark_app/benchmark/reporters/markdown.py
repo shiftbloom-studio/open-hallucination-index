@@ -58,7 +58,7 @@ class MarkdownReporter(BaseReporter):
         runtime = getattr(report, "total_runtime_seconds", None)
 
         lines: list[str] = []
-        lines.append(f"# OHI Benchmark Report — `{run_id}`")
+        lines.append(f"# OHI Benchmark Report - `{run_id}`")
         lines.append("")
         lines.extend(self._toc())
 

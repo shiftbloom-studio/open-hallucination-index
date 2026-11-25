@@ -42,7 +42,7 @@ docker compose -f docker/compose/pc-data.yml \
 ```
 - Host ports bound on 127.0.0.1 only.
 - `cloudflared` NOT started.
-- Separate volumes (`*-dev`) — dev data doesn't touch prod data.
+- Separate volumes (`*-dev`) - dev data doesn't touch prod data.
 
 Stop prod before starting local-dev (volumes are different but the container
 names could collide if you forgot `--profile`).

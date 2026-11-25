@@ -1,10 +1,10 @@
-"""Wave 3 Stream G.2 — end-to-end pipeline integration tests (blocking item #1).
+"""Wave 3 Stream G.2 - end-to-end pipeline integration tests (blocking item #1).
 
 Hits real prod through the HTTP API. Skipped entirely when
 ``OHI_API_URL`` / ``OHI_EDGE_SECRET`` aren't set (local dev mode).
 
 These tests are pytest-marked ``integration`` so the default pytest
-runline (``-m "not infra"``) does NOT pick them up — they run in the
+runline (``-m "not infra"``) does NOT pick them up - they run in the
 ``v2-post-deploy-verify.yml`` workflow where creds are injected.
 """
 
@@ -83,9 +83,9 @@ def test_verify_buckets_are_label_driven(api_url: str, edge_secret: str) -> None
         )
     result = body["result"]
     c = result["claims"][0]
-    # Einstein-Russia is obviously refutable — post-Wave-3 PCG should
+    # Einstein-Russia is obviously refutable - post-Wave-3 PCG should
     # push p_true very low (< 0.3) and surface refuting_evidence > 0.
-    assert c["p_true"] < 0.3, f"Einstein-Russia p_true={c['p_true']:.3f} — too high"
+    assert c["p_true"] < 0.3, f"Einstein-Russia p_true={c['p_true']:.3f} - too high"
     # Support bucket should be empty or very small; refute bucket non-empty.
     assert len(c["refuting_evidence"]) >= 1
 

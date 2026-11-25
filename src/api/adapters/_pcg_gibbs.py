@@ -3,7 +3,7 @@
 Draws samples from the joint distribution, approximates marginals by
 sample frequencies, and reports the max-absolute-delta versus a
 reference BP marginal set. Used in ``balanced`` + ``maximum`` rigor
-tiers to catch "BP converged to the wrong fixed point" failures —
+tiers to catch "BP converged to the wrong fixed point" failures -
 LBP can converge to non-MAP basins of attraction on cyclic graphs,
 and TRW-BP's marginals are valid only under the chosen ρ-cover.
 
@@ -12,7 +12,7 @@ recover the exact marginals. In practice we take ~2000 samples after
 burn-in, which suffices to spot ~0.05-level disagreements reliably.
 
 A fixed seed is derived from the verify ``request_id`` so two
-verifies of the same document produce the same Gibbs sanity verdict —
+verifies of the same document produce the same Gibbs sanity verdict -
 important for the integration test suite. Non-determinism in the
 sampler would make "the Gibbs sanity failed flakily" an easy
 false-positive pattern.

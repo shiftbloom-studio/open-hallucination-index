@@ -34,7 +34,7 @@ export function useHealthDeep(
   return useQuery<HealthDeep>({
     queryKey: queryKeys.health,
     queryFn: ({ signal }) => ohi.healthDeep({ signal }),
-    staleTime: 30 * 1000, // 30s — cheap probe
+    staleTime: 30 * 1000, // 30s - cheap probe
     refetchInterval: 30 * 1000,
     retry: false,
     ...options,

@@ -2,7 +2,7 @@
 
 Engine-agnostic measurement infrastructure for the plan's Phase 0–4
 acceptance gates. See the v2 design notes (internal)
-implementation.md` — Task 0.2.
+implementation.md` - Task 0.2.
 
 Public surface:
 

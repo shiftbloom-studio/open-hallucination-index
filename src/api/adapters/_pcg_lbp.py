@@ -4,7 +4,7 @@ Murphy-Weiss-Jordan 1999 damping scheme. Runs in log-space for
 numerical stability on strongly-polarised NLI edges (entail=0.98 style
 cases produce log-factors near zero on one state and highly-negative on
 the other). Convergence tolerance checked in the marginal domain, not
-message domain — matches the ``PosteriorBelief.p_true`` contract users
+message domain - matches the ``PosteriorBelief.p_true`` contract users
 observe.
 
 Fallback role in the Stream P spec: when TRW-BP does not converge
@@ -75,7 +75,7 @@ def run_damped_lbp(
     (near 1) oscillates on tight cycles.
 
     Convergence check: max absolute delta on node marginals between
-    iterations. Not on messages — messages can chase their tail while
+    iterations. Not on messages - messages can chase their tail while
     the marginals have already settled, and it's the marginals users
     see in ``PosteriorBelief``.
     """
@@ -118,7 +118,7 @@ def run_damped_lbp(
                     new_messages[k, 0, xj] = 0.0
                 else:
                     new_messages[k, 0, xj] = m + float(np.log(np.sum(np.exp(log_vals - m))))
-            # Normalise (subtract log-sum-exp over states — keeps numbers bounded).
+            # Normalise (subtract log-sum-exp over states - keeps numbers bounded).
             lse = new_messages[k, 0, 0] + float(
                 np.log(
                     np.exp(new_messages[k, 0, 0] - new_messages[k, 0, 0])

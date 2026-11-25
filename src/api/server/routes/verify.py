@@ -1,4 +1,4 @@
-"""Public /api/v2/verify surface — async polling flow (Stream D2).
+"""Public /api/v2/verify surface - async polling flow (Stream D2).
 
 Pre-D2 POST /verify blocked on ``pipeline.verify()`` and returned the
 ``DocumentVerdict`` synchronously. E1 observed ~5s latency on a 2-claim
@@ -60,7 +60,7 @@ async def verify(body: VerifyRequest, request: Request) -> ORJSONResponse:
     # Retention (spec §11): raw text is NOT persisted unless ?retain=true
     # tagged request.state. The async-invoke payload (below) always carries
     # the real text because the handler needs it to run the pipeline, but
-    # that payload is ephemeral — it dies with the Lambda invocation. What
+    # that payload is ephemeral - it dies with the Lambda invocation. What
     # ends up in DynamoDB honours the retention flag.
     retain_text = bool(getattr(request.state, "retain_text", False))
     persisted_text = body.text if retain_text else ""
@@ -82,7 +82,7 @@ async def verify(body: VerifyRequest, request: Request) -> ORJSONResponse:
         )
     except Exception as exc:
         # If the async-invoke fails the DynamoDB record is already in
-        # 'pending' — flip it to error so the poller sees a terminal
+        # 'pending' - flip it to error so the poller sees a terminal
         # state immediately rather than timing out after 3 min.
         logger.exception("jobs.async_invoke_verify failed for %s", job_id)
         try:
@@ -98,7 +98,7 @@ async def verify(body: VerifyRequest, request: Request) -> ORJSONResponse:
         ) from exc
 
     # The boto3 invoke call itself can succeed (no exception) while the
-    # async queue still refuses the payload — throttling, IAM regression,
+    # async queue still refuses the payload - throttling, IAM regression,
     # reserved-concurrency ceiling hit. When that happens the downstream
     # pipeline never runs and the DynamoDB record stays at 'pending'
     # forever. Returning 202 to the caller in that state is exactly the
@@ -108,7 +108,7 @@ async def verify(body: VerifyRequest, request: Request) -> ORJSONResponse:
     if invoke_status != 202:
         logger.error(
             "jobs.async_invoke_verify returned non-202 StatusCode=%s "
-            "for %s — failing record and returning 503.",
+            "for %s - failing record and returning 503.",
             invoke_status,
             job_id,
         )
@@ -170,7 +170,7 @@ async def verify_status(job_id: UUID) -> ORJSONResponse:
             },
         )
 
-    # Drop the ticket + raw text from the response — they are internal.
+    # Drop the ticket + raw text from the response - they are internal.
     out = {k: v for k, v in record.items() if k not in {"invoke_ticket", "text"}}
     return ORJSONResponse(status_code=status.HTTP_200_OK, content=out)
 

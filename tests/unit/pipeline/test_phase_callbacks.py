@@ -4,11 +4,11 @@ D2's async handler runs ``pipeline.verify()`` and needs to advance the
 DynamoDB job record's ``phase`` field at each of the five natural
 boundaries D1 identified in §5 of its handoff:
 
-  1. decomposing         — entering L1 decomposition
-  2. retrieving_evidence — entering L1 evidence retrieval
-  3. classifying         — entering L3/L4 NLI posteriors
-  4. calibrating         — entering the L5 per-claim conformal loop
-  5. assembling          — entering L7 document assembly
+  1. decomposing - entering L1 decomposition
+  2. retrieving_evidence - entering L1 evidence retrieval
+  3. classifying - entering L3/L4 NLI posteriors
+  4. calibrating - entering the L5 per-claim conformal loop
+  5. assembling - entering L7 document assembly
 
 The brief is explicit: phase callbacks fire AROUND the phases, not
 inside them. So the contract is:
@@ -17,14 +17,14 @@ inside them. So the contract is:
   ``await cb(phase_name)`` once per boundary, in the order above,
   BEFORE the phase's work starts.
 * Passing ``phase_callback=None`` (or omitting it) preserves pre-D2
-  behaviour exactly — no callback invocations.
+  behaviour exactly - no callback invocations.
 * An exception raised by the callback must NOT crash the pipeline.
   The async handler may be racing DynamoDB writes; a transient failure
   there should produce a warning log at worst, never a ``verify()``
   that aborts mid-document.
 
 All five boundaries fire even when the Phase 1 placeholder path runs
-(nli_adapter=None) — the phases exist independently of whether NLI is
+(nli_adapter=None) - the phases exist independently of whether NLI is
 wired. That way the polling UI gets a consistent progress signal
 regardless of what implementation is active underneath.
 """
@@ -71,7 +71,7 @@ class _StubDecomposer:
     async def decompose(self, text: str) -> list:
         from models.entities import Claim, ClaimType
 
-        # Two trivial claims — enough to exercise the L5 loop.
+        # Two trivial claims - enough to exercise the L5 loop.
         return [
             Claim(
                 id=UUID(int=1),
@@ -94,7 +94,7 @@ class _StubDecomposer:
 
 class _StubRetrieval:
     """``AdaptiveEvidenceCollector`` look-alike. Returns no evidence per
-    claim — the placeholder posteriors path trips the uniform prior
+    claim - the placeholder posteriors path trips the uniform prior
     branch, which is irrelevant to what we're testing (phase ordering)."""
 
     async def collect(self, claim, mcp_sources=None):  # noqa: D401, ANN001
@@ -158,7 +158,7 @@ async def test_phase_callback_fires_five_boundaries_in_order() -> None:
         "calibrating",
         "assembling",
     ]
-    # Sanity — verdict still shaped correctly end-to-end.
+    # Sanity - verdict still shaped correctly end-to-end.
     assert verdict is not None
     assert verdict.document_score is not None
 
@@ -181,10 +181,10 @@ async def test_phase_callback_exception_does_not_crash_pipeline() -> None:
             raise RuntimeError("dynamodb transient")
 
     pipe = _build_pipeline()
-    # Must NOT raise — a flaky progress-reporter cannot abort a verdict.
+    # Must NOT raise - a flaky progress-reporter cannot abort a verdict.
     verdict = await pipe.verify("hello", phase_callback=flaky_cb)
     assert verdict is not None
-    # And the later callbacks still fired — failure of one phase write
+    # And the later callbacks still fired - failure of one phase write
     # does not silently skip the next boundary's write.
     assert "calibrating" in calls
     assert "assembling" in calls

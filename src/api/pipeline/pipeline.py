@@ -64,7 +64,7 @@ PhaseCallback = Callable[[str], Awaitable[None]]
 async def _safe_fire(callback: PhaseCallback | None, phase: str) -> None:
     """Invoke ``callback`` if present; swallow exceptions.
 
-    Progress reporting is best-effort — a transient DynamoDB write failure
+    Progress reporting is best-effort - a transient DynamoDB write failure
     from the polling handler MUST NOT abort an in-flight verdict. We log
     and move on; the next phase will try again, and the final
     ``complete_job`` / ``fail_job`` write still runs after verify()
@@ -92,13 +92,13 @@ class _PosteriorsResult:
     """Internal return type for ``_compute_posteriors``.
 
     Four dicts, keyed by claim id:
-    * ``posteriors`` — the per-claim ``PosteriorBelief`` (p_true etc.)
-    * ``buckets`` — ``(supporting_evidence, refuting_evidence)``; only
+    * ``posteriors`` - the per-claim ``PosteriorBelief`` (p_true etc.)
+    * ``buckets`` - ``(supporting_evidence, refuting_evidence)``; only
       populated when NLI ran (Phase-2 Beta path or Wave-3 PCG path
-      use the same label-driven split — Hebel A + Fix 1+3).
-    * ``pcg_observability`` — per-claim PCG observability block when
+      use the same label-driven split - Hebel A + Fix 1+3).
+    * ``pcg_observability`` - per-claim PCG observability block when
       the PCG path ran; ``None`` otherwise (placeholder / Beta paths).
-    * ``pcg_edges`` — per-claim list of ``ClaimEdge`` neighbours
+    * ``pcg_edges`` - per-claim list of ``ClaimEdge`` neighbours
       derived from the PCG graph's binary factors; empty for paths
       that didn't build a graph.
     """
@@ -110,7 +110,7 @@ class _PosteriorsResult:
 
 
 class Pipeline:
-    """Stateless orchestrator — one instance per app, no per-request state.
+    """Stateless orchestrator - one instance per app, no per-request state.
 
     Concrete adapters are passed at construction time; missing layers
     (Phase 1/2/3/4 rollout) are represented by ``None`` and handled via
@@ -138,15 +138,15 @@ class Pipeline:
         #
         # Wave 3 Stream P adds two layered precedences in
         # ``_compute_posteriors``:
-        #   1. PCG path — when ``pcg`` AND ``nli_adapter`` are wired
+        #   1. PCG path - when ``pcg`` AND ``nli_adapter`` are wired
         #      (``cc_nli_dispatcher`` is optional; if omitted the PCG
         #      path runs without a binary-factor layer, effectively
         #      LBP-on-unaries). Produces TRW-BP / LBP / LBP-nonconvergent
         #      posteriors and populates ``PCGObservability``.
-        #   2. Phase-2 Beta-posterior path — when ``nli_adapter`` is
+        #   2. Phase-2 Beta-posterior path - when ``nli_adapter`` is
         #      wired but ``pcg`` isn't. Keeps D1 behaviour for local
         #      dev / degraded-mode deploys.
-        #   3. Phase-1 placeholder — no NLI adapter at all. Used in
+        #   3. Phase-1 placeholder - no NLI adapter at all. Used in
         #      unit tests only.
         self._decomposer = decomposer
         self._retrieval = retrieval
@@ -177,8 +177,8 @@ class Pipeline:
         """Run the full L1→L7 pipeline on a single text, return a DocumentVerdict.
 
         ``phase_callback`` (Stream D2) is invoked once BEFORE each of the
-        five natural phases — decomposing, retrieving_evidence,
-        classifying, calibrating, assembling — so the async polling
+        five natural phases - decomposing, retrieving_evidence,
+        classifying, calibrating, assembling - so the async polling
         handler can advance a DynamoDB ``phase`` field while the pipeline
         runs. Callback failures are logged and swallowed; see
         :func:`_safe_fire` for the exact semantic.
@@ -187,12 +187,12 @@ class Pipeline:
         request_id = request_id or uuid4()
         t0 = time.perf_counter()
 
-        # L1 — decomposition
+        # L1 - decomposition
         await _safe_fire(phase_callback, "decomposing")
         claims = await self._decomposer.decompose(text)
         logger.debug("request %s: decomposed into %d claims", request_id, len(claims))
 
-        # L1 — evidence retrieval per claim (placeholder when no collector)
+        # L1 - evidence retrieval per claim (placeholder when no collector)
         await _safe_fire(phase_callback, "retrieving_evidence")
         evidence_per_claim: dict[UUID, list[Evidence]] = {}
         if self._retrieval is not None and claims:
@@ -208,12 +208,12 @@ class Pipeline:
             for claim in claims:
                 evidence_per_claim[claim.id] = []
 
-        # L2 — domain routing (placeholder: always general). Not a polling
-        # boundary — L2 is a trivial dict lookup in the placeholder path
+        # L2 - domain routing (placeholder: always general). Not a polling
+        # boundary - L2 is a trivial dict lookup in the placeholder path
         # and too fast for the UI to render anything meaningful.
         assignments = await self._route_claims(claims)
 
-        # L3 / L4 — NLI + PCG joint inference
+        # L3 / L4 - NLI + PCG joint inference
         await _safe_fire(phase_callback, "classifying")
         posteriors_result = await self._compute_posteriors(
             claims, evidence_per_claim, assignments, rigor=rigor
@@ -223,7 +223,7 @@ class Pipeline:
         pcg_observability = posteriors_result.pcg_observability
         pcg_edges_by_claim = posteriors_result.pcg_edges
 
-        # L5 — conformal calibration per claim
+        # L5 - conformal calibration per claim
         await _safe_fire(phase_callback, "calibrating")
         claim_verdicts = []
         for claim in claims:
@@ -235,7 +235,7 @@ class Pipeline:
                 claim=claim, belief=belief, domain=primary, stratum=stratum
             )
 
-            # L6 — information-gain hook (placeholder: IG=0, never queue)
+            # L6 - information-gain hook (placeholder: IG=0, never queue)
             information_gain = 0.0
             queued_for_review = False
 
@@ -274,7 +274,7 @@ class Pipeline:
             )
             claim_verdicts.append(cv)
 
-        # L7 — document assembly
+        # L7 - document assembly
         await _safe_fire(phase_callback, "assembling")
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         decomp_coverage = self._compute_decomp_coverage(text, claims)
@@ -396,7 +396,7 @@ class Pipeline:
                 p_true=p_true,
                 p_false=1.0 - p_true,
                 converged=True,
-                algorithm="TRW-BP",  # placeholder label — no actual BP yet
+                algorithm="TRW-BP",  # placeholder label - no actual BP yet
                 iterations=0,
                 edge_count=0,
             )
@@ -484,7 +484,7 @@ class Pipeline:
             elif nli_result.label == "refute":
                 buckets[claim_id][1].append(_annotate_evidence_with_nli(evidence, nli_result))
             # label == "neutral": drop from both buckets (off-topic
-            # passage — neither confirms nor contradicts the claim).
+            # passage - neither confirms nor contradicts the claim).
 
         out: dict[UUID, PosteriorBelief] = {}
         for claim in claims:
@@ -594,9 +594,9 @@ class Pipeline:
             fallback_fired_count = dispatch.fallback_fired_count
 
         # --- Step 4+5: PCG inference -----------------------------------
-        # adapter_per_claim is reserved for per-domain TRW-BP weights —
+        # adapter_per_claim is reserved for per-domain TRW-BP weights -
         # empty dict for now (all general domain, Wave 3 scope).
-        adapter_per_claim: dict[UUID, object] = {}  # DomainAdapter typing — unused until Wave 4
+        adapter_per_claim: dict[UUID, object] = {}  # DomainAdapter typing - unused until Wave 4
         try:
             posteriors = await self._pcg.infer(
                 claims=claims,
@@ -608,7 +608,7 @@ class Pipeline:
             )
         except Exception as exc:
             logger.error(
-                "PCG infer failed: %s — falling back to Phase-2 Beta posterior",
+                "PCG infer failed: %s - falling back to Phase-2 Beta posterior",
                 exc,
             )
             return await self._compute_posteriors_via_nli_adapter(claims, evidence_per_claim)
@@ -712,10 +712,10 @@ def _beta_update_from_nli(
 
     Two classes of result are **skipped** (no α/β contribution):
 
-    1. Terminal-failure sentinels (``reasoning == "nli_unavailable"``) —
+    1. Terminal-failure sentinels (``reasoning == "nli_unavailable"``) -
        they carry no information, so they must not push the posterior
        around.
-    2. ``label == "neutral"`` results — these correspond to passages
+    2. ``label == "neutral"`` results - these correspond to passages
        that neither confirm nor contradict the claim (off-topic or
        genuinely uncertain). Post-v2.0-live-bug (Einstein-Russia case,
        p_true=0.33 for a 100%-refutable claim): off-topic-but-score-

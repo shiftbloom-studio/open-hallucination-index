@@ -1,4 +1,4 @@
-"""Stream F end-of-phase smoke — plan §5.3 phase 4 tier 2.
+"""Stream F end-of-phase smoke - plan §5.3 phase 4 tier 2.
 
 Asserts signal quality on both Marie-Curie positive and Antarctica
 negative inputs. Per the plan, the gate requires:
@@ -8,7 +8,7 @@ negative inputs. Per the plan, the gate requires:
 - No claim has fallback_used == "general" on either input.
 
 The "no general fallback" assertion is a CALIBRATION prerequisite (plan
-§7.6 / checkpoint §2.1 — InMemoryCalibrationStore is empty so every
+§7.6 / checkpoint §2.1 - InMemoryCalibrationStore is empty so every
 claim falls into the 'general' stratum). That's Phase 4 work, beyond
 Stream F's scope. We assert it and report it, but call the overall
 gate PASS-WITH-CAVEAT when the only failing assertion is the
@@ -110,7 +110,7 @@ def _evaluate(label: str, body: dict[str, Any], direction: str) -> tuple[list[st
                 f"p_true={p_trues} refute={refute_counts}"
             )
 
-    # "No claim has fallback_used == 'general'" — classified SOFT because
+    # "No claim has fallback_used == 'general'" - classified SOFT because
     # this depends on calibration data (Phase 4, out of Stream F scope).
     general_fallbacks = [fb for fb in fallbacks if fb == "general"]
     if general_fallbacks:

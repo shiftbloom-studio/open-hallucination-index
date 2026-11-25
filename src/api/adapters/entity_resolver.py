@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — runtime entity resolver.
+"""Wave 3 Stream C - runtime entity resolver.
 
 Maps claim subjects/objects to Wikidata QIDs at verify time. Used by
 the ClaimClaimNliDispatcher's entity-overlap short-circuit
@@ -10,7 +10,7 @@ Resolution strategy (stage order):
 1. **Exact-label lookup** via Cypher:
    ``MATCH (e:Entity {label_lower: $t}) RETURN e.qid``. Fast,
    unambiguous when the claim text literally matches a Wikidata label.
-2. **Vector lookup** on the Aura entity vector index (Decision K —
+2. **Vector lookup** on the Aura entity vector index (Decision K -
    no Qdrant hop). Embeds the claim text, runs
    ``CALL db.index.vector.queryNodes('entity_embeddings', $k, $vec)``,
    returns top-K QIDs above the cosine-similarity threshold.

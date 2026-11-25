@@ -4,7 +4,7 @@ Some setups run multiple worktrees against a single shared ``.venv`` whose
 editable install points at the MAIN checkout's ``src/api`` tree. Any
 test that imports ``from interfaces.*`` / ``from pipeline.*`` / etc.
 without first inserting THIS worktree's ``src/api`` on ``sys.path``
-would silently resolve against the main checkout — producing either a
+would silently resolve against the main checkout - producing either a
 stale Pipeline signature (missing newly-added kwargs) or, worse, a
 test that passes against code that was never written in this worktree.
 
@@ -15,7 +15,7 @@ test file in this subtree loads. It:
    ``from interfaces.*`` resolves here first.
 2. Purges every already-cached flat-namespace sibling package
    (``adapters``, ``interfaces``, ``models``, ``pipeline``, ``config``,
-   ``server``, ``services``) from ``sys.modules`` — the editable
+   ``server``, ``services``) from ``sys.modules`` - the editable
    install may have populated them during pytest's own bootstrap, and
    those entries would shadow the fresh re-resolution.
 
@@ -25,7 +25,7 @@ braces second layer so the tests also work when run from directories
 where this conftest isn't in scope. Those file-level purges should
 guard themselves against re-purging a cache that's already from this
 worktree (see ``tests/unit/pipeline/test_compute_posteriors.py`` for
-the canonical guarded pattern) — otherwise a second purge re-creates
+the canonical guarded pattern) - otherwise a second purge re-creates
 the module objects and breaks earlier test files' ``is`` identity
 assertions.
 """

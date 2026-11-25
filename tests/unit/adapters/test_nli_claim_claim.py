@@ -1,4 +1,4 @@
-"""Wave 3 Stream P — ClaimClaimNliDispatcher tests.
+"""Wave 3 Stream P - ClaimClaimNliDispatcher tests.
 
 Stubbed primary + fallback; asserts fallback-firing, overlap filter,
 and hard-cap behaviours.
@@ -94,7 +94,7 @@ async def test_dispatcher_primary_success_does_not_call_fallback() -> None:
     ca = _claim("a")
     cb = _claim("b")
     result = await d.classify_pairs([ca, cb])
-    # One pair — primary called once, fallback not at all.
+    # One pair - primary called once, fallback not at all.
     assert len(primary.calls) == 1
     assert len(fallback.calls) == 0
     assert result.fallback_fired_count == 0

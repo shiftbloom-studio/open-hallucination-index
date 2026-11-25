@@ -1,8 +1,8 @@
 """Thin wrapper around boto3 SecretsManager with TTL cache + bootstrap-grace.
 
 Two failure modes:
-- `ConfigurationError` — critical secret missing; Lambda cold-start fails loudly.
-- `BootstrapGraceSecret` — specific secrets that are legitimately empty between
+- `ConfigurationError` - critical secret missing; Lambda cold-start fails loudly.
+- `BootstrapGraceSecret` - specific secrets that are legitimately empty between
   `secrets/` apply and `cloudflare/` apply (spec §4.3); callers that raise this
   should return 503 `{"status":"bootstrapping"}` rather than 500.
 

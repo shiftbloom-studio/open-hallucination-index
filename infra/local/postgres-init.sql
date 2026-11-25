@@ -1,4 +1,4 @@
--- OHI v2 — local dev schema. Mirrors spec §12
+-- OHI v2 - local dev schema. Mirrors spec §12
 -- (the v2 design notes (internal)).
 
 CREATE TABLE IF NOT EXISTS verifications (

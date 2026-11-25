@@ -1,16 +1,16 @@
 """Gemini 3 Pro NLI adapter (Phase 2 Task 2.1 / plan §4.2).
 
-Composes over an existing :class:`~interfaces.llm.LLMProvider` — typically
+Composes over an existing :class:`~interfaces.llm.LLMProvider` - typically
 the native :class:`~adapters.gemini.GeminiLLMAdapter` running Gemini 3 Pro
-with ``thinkingLevel=HIGH`` and ``safetySettings=BLOCK_NONE`` — and layers
+with ``thinkingLevel=HIGH`` and ``safetySettings=BLOCK_NONE`` - and layers
 three NLI-specific concerns on top:
 
-1. **Prompt** — the strict-JSON NLI prompt from plan §4.2.
-2. **Retries + fallback** — transport and JSON-decode errors are retried
+1. **Prompt** - the strict-JSON NLI prompt from plan §4.2.
+2. **Retries + fallback** - transport and JSON-decode errors are retried
    up to ``max_retries`` times; a terminal failure returns a neutral
    ``NliResult`` rather than bubbling up (the pipeline's posterior update
    must keep going even when one evidence passage can't be classified).
-3. **Self-consistency** — when ``self_consistency_k > 1``, the adapter
+3. **Self-consistency** - when ``self_consistency_k > 1``, the adapter
    draws K samples at ``temperature=0.2``, majority-votes the label, and
    averages scores within the winning label before renormalising.
 
@@ -38,18 +38,18 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Prompt — v2 decisive variant (post Einstein-Russia tuning). The v1 prompt
+# Prompt - v2 decisive variant (post Einstein-Russia tuning). The v1 prompt
 # was deliberately symmetric and terse; Gemini 3 Pro hedged to "neutral"
 # whenever the passage didn't literally quote the claim, which let
 # obviously-refutable claims ("Einstein was born in Russia") settle at
-# p_true ≈ 0.33 — too soft, and close to "uncertain" when the truth value
+# p_true ≈ 0.33 - too soft, and close to "uncertain" when the truth value
 # is not uncertain at all. v2 forces a decisive 3-way choice: passages
 # that provide a *contradicting fact* are REFUTE, not NEUTRAL; NEUTRAL is
 # reserved for genuinely off-topic text.
 #
 # Paired with a pipeline-side change: ``label="neutral"`` results are now
 # skipped from the Beta-posterior fold (``_beta_update_from_nli`` in
-# pipeline.py). The prompt and the fold rule must stay in lockstep — if
+# pipeline.py). The prompt and the fold rule must stay in lockstep - if
 # one is loosened, off-topic tilt starts leaking into the posterior again.
 # ---------------------------------------------------------------------------
 
@@ -59,12 +59,12 @@ truly NEUTRAL with respect to the claim.
 
 Decision rules (apply in order):
 
-1. SUPPORT — the evidence confirms the claim's central assertion,
+1. SUPPORT - the evidence confirms the claim's central assertion,
    either by explicitly stating it or by providing facts from which a
    reasonable reader would conclude the claim is true. Use SUPPORT
    whenever the evidence is on-topic and consistent with the claim.
 
-2. REFUTE — the evidence contradicts the claim, EITHER directly ("X
+2. REFUTE - the evidence contradicts the claim, EITHER directly ("X
    did not do Y") OR by providing facts that are **mutually exclusive**
    with the claim. Example: evidence "Albert Einstein was born in Ulm,
    Germany in 1879" REFUTES the claim "Einstein was born in Russia",
@@ -76,12 +76,12 @@ Decision rules (apply in order):
    or biography for that person without support for that invention,
    classify as REFUTE (not NEUTRAL).
 
-3. NEUTRAL — reserved ONLY for passages that do not address the claim's
+3. NEUTRAL - reserved ONLY for passages that do not address the claim's
    subject-predicate-object at all. Example: "Einstein won the Nobel
    Prize in Physics in 1921" is NEUTRAL with respect to the claim
-   "Einstein was born in Russia" — the Nobel fact is on a different
+   "Einstein was born in Russia" - the Nobel fact is on a different
    predicate and neither confirms nor contradicts the birthplace claim.
-   NEUTRAL is NOT for "I am uncertain" — if you can infer SUPPORT or
+   NEUTRAL is NOT for "I am uncertain" - if you can infer SUPPORT or
    REFUTE from the evidence, you MUST pick one of those.
 
 Score guidance:
@@ -114,7 +114,7 @@ Evidence: "{evidence_text}"
 
 _VALID_LABELS: frozenset[str] = frozenset({"support", "refute", "neutral"})
 
-# Sentinel returned when every retry is exhausted — the pipeline's posterior
+# Sentinel returned when every retry is exhausted - the pipeline's posterior
 # update must keep going even when one evidence passage can't be classified.
 _NLI_UNAVAILABLE_REASON = "nli_unavailable"
 
@@ -173,7 +173,7 @@ class NliGeminiAdapter:
     async def _single_pass_with_retry(self, messages: list[LLMMessage]) -> NliResult:
         """One NLI classification with up to ``max_retries`` attempts.
 
-        Catches every exception — transport, JSON parse, validation —
+        Catches every exception - transport, JSON parse, validation -
         because the pipeline must not crash on a flaky LLM. The terminal
         failure returns the ``_NEUTRAL_FALLBACK`` sentinel.
         """
@@ -186,7 +186,7 @@ class NliGeminiAdapter:
                     json_mode=True,
                 )
                 return _parse_result(response.content)
-            except Exception as exc:  # noqa: BLE001 — we really do want "everything"
+            except Exception as exc:  # noqa: BLE001 - we really do want "everything"
                 last_exc = exc
                 logger.warning(
                     "NLI attempt %d/%d failed: %s",
@@ -195,7 +195,7 @@ class NliGeminiAdapter:
                     exc,
                 )
         logger.error(
-            "NLI terminal failure after %d retries (last error: %s) — returning neutral fallback",
+            "NLI terminal failure after %d retries (last error: %s) - returning neutral fallback",
             self._max_retries,
             last_exc,
         )
@@ -245,7 +245,7 @@ def _aggregate_samples(samples: list[NliResult]) -> NliResult:
     winning bucket; renormalise so the 3 scores sum to 1.
 
     Ties fall back to the ``Counter.most_common`` ordering, which
-    preserves first-seen on equal counts — deterministic given stable
+    preserves first-seen on equal counts - deterministic given stable
     sample order. In practice ties are rare at K=3/5 with a calibrated
     NLI model and the pipeline just consumes whichever label wins.
     """
@@ -264,7 +264,7 @@ def _aggregate_samples(samples: list[NliResult]) -> NliResult:
     avg_confidence = sum(s.confidence for s in winners) / n
     if avg_confidence < _LOW_CONFIDENCE_FLOOR:
         avg_confidence = 0.0
-    # Surface the reasoning from the most confident winner — still
+    # Surface the reasoning from the most confident winner - still
     # grounded in the winning label, unlike a free pick across buckets.
     best_winner = max(winners, key=lambda s: s.confidence)
     return NliResult(

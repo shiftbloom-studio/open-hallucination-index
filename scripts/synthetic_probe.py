@@ -1,4 +1,4 @@
-"""Wave 3 Stream G.1 — synthetic probe.
+"""Wave 3 Stream G.1 - synthetic probe.
 
 Periodically POSTs a known good claim to ``/api/v2/verify``, polls
 until terminal, and asserts the verdict shape + PCG observability.
@@ -13,9 +13,9 @@ Used by:
   behaviour.
 
 Reads configuration from env:
-* ``OHI_API_URL``       — base URL (default ``https://ohi-api.shiftbloom.studio``)
-* ``OHI_EDGE_SECRET``   — X-OHI-Edge-Secret header value (required)
-* ``PROBE_CLAIM_TEXT``  — override the default Marie-Curie claim text
+* ``OHI_API_URL`` - base URL (default ``https://ohi-api.shiftbloom.studio``)
+* ``OHI_EDGE_SECRET`` - X-OHI-Edge-Secret header value (required)
+* ``PROBE_CLAIM_TEXT`` - override the default Marie-Curie claim text
 
 CLI:
 * ``--duration``  total seconds to run (default 600 = 10 min)
@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
                 total_failures += 1
                 if consecutive_failures >= args.max_failures:
                     print(
-                        f"::error::{consecutive_failures} consecutive probe failures — "
+                        f"::error::{consecutive_failures} consecutive probe failures - "
                         f"early exit after {total_probes} probes",
                         file=sys.stderr,
                     )

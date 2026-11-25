@@ -1,4 +1,4 @@
-# Open Hallucination Index — Frontend Documentation
+# Open Hallucination Index - Frontend Documentation
 
 > **Status:** Next.js 16 static export served by Cloudflare Worker Static Assets at `https://ohi.shiftbloom.studio`.
 > The browser talks to the same origin API at `https://ohi.shiftbloom.studio/api/v2`.

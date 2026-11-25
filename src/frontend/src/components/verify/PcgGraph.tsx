@@ -33,7 +33,7 @@ interface GraphLink {
 }
 
 // Saturated brand accents for 3D viewport (three.js lighting tends to wash
-// out soft colours — 600-weight values keep the node bands distinguishable
+// out soft colours - 600-weight values keep the node bands distinguishable
 // over the ambient light).
 function bandColor(pTrue: number): string {
   if (pTrue >= 0.8) return "#059669"; // brand-success

@@ -1,4 +1,4 @@
-"""Wave 3 Stream P — verdict JSON extensions for PCG observability.
+"""Wave 3 Stream P - verdict JSON extensions for PCG observability.
 
 Adds a ``pcg`` sub-object on each ``ClaimVerdict`` surfacing the
 probabilistic-claim-graph provenance so consumers (frontend BP badge,
@@ -22,7 +22,7 @@ class PCGObservability(BaseModel):
     """Per-claim provenance of the L4 PCG inference pass.
 
     All fields are authoritative facts about how the posterior was
-    produced — no derived metrics, no humanised labels. Consumers map
+    produced - no derived metrics, no humanised labels. Consumers map
     to UI copy (e.g. ``LBP-nonconvergent`` → "approximate verdict").
 
     ``log_partition_bound`` is only meaningful when
@@ -33,7 +33,7 @@ class PCGObservability(BaseModel):
     marginal delta observed, so downstream analysis can rank
     severity. ``cc_nli_fallback_fired_count`` is the number of
     claim-claim pairs whose OpenAI primary failed and whose Gemini
-    fallback was invoked during this verify — surfaces cost + signal
+    fallback was invoked during this verify - surfaces cost + signal
     drift concerns.
     """
 

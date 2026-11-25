@@ -1,4 +1,4 @@
-"""Wave 3 Stream P — factor-graph construction tests."""
+"""Wave 3 Stream P - factor-graph construction tests."""
 
 from __future__ import annotations
 

@@ -1,16 +1,16 @@
-"""Wave 3 Stream G.2 — FEVER slice runner (Decision G).
+"""Wave 3 Stream G.2 - FEVER slice runner (Decision G).
 
 Reads a small FEVER slice fixture from disk, runs each claim through
 the live API, and reports accuracy as a signal metric (not blocking).
 Commits ``docs/benchmarks/v2.0-public-benchmark.md`` as the published
 artifact.
 
-Fixture: ``tests/benchmark/fixtures/fever_slice.jsonl`` — one JSON
+Fixture: ``tests/benchmark/fixtures/fever_slice.jsonl`` - one JSON
 object per line with fields ``claim``, ``label`` (``SUPPORTS`` /
 ``REFUTES`` / ``NOT ENOUGH INFO``). 50-claim slice keeps the benchmark
 fast enough for CI; full FEVER evaluation is a separate offline run.
 
-This module is a **CLI**, not a pytest test — it runs from the
+This module is a **CLI**, not a pytest test - it runs from the
 gate workflow and writes its report. ``tests/benchmark`` is on the
 pytest path but this file doesn't expose a ``test_*`` function.
 """
@@ -109,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
 
     acc = correct / max(total, 1)
     lines = [
-        "# v2.0 Public Benchmark — FEVER slice",
+        "# v2.0 Public Benchmark - FEVER slice",
         "",
         f"Generated: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}",
         "",

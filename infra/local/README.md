@@ -29,7 +29,7 @@ Services:
 The `minio-init` one-shot container creates the `ohi-artifacts` bucket +
 subfolders the moment MinIO is healthy.
 
-### Credentials (local dev only — do not reuse elsewhere)
+### Credentials (local dev only - do not reuse elsewhere)
 
 - Postgres: `ohi` / `ohi-local-dev`, database `ohi`
 - MinIO root: `ohi-local` / `ohi-local-dev-key`
@@ -45,9 +45,9 @@ pytest tests/infra/ -v -m infra
 
 Both tests should PASS:
 
-- `test_postgres_reachable_with_required_schemas` — Postgres is up and every
+- `test_postgres_reachable_with_required_schemas` - Postgres is up and every
   spec §12 table exists in the `public` schema.
-- `test_minio_reachable_with_required_buckets` — MinIO is up and the
+- `test_minio_reachable_with_required_buckets` - MinIO is up and the
   `ohi-artifacts` bucket exists.
 
 ## Tear down

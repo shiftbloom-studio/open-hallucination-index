@@ -48,5 +48,5 @@ def test_edge_secret_middleware_not_registered_when_env_unset(monkeypatch):
 
     client = TestClient(app_module.app)
     r = client.get("/health/ready")
-    # Should not be 403 — middleware is not active
+    # Should not be 403 - middleware is not active
     assert r.status_code != 403

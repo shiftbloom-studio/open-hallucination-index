@@ -151,7 +151,7 @@ async def test_orchestrator_model_versions_populated() -> None:
         conformal=SplitConformalCalibrator(InMemoryCalibrationStore()),
     )
     dv = await pipeline.verify("Some text.")
-    # Phase 1 placeholders show up explicitly — callers can see the
+    # Phase 1 placeholders show up explicitly - callers can see the
     # pipeline hasn't graduated to real layers yet.
     assert "phase1" in dv.model_versions["pcg"]
     assert "phase1" in dv.model_versions["domain_router"]

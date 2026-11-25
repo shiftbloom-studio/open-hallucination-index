@@ -2,7 +2,7 @@
 
 Docker build contexts and compose stacks for the Open Hallucination
 Index. This directory is NOT the authoritative source for
-architecture — see
+architecture - see
 [docs/CURRENT_ARCHITECTURE.md](../docs/CURRENT_ARCHITECTURE.md) for
 the SSoT on what runs where in production vs. local dev.
 
@@ -38,7 +38,7 @@ Qdrant and friends on your own machine.
 ### Local dev
 
 ```bash
-# Host-ports-exposed overlay for local dev — skips cloudflared, binds
+# Host-ports-exposed overlay for local dev - skips cloudflared, binds
 # 127.0.0.1:7474 etc..
 docker compose -f docker/compose/pc-data.yml \
   -f docker/compose/pc-data.local-dev.yml \
@@ -60,6 +60,6 @@ See [docs/runbooks/pc-compose-start.md](../docs/runbooks/pc-compose-start.md).
 
 ## Related docs
 
-- [../docs/CURRENT_ARCHITECTURE.md](../docs/CURRENT_ARCHITECTURE.md) — **SSoT** for topology
-- [../docs/runbooks/pc-compose-start.md](../docs/runbooks/pc-compose-start.md) — PC stack bring-up
-- [../docs/runbooks/rollback-deploy.md](../docs/runbooks/rollback-deploy.md) — Worker rollback
+- [../docs/CURRENT_ARCHITECTURE.md](../docs/CURRENT_ARCHITECTURE.md) - **SSoT** for topology
+- [../docs/runbooks/pc-compose-start.md](../docs/runbooks/pc-compose-start.md) - PC stack bring-up
+- [../docs/runbooks/rollback-deploy.md](../docs/runbooks/rollback-deploy.md) - Worker rollback

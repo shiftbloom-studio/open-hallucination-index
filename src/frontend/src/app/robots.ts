@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-// Required by `output: 'export'` — mark as a static asset.
+// Required by `output: 'export'` - mark as a static asset.
 export const dynamic = "force-static";
 
 const siteUrl =

@@ -2,14 +2,14 @@
 
 OHI v2 is open-access; unauthenticated callers submit arbitrary text.
 To minimise the PII/GDPR surface, raw input text is NOT persisted by
-default — only the ``sha256(text)`` cache key and the resulting
+default - only the ``sha256(text)`` cache key and the resulting
 ``DocumentVerdict`` hit Postgres / Redis.
 
 Retention opt-in lives in the ``?retain=true`` query parameter. The
 middleware reads it on every request, stamps ``request.state.retain_text``,
 and downstream storage (verdict_store, feedback_store) respects the flag.
 
-This middleware deliberately does no other work on the request path —
+This middleware deliberately does no other work on the request path -
 the actual enforcement happens at the storage boundary, not here. Its
 sole purpose is to surface the retention decision explicitly so policy
 doesn't leak into route handlers.

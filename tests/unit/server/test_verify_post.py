@@ -67,7 +67,7 @@ def verify_client(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, dict[str, Any]]
     touching AWS.
 
     Patching the module-level ``_jobs`` binding ensures we target the
-    same object ``server.routes.verify`` imported — necessary because a
+    same object ``server.routes.verify`` imported - necessary because a
     conftest-triggered sys.modules purge between collection and test
     runtime can otherwise leave us patching a different ``server.jobs``
     module than the one the route uses.
@@ -81,7 +81,7 @@ def verify_client(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, dict[str, Any]]
         "fail": [],
     }
 
-    # Per-test override of the invoke status — defaults to 202 (success)
+    # Per-test override of the invoke status - defaults to 202 (success)
     # so existing happy-path tests see a successful async accept. The
     # non-202-rejection test below flips it to 429 to exercise the
     # failure path introduced in Stream D3.

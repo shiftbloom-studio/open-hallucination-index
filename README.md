@@ -1,7 +1,7 @@
 <h1 align="center">Open Hallucination Index</h1>
 
 <p align="center">
-  <strong>Grounded fact-checking for LLM outputs — with calibrated uncertainty.</strong>
+  <strong>Grounded fact-checking for LLM outputs - with calibrated uncertainty.</strong>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 **Open Hallucination Index (OHI)** decomposes LLM output into atomic
 claims, retrieves real evidence for each, and returns a calibrated
 `p_true ∈ [0, 1]` with a confidence interval. The goal is a traceable,
-reproducible, open-source alternative to black-box "trust scores" — one
+reproducible, open-source alternative to black-box "trust scores" - one
 where every verdict is backed by citable evidence and every number has
 a published calibration methodology.
 
@@ -279,15 +279,15 @@ opening high-volume public traffic.
 
 ## Documentation
 
-- [docs/API.md](docs/API.md) — v2 API reference (endpoints, schemas,
+- [docs/API.md](docs/API.md) - v2 API reference (endpoints, schemas,
   polling flow, rigor tiers)
-- [docs/FRONTEND.md](docs/FRONTEND.md) — frontend architecture (static
+- [docs/FRONTEND.md](docs/FRONTEND.md) - frontend architecture (static
   Next.js export, polling state machine, design system)
-- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — contribution process
-- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — community standards
-- [docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md) — public access framework
-- [docs/runbooks/](docs/runbooks/) — legacy and operational runbooks
-- [AGENTS.md](AGENTS.md) — operational knowledge (gotchas, agent instructions)
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) - contribution process
+- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) - community standards
+- [docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md) - public access framework
+- [docs/runbooks/](docs/runbooks/) - legacy and operational runbooks
+- [AGENTS.md](AGENTS.md) - operational knowledge (gotchas, agent instructions)
 
 
 ---
@@ -321,21 +321,21 @@ Security issues: see [SECURITY.md](SECURITY.md).
 
 ## License
 
-AGPL-3.0-or-later — see [LICENSE](LICENSE). If you run a modified version as a
+AGPL-3.0-or-later - see [LICENSE](LICENSE). If you run a modified version as a
 network service, publish your changes under the same license.
 
 ---
 
 ## Acknowledgments
 
-- [**FastAPI**](https://fastapi.tiangolo.com/) — Python API framework
-- [**Next.js**](https://nextjs.org/) — React framework for the frontend
-- [**Cloudflare Workers**](https://developers.cloudflare.com/workers/) — hosted frontend, API, health, and MCP runtime
-- [**Cloudflare Workers AI**](https://developers.cloudflare.com/workers-ai/) — decomposer, NLI, embeddings, and reranker
-- [**Cloudflare D1**](https://developers.cloudflare.com/d1/) — job mirror, feedback, and evidence cache
-- [**Cloudflare Vectorize**](https://developers.cloudflare.com/vectorize/) — evidence vector index
-- [**Cloudflare Queues**](https://developers.cloudflare.com/queues/) — async verification jobs
-- [**MCP** (Anthropic)](https://modelcontextprotocol.io/) — Model
+- [**FastAPI**](https://fastapi.tiangolo.com/) - Python API framework
+- [**Next.js**](https://nextjs.org/) - React framework for the frontend
+- [**Cloudflare Workers**](https://developers.cloudflare.com/workers/) - hosted frontend, API, health, and MCP runtime
+- [**Cloudflare Workers AI**](https://developers.cloudflare.com/workers-ai/) - decomposer, NLI, embeddings, and reranker
+- [**Cloudflare D1**](https://developers.cloudflare.com/d1/) - job mirror, feedback, and evidence cache
+- [**Cloudflare Vectorize**](https://developers.cloudflare.com/vectorize/) - evidence vector index
+- [**Cloudflare Queues**](https://developers.cloudflare.com/queues/) - async verification jobs
+- [**MCP** (Anthropic)](https://modelcontextprotocol.io/) - Model
   Context Protocol for knowledge-source aggregation
 
 ---

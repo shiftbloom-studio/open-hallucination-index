@@ -9,10 +9,10 @@ evidence ``classify()`` calls run concurrently under a
 1. Support-leaning NLI results push ``p_true`` notably above 0.5.
 2. Refute-leaning NLI results push ``p_true`` notably below 0.5.
 3. In-flight concurrency never exceeds 10 (the Semaphore cap), and at
-   least one over-subscribed claim does observe >1 concurrent call —
+   least one over-subscribed claim does observe >1 concurrent call -
    proving the gather is actually parallel, not accidentally serial.
 4. Both ``reasoning == "nli_unavailable"`` sentinels AND ``label ==
-   "neutral"`` results are *skipped*, not folded into the Beta fold —
+   "neutral"`` results are *skipped*, not folded into the Beta fold -
    a down LLM and an off-topic classification must both leave the
    posterior at the uniform prior (post-v2.0 Einstein-Russia bug:
    off-topic-but-tilted neutrals were accumulating noise; the fix
@@ -38,14 +38,14 @@ if str(_SRC_API) not in sys.path:
 # loads ``interfaces`` / ``adapters`` / ``pipeline`` from there into
 # sys.modules. The sys.path insert above would then be too late because
 # subsequent ``from pipeline.pipeline import ...`` reuses the cached
-# package and walks its frozen ``__path__`` — which points at the main
+# package and walks its frozen ``__path__`` - which points at the main
 # checkout's pipeline/, where this worktree's new Pipeline signature
 # (``nli_adapter=`` kwarg) does NOT yet exist.
 #
 # The canonical snippet (per ``tests/unit/adapters/test_nli_gemini.py``
 # header) unconditionally purges the flat-namespace packages. We adopt
 # the same list verbatim, but skip the purge when ``interfaces`` is
-# *already* resolved to this worktree — doing it twice in one session
+# *already* resolved to this worktree - doing it twice in one session
 # re-creates the module objects after Stream B's ``test_nli_gemini.py``
 # has already bound ``NliAdapter``, which would break Stream B's
 # ``interfaces_pkg.NliAdapter is NliAdapter`` identity assertion.
@@ -69,7 +69,7 @@ if _cached_iface is None or str(_SRC_API) not in _cached_iface_file:
 import asyncio  # noqa: E402
 from uuid import uuid4  # noqa: E402
 
-# ruff: noqa: I001  — ordering below is deliberate; must follow the
+# ruff: noqa: I001 - ordering below is deliberate; must follow the
 # sys.path insert above.
 from interfaces.nli import NliResult  # noqa: E402
 from models.domain import DomainAssignment  # noqa: E402
@@ -84,7 +84,7 @@ from pipeline.pipeline import Pipeline  # noqa: E402
 
 
 class _StubDecomposer:
-    """Minimal decomposer stub — ``_compute_posteriors`` never calls it,
+    """Minimal decomposer stub - ``_compute_posteriors`` never calls it,
     but Pipeline's ctor requires one."""
 
     async def decompose(self, text: str) -> list[Claim]:  # pragma: no cover
@@ -100,7 +100,7 @@ class _StubDecomposer:
 
 
 class _StubConformal:
-    """Minimal conformal stub — ``_compute_posteriors`` never calls it,
+    """Minimal conformal stub - ``_compute_posteriors`` never calls it,
     but Pipeline's ctor requires one."""
 
     async def calibrate(self, **kwargs: object) -> object:  # pragma: no cover
@@ -207,7 +207,7 @@ def _asymmetric_neutral_result() -> NliResult:
 
     Post-v2.0 semantic change: even such a tilted neutral is skipped
     from the Beta fold (same rule as the ``nli_unavailable`` sentinel)
-    — the label governs whether we fold at all. The asymmetric scores
+    - the label governs whether we fold at all. The asymmetric scores
     are retained here so the test can still distinguish "skipped with
     tilt" from "skipped with zero mass": both must leave the posterior
     at the uniform prior.
@@ -265,7 +265,7 @@ async def test_supporting_evidence_pushes_p_true_above_uniform_prior() -> None:
     # All three evidence classifications observed.
     assert len(stub.calls) == 3
     # All 3 classifications used _support_result() whose label is
-    # "support" — buckets[claim.id] = (supporting, refuting) must be
+    # "support" - buckets[claim.id] = (supporting, refuting) must be
     # (3 items, 0 items).
     supporting, refuting = buckets[claim.id]
     assert len(supporting) == 3
@@ -294,7 +294,7 @@ async def test_refuting_evidence_pushes_p_true_below_uniform_prior() -> None:
     assert belief.p_false == pytest.approx(1.0 - belief.p_true)
     assert len(stub.calls) == 3
     # All 3 classifications used _refute_result() whose label is
-    # "refute" — buckets should mirror: (0 support, 3 refute).
+    # "refute" - buckets should mirror: (0 support, 3 refute).
     supporting, refuting = buckets[claim.id]
     assert len(supporting) == 0
     assert len(refuting) == 3
@@ -304,7 +304,7 @@ async def test_semaphore_caps_in_flight_nli_calls_at_ten() -> None:
     """With more than 10 (claim, evidence) pairs fanning out under
     ``asyncio.gather``, the pipeline's internal ``Semaphore(10)`` must
     hold the high-water in-flight count to ≤ 10. We also want that
-    high-water to be strictly greater than 1 — otherwise the test
+    high-water to be strictly greater than 1 - otherwise the test
     would pass even on a fully-serialised implementation."""
     claim = _claim("c")
     evidence = [_evidence(f"ev-{i}") for i in range(25)]
@@ -325,7 +325,7 @@ async def test_semaphore_caps_in_flight_nli_calls_at_ten() -> None:
     assert stub.max_in_flight <= 10, (
         f"Semaphore should cap concurrency at 10, observed {stub.max_in_flight}"
     )
-    # And the pipeline actually ran in parallel — not a hidden serial loop.
+    # And the pipeline actually ran in parallel - not a hidden serial loop.
     assert stub.max_in_flight > 1, (
         f"Expected concurrent classify calls, observed only {stub.max_in_flight}"
     )
@@ -383,7 +383,7 @@ async def test_neutral_label_and_unavailable_sentinel_are_both_skipped_from_beta
 
     # Label=neutral path (asymmetric tilt s=0.4, r=0.1): classified 3×
     # but ALL THREE skipped from Beta fold despite the nonzero score
-    # tilt — the label is what gates folding. Posterior also sits at
+    # tilt - the label is what gates folding. Posterior also sits at
     # uniform prior. Buckets still empty (neutrals not shown in either
     # supporting_evidence or refuting_evidence).
     assert len(stub_neutral.calls) == 3

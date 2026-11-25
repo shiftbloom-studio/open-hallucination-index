@@ -65,7 +65,7 @@ async def test_phase1_empty_store_emits_general_fallback() -> None:
 @pytest.mark.asyncio
 async def test_stratum_below_minimum_still_triggers_fallback() -> None:
     """Adding 20 entries (below the 50-entry minimum) still returns the
-    general fallback — we don't cheat by emitting "tight" intervals
+    general fallback - we don't cheat by emitting "tight" intervals
     from an underpowered calibration set."""
     store = InMemoryCalibrationStore()
     for _ in range(20):
@@ -88,7 +88,7 @@ async def test_stratum_below_minimum_still_triggers_fallback() -> None:
 async def test_populated_store_emits_real_interval() -> None:
     """With 100 well-calibrated entries, the interval should actually
     shrink around the posterior. Not a strict coverage test (we need
-    more samples for that) — just that the `fallback_used` flag is off
+    more samples for that) - just that the `fallback_used` flag is off
     and the interval is narrower than [0, 1]."""
     store = InMemoryCalibrationStore()
     rng = random.Random(42)

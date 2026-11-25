@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — vector-only Qdrant passage search (Decision K).
+"""Wave 3 Stream C - vector-only Qdrant passage search (Decision K).
 
 Qdrant stores payload ``{passage_id, qid}`` only. Search returns
 passage IDs; callers hop to Aura to fetch text + article context.

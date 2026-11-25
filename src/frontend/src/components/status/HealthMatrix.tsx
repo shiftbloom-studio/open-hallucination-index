@@ -26,7 +26,7 @@ export function HealthMatrix({ data, className }: HealthMatrixProps) {
       <header className="border-b border-[color:var(--border-subtle)] bg-[color:var(--surface-soft)]/45 px-5 py-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-[color:var(--brand-ink)]">
-            System health — <span className="font-mono text-[color:var(--brand-muted)]">{overall}</span>
+            System health - <span className="font-mono text-[color:var(--brand-muted)]">{overall}</span>
           </h2>
           <span className="font-mono text-[10px] text-[color:var(--brand-subtle)]">{data.timestamp}</span>
         </div>

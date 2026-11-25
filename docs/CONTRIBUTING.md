@@ -50,7 +50,7 @@ Do not run these on a first evening (they touch production):
 
 ### Bindings and secrets without production credentials
 
-`wrangler.jsonc` does not set `remote: true` on bindings. Local `wrangler dev` therefore uses local simulations for D1 (`OHI_DB`), R2 (`OHI_CORPUS`), Queues, Durable Objects, and Workflows — empty, not a copy of prod. Vectorize (`OHI_VECTOR`) has no local simulation. Workers AI (`AI`) is not a local model; calls go to Cloudflare when you are authenticated.
+`wrangler.jsonc` does not set `remote: true` on bindings. Local `wrangler dev` therefore uses local simulations for D1 (`OHI_DB`), R2 (`OHI_CORPUS`), Queues, Durable Objects, and Workflows - empty, not a copy of prod. Vectorize (`OHI_VECTOR`) has no local simulation. Workers AI (`AI`) is not a local model; calls go to Cloudflare when you are authenticated.
 
 `ADMIN_TOKEN` and `TURNSTILE_SECRET_KEY` are Worker secrets, not `wrangler.jsonc` vars. Do not put production values in the repo.
 
@@ -60,7 +60,7 @@ Without those secrets, the code fails closed or skips as follows (`cloudflare/oh
 - `TURNSTILE_SECRET_KEY` missing: `rejectIfAbusive` skips the Turnstile check and does not challenge the request
 - `GET /health/live`: no bindings required
 - `GET /health/ready`: probes local D1 and Durable Objects; it marks Workers AI and Vectorize as `configured` without calling them
-- `GET /health/deep`: actually calls Workers AI, Wikipedia, and Vectorize — expect `degraded` locally when Vectorize/AI are not remote
+- `GET /health/deep`: actually calls Workers AI, Wikipedia, and Vectorize - expect `degraded` locally when Vectorize/AI are not remote
 
 Do not publish secrets. Do not try to bypass the production WAF or Turnstile.
 

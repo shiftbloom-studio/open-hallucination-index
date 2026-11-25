@@ -1,7 +1,7 @@
 """Integration tests for the async POST /api/v2/verify surface (D2).
 
 Pre-D2 this file tested the blocking /verify that returned a
-DocumentVerdict. Post-D2 (plan §5.2) POST is a 202 producer — the
+DocumentVerdict. Post-D2 (plan §5.2) POST is a 202 producer - the
 pipeline runs on a self-async-invoke, not on the request thread.
 
 What still matches the pre-D2 file:
@@ -12,7 +12,7 @@ What still matches the pre-D2 file:
 What changed:
 * Success is 202 + ``{"job_id": "<uuid>"}``, not 200 + DocumentVerdict.
 * There is no "pipeline failure → 503" path from POST /verify
-  anymore — the pipeline only runs inside the async handler.
+  anymore - the pipeline only runs inside the async handler.
 * Retention is enforced at the ``jobs.create_job`` write, not at
   ``verdict_store.put``. Retain=false → DynamoDB record has text="".
 
@@ -41,7 +41,7 @@ if str(_SRC_API) not in sys.path:
 # the cached flat packages so the imports below reload from this
 # worktree; guard on ``interfaces`` so we don't re-purge a cache that's
 # already correct (which would break earlier files' bound class
-# identities — see D1 handoff §6 for the symptom).
+# identities - see D1 handoff §6 for the symptom).
 _FLAT_PACKAGES = {
     "adapters",
     "interfaces",
@@ -65,7 +65,7 @@ from models.results import DocumentVerdict  # noqa: E402
 from server.app import create_app  # noqa: E402
 
 # Import jobs at module level so the binding shares identity with the
-# `from server import jobs` in server.routes.verify — if we imported it
+# `from server import jobs` in server.routes.verify - if we imported it
 # inside the fixture, a tests/unit conftest purge that ran between
 # collection and runtime could leave us patching a DIFFERENT server.jobs
 # module than the one the route uses.
@@ -91,7 +91,7 @@ def jobs_env(monkeypatch: pytest.MonkeyPatch) -> _JobsRecorder:
     ``server.routes.async_verify`` hold under their own ``jobs`` name.
 
     ``fake_async_invoke`` returns 202 to mirror a healthy async-queue
-    accept — D3 added a StatusCode check on the POST handler so any
+    accept - D3 added a StatusCode check on the POST handler so any
     non-202 is treated as an async-invoke failure."""
     recorder = _JobsRecorder()
 
@@ -136,13 +136,13 @@ class _DummyPipeline:
 
     async def verify(self, *args: Any, **kwargs: Any) -> DocumentVerdict:
         raise AssertionError(
-            "POST /verify must not call the pipeline — the async handler "
+            "POST /verify must not call the pipeline - the async handler "
             "is the only pipeline consumer under D2."
         )
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v2/verify — new async contract.
+# POST /api/v2/verify - new async contract.
 # ---------------------------------------------------------------------------
 
 
@@ -191,7 +191,7 @@ def test_verify_rigor_rejects_invalid_values(app_client) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Retention — enforced at jobs.create_job, not verdict_store.
+# Retention - enforced at jobs.create_job, not verdict_store.
 # ---------------------------------------------------------------------------
 
 
@@ -202,7 +202,7 @@ def test_retention_default_does_not_persist_raw_text(app_client) -> None:
     )
     assert resp.status_code == 202
     # DynamoDB record carries empty text; async-invoke payload carries the
-    # real text (that one is ephemeral — it dies with the Lambda
+    # real text (that one is ephemeral - it dies with the Lambda
     # invocation and does not hit persistent storage).
     assert jobs_env.created[0]["text"] == ""
     assert jobs_env.invoked[0]["text"] == "sensitive info goes here"
@@ -219,7 +219,7 @@ def test_retention_opt_in_persists_raw_text(app_client) -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v2/verdict/{request_id} — legacy back-compat shim (unchanged).
+# GET /api/v2/verdict/{request_id} - legacy back-compat shim (unchanged).
 # ---------------------------------------------------------------------------
 
 
@@ -237,7 +237,7 @@ def test_verdict_invalid_uuid_is_422(app_client) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /health/deep — unchanged by D2.
+# /health/deep - unchanged by D2.
 # ---------------------------------------------------------------------------
 
 

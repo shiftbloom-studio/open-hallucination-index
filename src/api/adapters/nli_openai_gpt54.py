@@ -1,7 +1,7 @@
 """OpenAI GPT-5.4 claim-claim NLI adapter (Wave 3 Stream P, Decision H).
 
 Satisfies the :class:`~interfaces.nli.NliAdapter` port so it's
-interchangeable with :class:`~adapters.nli_gemini.NliGeminiAdapter` —
+interchangeable with :class:`~adapters.nli_gemini.NliGeminiAdapter` -
 the claim-claim dispatcher can wire either as primary or fallback.
 
 Uses the **OpenAI Responses API** (``POST /v1/responses``, SDK method
@@ -48,13 +48,13 @@ REFUTES, or is truly NEUTRAL with respect to Claim B.
 
 Decision rules (apply in order):
 
-1. SUPPORT — Claim A confirms Claim B's central assertion, either by
+1. SUPPORT - Claim A confirms Claim B's central assertion, either by
    restating it or by providing facts from which Claim B follows.
-2. REFUTE — Claim A contradicts Claim B directly, OR provides facts
+2. REFUTE - Claim A contradicts Claim B directly, OR provides facts
    that are **mutually exclusive** with Claim B's central assertion
    (e.g. different birthplace, different year, different outcome).
    Mutually-exclusive facts are a refutation, not a neutral.
-3. NEUTRAL — reserved ONLY for cases where A and B do not share a
+3. NEUTRAL - reserved ONLY for cases where A and B do not share a
    testable subject-predicate-object. NEUTRAL is NOT for "uncertain".
 
 Score guidance: when SUPPORT or REFUTE is chosen, the corresponding
@@ -138,7 +138,7 @@ class NliOpenAIGpt54Adapter:
         self._max_retries = max_retries
 
     async def classify(self, claim_text: str, evidence_text: str) -> NliResult:
-        """Run one NLI classification. Never raises — terminal
+        """Run one NLI classification. Never raises - terminal
         failures return the ``_NEUTRAL_FALLBACK`` sentinel.
 
         For the cc-NLI channel, ``claim_text`` is Claim A and
@@ -157,7 +157,7 @@ class NliOpenAIGpt54Adapter:
                 response = await self._client.responses.create(**kwargs)
                 raw = _extract_output_text(response)
                 return _parse_result(raw)
-            except Exception as exc:  # noqa: BLE001 — intentional: keep pipeline alive
+            except Exception as exc:  # noqa: BLE001 - intentional: keep pipeline alive
                 last_exc = exc
                 logger.warning(
                     "cc-NLI OpenAI attempt %d/%d failed: %s",
@@ -166,7 +166,7 @@ class NliOpenAIGpt54Adapter:
                     exc,
                 )
         logger.error(
-            "cc-NLI OpenAI terminal failure after %d retries (last: %s) — "
+            "cc-NLI OpenAI terminal failure after %d retries (last: %s) - "
             "returning neutral fallback sentinel",
             self._max_retries,
             last_exc,
@@ -174,7 +174,7 @@ class NliOpenAIGpt54Adapter:
         return _NEUTRAL_FALLBACK
 
     async def health_check(self) -> bool:
-        """Minimal connectivity probe — runs a tiny ``responses.create``
+        """Minimal connectivity probe - runs a tiny ``responses.create``
         call with ``max_output_tokens=1``. Returns False on any error
         rather than raising so ``/health/deep`` can render degraded."""
         try:
@@ -208,7 +208,7 @@ def _extract_output_text(response: Any) -> str:
     text = getattr(response, "output_text", None)
     if text is not None:
         return str(text)
-    # Fallback walker — keeps us resilient if SDK shape shifts.
+    # Fallback walker - keeps us resilient if SDK shape shifts.
     output = getattr(response, "output", None) or []
     parts: list[str] = []
     for item in output:

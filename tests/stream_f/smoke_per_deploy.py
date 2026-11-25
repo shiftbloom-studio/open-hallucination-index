@@ -1,8 +1,8 @@
-"""Stream F per-deploy smoke — plan §5.3 phase 4 tier 1.
+"""Stream F per-deploy smoke - plan §5.3 phase 4 tier 1.
 
 Asserts the deploy lifted the image and the pipeline responds with the
 expected shape and model_versions. Does NOT assert signal quality
-(evidence count, p_true direction) — that's the end-of-phase smoke.
+(evidence count, p_true direction) - that's the end-of-phase smoke.
 
 Hard-coded tolerances, not exact values. Exits non-zero on any failure
 so the deploy orchestrator can detect it.
@@ -82,7 +82,7 @@ def main() -> int:
         "X-OHI-Edge-Secret": edge,
         # CF WAF rejects urllib's default "Python-urllib/3.x" UA with
         # `error code: 1010` (banned browser signature). Any non-default
-        # UA passes — this is the OHI smoke signature.
+        # UA passes - this is the OHI smoke signature.
         "User-Agent": "ohi-stream-f-smoke/1.0",
     }
 
@@ -105,7 +105,7 @@ def main() -> int:
         print(f"  model_versions={model_versions}")
 
     # === POST /verify (Marie Curie positive) ===
-    print("[2/4] POST /api/v2/verify — Marie Curie (positive)")
+    print("[2/4] POST /api/v2/verify - Marie Curie (positive)")
     t0 = time.perf_counter()
     status, body = _post(
         f"{API}/api/v2/verify",

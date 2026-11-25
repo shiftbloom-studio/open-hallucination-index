@@ -9,7 +9,7 @@ VerificationResult, VerificationStatus, EvidenceClassification) have been
 removed. v2 equivalents live in `models.results` (ClaimVerdict,
 DocumentVerdict, ClaimEdge, EdgeType).
 
-The `models.track` module is kept for now — it powers the in-memory
+The `models.track` module is kept for now - it powers the in-memory
 KnowledgeMesh used by L1 retrieval (pipeline.mesh). Its EdgeType enum is
 distinct from the v2 PCG EdgeType in `models.results`; callers importing
 from this package get the v2 one by default. Import directly from

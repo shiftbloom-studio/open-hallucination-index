@@ -1,4 +1,4 @@
-"""Wave 3 Stream P — Gibbs MCMC sanity tests."""
+"""Wave 3 Stream P - Gibbs MCMC sanity tests."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def test_gibbs_empty_graph_returns_empty_marginals() -> None:
 
 
 def test_gibbs_marginals_match_strong_unary() -> None:
-    """Single node with strong evidence — Gibbs marginal should
+    """Single node with strong evidence - Gibbs marginal should
     converge close to the true normalised unary."""
     uid = uuid4()
     unary = np.array([[np.log(0.2), np.log(0.8)]], dtype=np.float64)

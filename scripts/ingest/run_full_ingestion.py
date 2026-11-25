@@ -1,4 +1,4 @@
-"""Wave 3 Stream C — ingestion CLI wrapper.
+"""Wave 3 Stream C - ingestion CLI wrapper.
 
 Bootstraps the DI container (so the ingestion orchestrator has the
 same graph/vector/embedding adapters the Lambda runtime uses), then
@@ -10,7 +10,7 @@ Invocation (PC mode, the operator's machine):
         --wikidata /data/wikidata-20260401-all.json.bz2 \\
         --enwiki   /data/enwiki-20260401-pages-articles.xml.bz2
 
-Checkpoint-resumable — re-running with the same flags picks up at the
+Checkpoint-resumable - re-running with the same flags picks up at the
 last committed record for each pass.
 """
 

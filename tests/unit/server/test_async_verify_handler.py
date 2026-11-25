@@ -12,20 +12,20 @@ its client).
 
 Covered here:
 
-* **Happy path** — pipeline returns a verdict; the handler fires
+* **Happy path** - pipeline returns a verdict; the handler fires
   ``jobs.update_phase`` at every pipeline boundary and lands
   ``jobs.complete_job`` with a JSON-serialised verdict at the end.
-* **Pipeline raises** — the handler captures the exception and calls
+* **Pipeline raises** - the handler captures the exception and calls
   ``jobs.fail_job`` with a ``TypeName: message`` string; it MUST NOT
   let the exception propagate back to Lambda (which would surface as
   a failure in the AsyncInvoke DLQ, not in our own record).
-* **Unknown job_id** — handler refuses: no pipeline call, no terminal
+* **Unknown job_id** - handler refuses: no pipeline call, no terminal
   write (the record doesn't exist to write to).
-* **Ticket mismatch** — handler refuses: no pipeline call, logs a
+* **Ticket mismatch** - handler refuses: no pipeline call, logs a
   warning. Defence-in-depth against a caller that has the edge secret
   but should not be able to trigger async jobs for a job_id that
   doesn't belong to them.
-* **Job already consumed** — handler refuses: replay protection.
+* **Job already consumed** - handler refuses: replay protection.
 
 Depth-guard ruggedness lives in ``test_async_depth_guard.py``.
 """
@@ -165,7 +165,7 @@ def async_handler_env(
 
     app = FastAPI()
     app.include_router(async_verify_mod.router)
-    # Override by the *original* function identity — FastAPI's Depends
+    # Override by the *original* function identity - FastAPI's Depends
     # captured that reference at route registration time. Monkey-patching
     # deps.get_pipeline would change what the key points to, breaking the
     # override match.
@@ -235,7 +235,7 @@ def test_pipeline_exception_routes_to_fail_job(async_handler_env) -> None:
     harness.pipeline = _StubPipeline(raises=RuntimeError("pipeline boom"))
 
     resp = client.post("/_internal/async-verify", json=_body())
-    # Handler absorbs the exception — Lambda must see a 200, not a 500,
+    # Handler absorbs the exception - Lambda must see a 200, not a 500,
     # otherwise async-invoke retries kick in per the Lambda default
     # retry policy (up to 2 retries with exponential backoff) and we
     # end up re-running a verdict that was already captured.
@@ -250,7 +250,7 @@ def test_pipeline_exception_routes_to_fail_job(async_handler_env) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Refuse paths — do NOT touch pipeline.
+# Refuse paths - do NOT touch pipeline.
 # ---------------------------------------------------------------------------
 
 

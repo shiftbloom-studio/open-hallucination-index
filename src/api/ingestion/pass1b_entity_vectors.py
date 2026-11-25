@@ -1,9 +1,9 @@
-"""Wave 3 Stream C — Pass 1b: entity vector index (Decision K).
+"""Wave 3 Stream C - Pass 1b: entity vector index (Decision K).
 
 After Pass 1 lands the full entity graph, Pass 1b:
 
 1. Queries Aura for the top-K entities by ``inbound_link_count`` (the
-   popularity prior). K defaults to 1,800,000 — the Aura Pro 2.8 GiB
+   popularity prior). K defaults to 1,800,000 - the Aura Pro 2.8 GiB
    vector-optimisation carve-out can hold ~1.8M 384-dim vectors.
 2. Embeds each entity's ``label`` via the pc-embed service.
 3. Writes the embedding to Aura's vector index
@@ -11,7 +11,7 @@ After Pass 1 lands the full entity graph, Pass 1b:
 
 The index must exist before writing; first invocation runs the
 ``db.index.vector.createNodeIndex`` call. Lives on the Aura side
-(single source of truth, Decision K) — no Qdrant hop for entity
+(single source of truth, Decision K) - no Qdrant hop for entity
 resolution.
 """
 
@@ -186,7 +186,7 @@ class Pass1bEntityVectorWriter:
         try:
             await self._graph.run_cypher(_CREATE_VECTOR_INDEX_CYPHER, {"dim": self._dim})
         except Exception as exc:  # noqa: BLE001
-            # Index likely already exists — log at info, keep going.
+            # Index likely already exists - log at info, keep going.
             logger.info("Aura vector index create: %s (ok if already exists)", exc)
 
 

@@ -63,7 +63,7 @@ from pipeline.retrieval.selector import SmartMCPSelector
 
 
 class _StubMCPSource(MCPKnowledgeSource):
-    """Canned MCP source — returns one Evidence per ``find_evidence`` call.
+    """Canned MCP source - returns one Evidence per ``find_evidence`` call.
 
     Instrumented with a call counter so tests can assert the collector
     actually invoked it (rather than short-circuiting into the empty
@@ -144,7 +144,7 @@ async def test_collector_without_selector_returns_empty_from_mcp_tier() -> None:
     )
     result = await collector.collect(_make_claim(), mcp_sources=None)
     assert list(result.evidence) == [], (
-        "Collector with no selector and no mcp_sources must return empty — "
+        "Collector with no selector and no mcp_sources must return empty - "
         "this is the branch Stream F saw misfiring in prod Lambda."
     )
 
@@ -221,6 +221,6 @@ async def test_collector_respects_mcp_timeout_from_settings() -> None:
     )
     r_tight = await collector_tight.collect(_make_claim(), mcp_sources=None)
     assert list(r_tight.evidence) == [], (
-        "50ms MCP timeout must cancel a 200ms stub — this pins the "
+        "50ms MCP timeout must cancel a 200ms stub - this pins the "
         "bug-2 reproduction Stream F observed in prod."
     )

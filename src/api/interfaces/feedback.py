@@ -23,7 +23,7 @@ class FeedbackStore(Protocol):
 
     async def submit(self, submission: FeedbackSubmission) -> FeedbackId:
         """Write to ``feedback_pending``. Idempotent on
-        ``(claim_id, labeler_id_hash, label)`` — returns the existing
+        ``(claim_id, labeler_id_hash, label)`` - returns the existing
         feedback_id when the tuple already exists.
         """
 

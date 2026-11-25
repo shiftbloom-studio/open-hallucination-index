@@ -26,7 +26,7 @@ class _Entry:
 class InMemoryVerdictStore(VerdictStore):
     """Process-local verdict cache.
 
-    No TTL enforcement in Phase 1 — retention time is bounded by
+    No TTL enforcement in Phase 1 - retention time is bounded by
     worker lifetime. Phase 4 swaps in a durable store with spec §11
     retention (30d for verdicts, 90d for feedback rationale).
     """

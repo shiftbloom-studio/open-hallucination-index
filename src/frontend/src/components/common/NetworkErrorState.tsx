@@ -6,7 +6,7 @@ export interface NetworkErrorStateProps {
   className?: string;
 }
 
-// The "Retry with sync fallback" button MUST dispatch submitSync — see
+// The "Retry with sync fallback" button MUST dispatch submitSync - see
 // phase2-handover §7.8. We only restyle; the callback wiring is preserved.
 export function NetworkErrorState({ onRetrySync, detail, className }: NetworkErrorStateProps) {
   return (

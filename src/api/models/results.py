@@ -39,7 +39,7 @@ class ClaimEdge(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# ClaimVerdict — the per-claim public output. Spec §9.
+# ClaimVerdict - the per-claim public output. Spec §9.
 # ---------------------------------------------------------------------------
 
 
@@ -89,7 +89,7 @@ class ClaimVerdict(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# DocumentVerdict — top-level public output. Spec §9.
+# DocumentVerdict - top-level public output. Spec §9.
 # ---------------------------------------------------------------------------
 
 

@@ -16,7 +16,7 @@ class DomainAssignment(BaseModel):
 
     `weights` is a full distribution over the 5 domains summing to ~1.
     `primary` is the argmax. `soft` is True when the top-1 and top-2
-    weights are within 0.15 of each other — triggers mixture conformal
+    weights are within 0.15 of each other - triggers mixture conformal
     in L5 and NLI-head mixing in L3 (Phase 3).
     """
 
