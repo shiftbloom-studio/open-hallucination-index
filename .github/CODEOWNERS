@@ -11,3 +11,5 @@ migrations/ @fabianzimber
 # Repository-specific sensitive paths
 /docker/ @fabianzimber
 /infra/ @fabianzimber
+/src/api/config/secrets_loader.py @fabianzimber
+/src/api/server/middleware/edge_secret.py @fabianzimber
