@@ -11,6 +11,9 @@ on:
   push:
     branches: [feat/ohi-v2-foundation]
 
+permissions:
+  contents: read
+
 concurrency:
   group: v2-unit-tests-${{ github.ref }}
   cancel-in-progress: true
