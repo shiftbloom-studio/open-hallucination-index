@@ -6,4 +6,4 @@ allowBuilds:
   unrs-resolver: true
 overrides:
   '@babel/core': 7.29.7
-  postcss: 8.5.16
+  postcss: 8.5.33
