@@ -615,7 +615,13 @@ function authorsFromOpenAlex(work: Record<string, unknown>): string {
 }
 
 function stripHtml(text: string): string {
-  return text.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  // Repeat until nothing changes, so nested fragments like "<scr<b>ipt>" can't leave a tag behind.
+  let out = text;
+  for (let prev = ""; prev !== out; ) {
+    prev = out;
+    out = out.replace(/<[^>]+>/g, "");
+  }
+  return out.replace(/\s+/g, " ").trim();
 }
 
 function escapeSparql(text: string): string {

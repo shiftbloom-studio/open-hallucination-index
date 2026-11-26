@@ -120,5 +120,6 @@ async def health_ready() -> JSONResponse:
         vec = await asyncio.get_running_loop().run_in_executor(_executor, _encode_sync, "ready")
         return JSONResponse({"status": "ok", "dim": len(vec), "model": MODEL_NAME})
     except Exception as exc:
+        # Details stay in the server log; the probe response only says it isn't ready.
         logger.warning(f"readiness failed: {exc}")
-        return JSONResponse({"status": "error", "detail": str(exc)}, status_code=503)
+        return JSONResponse({"status": "error", "detail": "encoder not ready"}, status_code=503)
