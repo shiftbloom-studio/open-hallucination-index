@@ -1,0 +1,13 @@
+# Changes to these paths need a review from the code owner before merge.
+# Everything else can be merged once CI is green.
+
+# CI, workflows and repository settings (including this file)
+/.github/ @fabianzimber
+
+# Deploy config and database migrations
+wrangler.* @fabianzimber
+migrations/ @fabianzimber
+
+# Repository-specific sensitive paths
+/docker/ @fabianzimber
+/infra/ @fabianzimber
