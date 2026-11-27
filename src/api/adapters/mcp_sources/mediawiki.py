@@ -13,6 +13,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, cast
 
+from adapters.mcp_sources._text import strip_edge_punctuation
 from adapters.mcp_sources.base import (
     HTTPKnowledgeSource,
 )
@@ -266,9 +267,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
     async def _search(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Execute search query via Action API."""
         try:
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            response = await self._client.get(
+            response = await self._http().get(
                 self._api_path,
                 params={
                     "action": "query",
@@ -289,9 +288,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
     async def _get_extract(self, title: str, sentences: int = 5) -> str:
         """Get article extract/summary."""
         try:
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            response = await self._client.get(
+            response = await self._http().get(
                 self._api_path,
                 params={
                     "action": "query",
@@ -316,9 +313,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
     async def get_page_info(self, title: str) -> dict[str, Any]:
         """Get detailed page information."""
         try:
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            response = await self._client.get(
+            response = await self._http().get(
                 self._api_path,
                 params={
                     "action": "query",
@@ -511,11 +506,7 @@ class MediaWikiAdapter(HTTPKnowledgeSource):
         current: list[str] = []
 
         for raw_word in re.split(r"\s+", text):
-            word = re.sub(
-                r"^[^\w\u00c0-\u024f]+|(?<![^\w\u00c0-\u024f\-])[^\w\u00c0-\u024f\-]+$",
-                "",
-                raw_word,
-            )
+            word = strip_edge_punctuation(raw_word)
             if not word:
                 continue
 

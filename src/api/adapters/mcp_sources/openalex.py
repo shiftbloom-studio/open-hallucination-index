@@ -137,9 +137,7 @@ class OpenAlexAdapter(HTTPKnowledgeSource):
     async def _search_works(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for academic works."""
         try:
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            response = await self._client.get(
+            response = await self._http().get(
                 "/works",
                 params=self._get_params(
                     search=query,
@@ -157,9 +155,7 @@ class OpenAlexAdapter(HTTPKnowledgeSource):
     async def search_authors(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for authors."""
         try:
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            response = await self._client.get(
+            response = await self._http().get(
                 "/authors",
                 params=self._get_params(search=query, per_page=limit),
             )
@@ -173,9 +169,7 @@ class OpenAlexAdapter(HTTPKnowledgeSource):
         """Get work by DOI."""
         try:
             encoded_doi = quote(doi, safe="")
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            response = await self._client.get(
+            response = await self._http().get(
                 f"/works/https://doi.org/{encoded_doi}",
                 params=self._get_params(),
             )

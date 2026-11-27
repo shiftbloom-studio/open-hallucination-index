@@ -148,9 +148,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
     async def _search_pubmed(self, query: str, limit: int = 5) -> list[str]:
         """Search PubMed and return PMIDs."""
         try:
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            response = await self._client.get(
+            response = await self._http().get(
                 "/esearch.fcgi",
                 params=self._get_params(
                     db="pubmed",
@@ -174,9 +172,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
             return []
 
         try:
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            response = await self._client.get(
+            response = await self._http().get(
                 "/esummary.fcgi",
                 params=self._get_params(
                     db="pubmed",
@@ -201,9 +197,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
     async def get_abstract(self, pmid: str) -> str:
         """Fetch full abstract for a PMID."""
         try:
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            response = await self._client.get(
+            response = await self._http().get(
                 "/efetch.fcgi",
                 params=self._get_params(
                     db="pubmed",
@@ -227,9 +221,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
         """Search NCBI Gene database."""
         try:
             # Search
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            search_resp = await self._client.get(
+            search_resp = await self._http().get(
                 "/esearch.fcgi",
                 params=self._get_params(
                     db="gene",
@@ -245,9 +237,7 @@ class NCBIAdapter(HTTPKnowledgeSource):
                 return []
 
             # Fetch summaries
-            if self._client is None:
-                raise RuntimeError("HTTP client is not initialised")
-            summary_resp = await self._client.get(
+            summary_resp = await self._http().get(
                 "/esummary.fcgi",
                 params=self._get_params(
                     db="gene",
