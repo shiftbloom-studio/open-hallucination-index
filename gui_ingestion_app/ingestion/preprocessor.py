@@ -220,7 +220,7 @@ class BM25Tokenizer:
             self._token_hash_cache.move_to_end(token)
             return self._token_hash_cache[token]
 
-        hash_val = int(hashlib.md5(token.encode()).hexdigest(), 16) % self.vocab_size
+        hash_val = int(hashlib.md5(token.encode(), usedforsecurity=False).hexdigest(), 16) % self.vocab_size
         
         # Evict oldest entries if cache is full (LRU eviction)
         while len(self._token_hash_cache) >= self._cache_limit:
@@ -391,7 +391,7 @@ class AdvancedTextPreprocessor:
     DISAMBIGUATION_PATTERN = re.compile(
         r"\{\{disambiguation\}\}|\{\{disambig\}\}", re.IGNORECASE
     )
-    EXTERNAL_LINKS_PATTERN = re.compile(r"\[https?://[^\s\]]+(?:\s+[^\]]+)?\]")
+    EXTERNAL_LINKS_PATTERN = re.compile(r"\[https?://[^\s\]]+(?:\s[^\]]+)?\]")
     BR_TAG_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
     LIST_TEMPLATE_PATTERN = re.compile(
         r"\{\{\s*(?:hlist|plainlist|flatlist|ubl|unbulleted\s*list|bulleted\s*list)\b(.*?)\}\}",
@@ -532,7 +532,7 @@ class AdvancedTextPreprocessor:
         key = re.sub(r"\s+", "_", key)
         key = re.sub(r"[\-/]", "_", key)
         key = re.sub(r"__+", "_", key)
-        key = re.sub(r"\d+$", "", key)
+        key = re.sub(r"(?<!\d)\d+$", "", key)
         return key.strip("_")
 
     def _normalize_infobox_value(self, value: str) -> str:

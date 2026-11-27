@@ -148,7 +148,8 @@ class NCBIAdapter(HTTPKnowledgeSource):
     async def _search_pubmed(self, query: str, limit: int = 5) -> list[str]:
         """Search PubMed and return PMIDs."""
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 "/esearch.fcgi",
                 params=self._get_params(
@@ -173,7 +174,8 @@ class NCBIAdapter(HTTPKnowledgeSource):
             return []
 
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 "/esummary.fcgi",
                 params=self._get_params(
@@ -199,7 +201,8 @@ class NCBIAdapter(HTTPKnowledgeSource):
     async def get_abstract(self, pmid: str) -> str:
         """Fetch full abstract for a PMID."""
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 "/efetch.fcgi",
                 params=self._get_params(
@@ -224,7 +227,8 @@ class NCBIAdapter(HTTPKnowledgeSource):
         """Search NCBI Gene database."""
         try:
             # Search
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             search_resp = await self._client.get(
                 "/esearch.fcgi",
                 params=self._get_params(
@@ -241,7 +245,8 @@ class NCBIAdapter(HTTPKnowledgeSource):
                 return []
 
             # Fetch summaries
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             summary_resp = await self._client.get(
                 "/esummary.fcgi",
                 params=self._get_params(

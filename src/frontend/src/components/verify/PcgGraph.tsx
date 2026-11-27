@@ -60,7 +60,7 @@ export function buildGraphData(claims: ClaimVerdict[], hideNeutral: boolean) {
   for (const c of claims) {
     for (const n of c.pcg_neighbors) {
       if (hideNeutral && n.edge_type === "neutral") continue;
-      const [a, b] = [c.claim.id, n.neighbor_claim_id].sort();
+      const [a, b] = [c.claim.id, n.neighbor_claim_id].sort((x, y) => x.localeCompare(y));
       const k = `${a}|${b}|${n.edge_type}`;
       if (linkSet.has(k)) continue;
       linkSet.add(k);

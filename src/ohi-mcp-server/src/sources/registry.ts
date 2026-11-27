@@ -63,8 +63,8 @@ class SourceRegistry {
     }
 
     // Read throttling settings (defaults keep MCP gentle for external APIs)
-    this.maxParallel = Math.max(1, parseInt(process.env.MCP_MAX_PARALLEL_SOURCES || "1", 10));
-    this.perSourceDelayMs = Math.max(0, parseInt(process.env.MCP_SOURCE_DELAY_MS || "0", 10));
+    this.maxParallel = Math.max(1, Number.parseInt(process.env.MCP_MAX_PARALLEL_SOURCES || "1", 10));
+    this.perSourceDelayMs = Math.max(0, Number.parseInt(process.env.MCP_SOURCE_DELAY_MS || "0", 10));
 
     if (this.maxParallel > 1) {
       console.log(`[Registry] MCP parallelism set to ${this.maxParallel}`);

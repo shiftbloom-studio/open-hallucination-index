@@ -22,7 +22,7 @@ export class ResponseCache {
   ) {}
 
   private generateKey(source: string, operation: string, params: Record<string, unknown>): string {
-    const paramStr = JSON.stringify(params, Object.keys(params).sort());
+    const paramStr = JSON.stringify(params, Object.keys(params).sort((a, b) => a.localeCompare(b)));
     return `${source}:${operation}:${paramStr}`;
   }
 

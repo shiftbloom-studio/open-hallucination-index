@@ -43,8 +43,8 @@ import { RateLimiter } from "./utils/rate-limiter.js";
 import { ResponseCache } from "./utils/cache.js";
 
 // Configuration
-const PORT = parseInt(process.env.PORT || "8080", 10);
-const CACHE_TTL = parseInt(process.env.CACHE_TTL || "300", 10); // 5 minutes
+const PORT = Number.parseInt(process.env.PORT || "8080", 10);
+const CACHE_TTL = Number.parseInt(process.env.CACHE_TTL || "300", 10); // 5 minutes
 const ENABLE_CACHE = process.env.ENABLE_CACHE !== "false";
 
 // Initialize components
@@ -446,6 +446,7 @@ async function main() {
   } else {
     // SSE transport for HTTP usage
     const app = express();
+    app.disable("x-powered-by");
     app.use(express.json());
 
     // Request Timeout Middleware (4 minutes default)
@@ -506,7 +507,7 @@ async function main() {
         // Pass req.body as the third parameter since express.json() already parsed it
         await transport.handlePostMessage(req, res, req.body);
       } else {
-        console.error(`Session not found: ${sessionId}, active sessions: ${Array.from(transports.keys()).join(", ")}`);
+        console.error(`Session not found: ${String(sessionId).replace(/[\r\n]/g, " ")}, active sessions: ${Array.from(transports.keys()).join(", ")}`);
         res.status(404).json({ error: "Session not found", sessionId });
       }
     });

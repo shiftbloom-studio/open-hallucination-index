@@ -52,7 +52,7 @@ def assemble_document_verdict(
         return DocumentVerdict(
             document_score=1.0,
             document_interval=(1.0, 1.0),
-            internal_consistency=internal_consistency if n else 1.0,
+            internal_consistency=1.0,
             claims=[],
             decomposition_coverage=decomposition_coverage,
             processing_time_ms=processing_time_ms,

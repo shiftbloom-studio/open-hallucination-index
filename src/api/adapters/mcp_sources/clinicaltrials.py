@@ -143,7 +143,8 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
     async def _search_studies(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for clinical studies."""
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 "/studies",
                 params={
@@ -162,7 +163,8 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
     async def get_study(self, nct_id: str) -> dict[str, Any] | None:
         """Get study by NCT ID."""
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(f"/studies/{nct_id}")
             if response.status_code == 200:
                 return cast("dict[str, Any] | None", response.json())
@@ -173,7 +175,8 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
     async def search_by_condition(self, condition: str, limit: int = 10) -> list[dict[str, Any]]:
         """Search studies by medical condition."""
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 "/studies",
                 params={
@@ -193,7 +196,8 @@ class ClinicalTrialsAdapter(HTTPKnowledgeSource):
     ) -> list[dict[str, Any]]:
         """Search studies by intervention (drug, device, etc.)."""
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 "/studies",
                 params={

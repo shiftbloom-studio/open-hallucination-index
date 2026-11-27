@@ -62,11 +62,8 @@ export class WorldBankSource extends BaseSource {
       };
 
       if (resolvedYear) {
-        if (resolvedYear.includes(":")) {
-          params.date = resolvedYear; // Range: 2015:2020
-        } else {
-          params.date = resolvedYear;
-        }
+        // Single year (2020) or range (2015:2020); the API accepts both as-is.
+        params.date = resolvedYear;
       }
 
       const response = await httpClient.get<WorldBankResponse>(

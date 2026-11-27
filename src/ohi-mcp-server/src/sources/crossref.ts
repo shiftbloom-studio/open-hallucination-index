@@ -47,7 +47,7 @@ export class CrossrefSource extends BaseSource {
     do {
       previous = current;
       // Recreate the global regex each iteration to avoid stateful `lastIndex`.
-      const tagRegex = /<[^>]+>/g;
+      const tagRegex = /<[^<>]+>/g;
       current = current.replace(tagRegex, "");
     } while (current !== previous);
     return current;

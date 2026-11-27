@@ -134,7 +134,8 @@ class CrossrefAdapter(HTTPKnowledgeSource):
     async def _search_works(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for works via Crossref."""
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 "/works",
                 params={
@@ -154,7 +155,8 @@ class CrossrefAdapter(HTTPKnowledgeSource):
         """Get work metadata by DOI."""
         try:
             encoded_doi = quote(doi, safe="/")
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(f"/works/{encoded_doi}")
             if response.status_code == 200:
                 data = response.json()

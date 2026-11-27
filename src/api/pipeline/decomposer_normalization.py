@@ -148,7 +148,7 @@ _NUMBER_SCALES = {
 
 # Percent patterns: "5%", "5 percent", "5 per cent"
 _PERCENT_RE = re.compile(
-    r"(?P<num>-?\d+(?:\.\d+)?)\s*(?:%|per\s*cent|percent)",
+    r"(?P<num>-?(?<!\d)\d+(?:\.\d+)?)\s*(?:%|per\s*cent)",
     re.IGNORECASE,
 )
 

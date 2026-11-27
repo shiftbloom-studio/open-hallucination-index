@@ -109,7 +109,8 @@ class WikimediaRESTAdapter(HTTPKnowledgeSource):
         """Get page summary via REST API."""
         try:
             encoded_title = quote(title.replace(" ", "_"), safe="")
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(f"/page/summary/{encoded_title}")
 
             if response.status_code == 200:
@@ -134,7 +135,8 @@ class WikimediaRESTAdapter(HTTPKnowledgeSource):
             event_type: One of 'events', 'births', 'deaths', 'holidays'
         """
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(f"/feed/onthisday/{event_type}/{month:02d}/{day:02d}")
             response.raise_for_status()
             data = response.json()
@@ -146,7 +148,8 @@ class WikimediaRESTAdapter(HTTPKnowledgeSource):
         """Get parsed HTML content for a page."""
         try:
             encoded_title = quote(title.replace(" ", "_"), safe="")
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 f"/page/html/{encoded_title}",
                 headers={"Accept": "text/html"},

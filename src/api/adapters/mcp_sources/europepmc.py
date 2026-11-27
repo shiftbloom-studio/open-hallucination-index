@@ -135,7 +135,8 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
     async def _search_articles(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for articles."""
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 "/search",
                 params={
@@ -156,7 +157,8 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
     async def get_article_by_pmid(self, pmid: str) -> dict[str, Any] | None:
         """Get article by PubMed ID."""
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 "/search",
                 params={
@@ -185,7 +187,8 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
             limit: Maximum citations to return
         """
         try:
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client is not initialised")
             response = await self._client.get(
                 f"/{source}/{identifier}/citations",
                 params={"page": 1, "pageSize": limit, "format": "json"},

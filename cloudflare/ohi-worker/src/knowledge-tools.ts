@@ -619,7 +619,7 @@ function stripHtml(text: string): string {
   let out = text;
   for (let prev = ""; prev !== out; ) {
     prev = out;
-    out = out.replace(/<[^>]+>/g, "");
+    out = out.replace(/<[^<>]+>/g, "");
   }
   return out.replace(/\s+/g, " ").trim();
 }
