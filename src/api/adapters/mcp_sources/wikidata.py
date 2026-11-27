@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
+from adapters.mcp_sources._text import strip_edge_punctuation
 from adapters.mcp_sources.base import (
     SPARQLKnowledgeSource,
 )
@@ -390,7 +391,7 @@ class WikidataAdapter(SPARQLKnowledgeSource):
         chunks: list[str] = []
         current: list[str] = []
         for raw_word in re.split(r"\s+", text):
-            word = re.sub(r"^[^\w\u00c0-\u024f]+|[^\w\u00c0-\u024f\-]+$", "", raw_word)
+            word = strip_edge_punctuation(raw_word)
             if not word:
                 continue
             if word[0].isupper() and len(word) > 1 and word not in cls._ENTITY_STOPWORDS:

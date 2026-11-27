@@ -677,13 +677,9 @@ def load_redirects(
 
         target_title = redirect.to_title
 
-        # Try to resolve source title if we have the mapping
-        if title_to_id:
-            # Find source title by page_id (reverse lookup - slow but accurate)
-            # For now, just store by page_id
-            source_key = str(redirect.from_page_id)
-        else:
-            source_key = str(redirect.from_page_id)
+        # Source titles are not resolved via title_to_id yet (reverse lookup
+        # by page_id would be slow but accurate); for now, store by page_id.
+        source_key = str(redirect.from_page_id)
 
         redirects[source_key] = target_title
 

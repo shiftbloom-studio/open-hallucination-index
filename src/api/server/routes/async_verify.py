@@ -45,6 +45,12 @@ from server import jobs
 
 logger = logging.getLogger(__name__)
 
+
+def _log_safe(value: object) -> str:
+    """Neutralise CR/LF so request values cannot forge extra log lines."""
+    return str(value).replace("\r", "\\r").replace("\n", "\\n")
+
+
 router = APIRouter()
 
 
@@ -86,7 +92,8 @@ async def async_verify(
     # stuck on an older image). D2's first deploy silent-failed for exactly
     # this reason; keeping the log line before every guard means regressions
     # on "request never reached the handler" show up loudly in observability.
-    logger.info("async-verify entry: depth=%s job_id=%s", body.depth, body.job_id)
+    job_id = _log_safe(body.job_id)  # log-only copy; jobs.* calls keep body.job_id
+    logger.info("async-verify entry: depth=%s job_id=%s", body.depth, job_id)
 
     # 1. Depth guard FIRST - before any DynamoDB read, before anything
     #    that could itself self-invoke. This is a hard $-cap.
@@ -94,33 +101,33 @@ async def async_verify(
         logger.error(
             "async_verify: refusing depth=%d invocation for %s",
             body.depth,
-            body.job_id,
+            job_id,
         )
         try:
             jobs.fail_job(body.job_id, "async_depth_exceeded")
         except Exception:  # noqa: BLE001
-            logger.exception("fail_job itself failed for %s", body.job_id)
+            logger.exception("fail_job itself failed for %s", job_id)
         return _refuse("depth_exceeded")
 
     # 2. Record lookup + capability check.
     try:
         record = jobs.get_job(body.job_id)
     except Exception:  # noqa: BLE001
-        logger.exception("jobs.get_job failed for %s", body.job_id)
+        logger.exception("jobs.get_job failed for %s", job_id)
         return _refuse("jobs_read_failed")
     if record is None:
-        logger.warning("async_verify: unknown job %s", body.job_id)
+        logger.warning("async_verify: unknown job %s", job_id)
         return _refuse("not_found")
     if record.get("invoke_ticket") != body.ticket:
         logger.warning(
             "async_verify: ticket mismatch for %s (possibly replayed)",
-            body.job_id,
+            job_id,
         )
         return _refuse("ticket_mismatch")
     if record.get("status") != "pending":
         logger.warning(
             "async_verify: %s already in status=%s - refusing replay",
-            body.job_id,
+            job_id,
             record.get("status"),
         )
         return _refuse("already_consumed")
@@ -133,12 +140,12 @@ async def async_verify(
         except Exception:  # noqa: BLE001
             # _safe_fire in pipeline.py swallows, but belt-and-braces here
             # so a local raise never leaks up to pipeline.verify.
-            logger.exception("update_phase(%s, %s) failed", body.job_id, phase)
+            logger.exception("update_phase(%s, %s) failed", job_id, phase)
 
     try:
         verdict = await pipeline.verify(body.text, phase_callback=_advance_phase)
     except Exception as exc:  # noqa: BLE001
-        logger.exception("pipeline.verify failed for %s", body.job_id)
+        logger.exception("pipeline.verify failed for %s", job_id)
         try:
             jobs.fail_job(body.job_id, f"{type(exc).__name__}: {exc}")
         except Exception:  # noqa: BLE001
@@ -153,7 +160,7 @@ async def async_verify(
         serialised: dict[str, Any] = verdict.model_dump(mode="json")
     except Exception:  # noqa: BLE001
         # If model_dump itself fails the verdict is unusable; treat as error.
-        logger.exception("verdict.model_dump failed for %s", body.job_id)
+        logger.exception("verdict.model_dump failed for %s", job_id)
         try:
             jobs.fail_job(body.job_id, "verdict_serialisation_failed")
         except Exception:  # noqa: BLE001
@@ -166,7 +173,7 @@ async def async_verify(
     try:
         jobs.complete_job(body.job_id, serialised)
     except Exception:  # noqa: BLE001
-        logger.exception("complete_job failed for %s", body.job_id)
+        logger.exception("complete_job failed for %s", job_id)
         return ORJSONResponse(
             status_code=status.HTTP_200_OK,
             content={"status": "error"},

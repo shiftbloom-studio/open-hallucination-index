@@ -93,6 +93,12 @@ class HTTPKnowledgeSource(ABC):
         """Configured request timeout in seconds."""
         return self._timeout
 
+    def _http(self) -> httpx.AsyncClient:
+        """Return the connected HTTP client or raise if connect() was not called."""
+        if self._client is None:
+            raise RuntimeError("HTTP client is not initialised")
+        return self._client
+
     async def connect(self) -> None:
         """Initialize the HTTP client."""
         if self._client is not None:

@@ -172,7 +172,7 @@ interface RateLimitDecision {
 export class JobObject extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    ctx.blockConcurrencyWhile(async () => {
+    void ctx.blockConcurrencyWhile(async () => {
       this.ctx.storage.sql.exec(`
         CREATE TABLE IF NOT EXISTS state (
           job_id TEXT PRIMARY KEY,
@@ -307,7 +307,7 @@ export class JobObject extends DurableObject<Env> {
 export class RateLimitObject extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    ctx.blockConcurrencyWhile(async () => {
+    void ctx.blockConcurrencyWhile(async () => {
       this.ctx.storage.sql.exec(`
         CREATE TABLE IF NOT EXISTS counters (
           key TEXT NOT NULL,

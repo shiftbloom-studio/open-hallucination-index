@@ -56,7 +56,7 @@ class InMemoryVerdictStore(VerdictStore):
     # Non-port extras (useful in tests / debugging)
     # ------------------------------------------------------------------
 
-    async def __len__(self) -> int:
+    def __len__(self) -> int:
         return len(self._by_request)
 
     def _count(self) -> int:

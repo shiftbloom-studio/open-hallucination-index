@@ -271,7 +271,7 @@ class ToolAggregator {
 
     const doi = rawDoi.trim();
     // Basic DOI format check: must start with "10." and contain a "/" separator
-    const doiPattern = /^10\.\S+\/\S+$/;
+    const doiPattern = /^10\.\S[^\s/]*\/\S+$/;
     if (!doiPattern.test(doi)) {
       return {
         success: false,

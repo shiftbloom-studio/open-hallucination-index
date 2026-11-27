@@ -88,7 +88,7 @@ class CSVReporter(BaseReporter):
         # Primary results CSV
         results_path = self.output_dir / f"{base}_results.{self.file_extension}"
         df_results = self._results_df(report, results)
-        df_results.to_csv(results_path, index=False, encoding="utf-8", newline="")
+        df_results.to_csv(results_path, index=False, encoding="utf-8")
 
         # Extra exports (best effort; never fail overall save)
         try:
@@ -97,7 +97,6 @@ class CSVReporter(BaseReporter):
                 self.output_dir / f"{base}_run_metadata.{self.file_extension}",
                 index=False,
                 encoding="utf-8",
-                newline="",
             )
         except Exception:
             pass
@@ -109,7 +108,6 @@ class CSVReporter(BaseReporter):
                     self.output_dir / f"{base}_strategy_summary.{self.file_extension}",
                     index=False,
                     encoding="utf-8",
-                    newline="",
                 )
         except Exception:
             pass
@@ -121,7 +119,6 @@ class CSVReporter(BaseReporter):
                     self.output_dir / f"{base}_domain_summary.{self.file_extension}",
                     index=False,
                     encoding="utf-8",
-                    newline="",
                 )
         except Exception:
             pass
@@ -133,7 +130,6 @@ class CSVReporter(BaseReporter):
                     self.output_dir / f"{base}_comparisons.{self.file_extension}",
                     index=False,
                     encoding="utf-8",
-                    newline="",
                 )
         except Exception:
             pass

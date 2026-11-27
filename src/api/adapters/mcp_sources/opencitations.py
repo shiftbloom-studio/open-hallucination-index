@@ -150,8 +150,7 @@ class OpenCitationsAdapter(HTTPKnowledgeSource):
         """Get metadata for a DOI."""
         try:
             encoded = quote(f"doi:{doi}", safe=":")
-            assert self._client is not None
-            response = await self._client.get(f"/metadata/{encoded}")
+            response = await self._http().get(f"/metadata/{encoded}")
             if response.status_code == 200:
                 return cast("list[dict[str, Any]]", response.json())
             return []
@@ -162,8 +161,7 @@ class OpenCitationsAdapter(HTTPKnowledgeSource):
         """Get works that cite this DOI."""
         try:
             encoded = quote(f"doi:{doi}", safe=":")
-            assert self._client is not None
-            response = await self._client.get(f"/citations/{encoded}")
+            response = await self._http().get(f"/citations/{encoded}")
             if response.status_code == 200:
                 return cast("list[dict[str, Any]]", response.json())
             return []
@@ -174,8 +172,7 @@ class OpenCitationsAdapter(HTTPKnowledgeSource):
         """Get works referenced by this DOI."""
         try:
             encoded = quote(f"doi:{doi}", safe=":")
-            assert self._client is not None
-            response = await self._client.get(f"/references/{encoded}")
+            response = await self._http().get(f"/references/{encoded}")
             if response.status_code == 200:
                 return cast("list[dict[str, Any]]", response.json())
             return []

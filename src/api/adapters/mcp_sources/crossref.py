@@ -134,8 +134,7 @@ class CrossrefAdapter(HTTPKnowledgeSource):
     async def _search_works(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for works via Crossref."""
         try:
-            assert self._client is not None
-            response = await self._client.get(
+            response = await self._http().get(
                 "/works",
                 params={
                     "query": query,
@@ -154,8 +153,7 @@ class CrossrefAdapter(HTTPKnowledgeSource):
         """Get work metadata by DOI."""
         try:
             encoded_doi = quote(doi, safe="/")
-            assert self._client is not None
-            response = await self._client.get(f"/works/{encoded_doi}")
+            response = await self._http().get(f"/works/{encoded_doi}")
             if response.status_code == 200:
                 data = response.json()
                 return cast("dict[str, Any] | None", data.get("message", {}))

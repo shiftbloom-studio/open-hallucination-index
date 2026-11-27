@@ -135,8 +135,7 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
     async def _search_articles(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """Search for articles."""
         try:
-            assert self._client is not None
-            response = await self._client.get(
+            response = await self._http().get(
                 "/search",
                 params={
                     "query": query,
@@ -156,8 +155,7 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
     async def get_article_by_pmid(self, pmid: str) -> dict[str, Any] | None:
         """Get article by PubMed ID."""
         try:
-            assert self._client is not None
-            response = await self._client.get(
+            response = await self._http().get(
                 "/search",
                 params={
                     "query": f"EXT_ID:{pmid}",
@@ -185,8 +183,7 @@ class EuropePMCAdapter(HTTPKnowledgeSource):
             limit: Maximum citations to return
         """
         try:
-            assert self._client is not None
-            response = await self._client.get(
+            response = await self._http().get(
                 f"/{source}/{identifier}/citations",
                 params={"page": 1, "pageSize": limit, "format": "json"},
             )
