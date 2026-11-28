@@ -28,7 +28,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build API image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/api/Dockerfile
@@ -53,7 +53,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Build MCP Server image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/mcp-server/Dockerfile

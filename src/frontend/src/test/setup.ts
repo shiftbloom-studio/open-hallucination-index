@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeAll, afterAll, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import { server } from './mocks/server';
@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 // MSW Setup
-beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'bypass' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 

@@ -13,7 +13,7 @@ const server = setupServer();
 
 beforeAll(() => {
   process.env.NEXT_PUBLIC_API_BASE = API_BASE;
-  server.listen({ onUnhandledRequest: "error" });
+  server.listen({ onUnhandledFrame: "error" });
 });
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());

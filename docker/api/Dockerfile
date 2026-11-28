@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM python:3.12-slim AS builder
+FROM python:3.15-slim AS builder
 
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
 
@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     && uv build --wheel --out-dir /wheels
 
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
 

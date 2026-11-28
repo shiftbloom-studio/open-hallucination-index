@@ -4,7 +4,7 @@
 # or sentence-transformers (which bloat the image to ~2GB and blow Lambda's
 # 10s INIT cap).
 
-FROM public.ecr.aws/docker/library/python:3.12-slim AS builder
+FROM public.ecr.aws/docker/library/python:3.15-slim AS builder
 
 WORKDIR /build
 
@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir --target /deps \
     "sentence-transformers>=2.2"
 
 # --- Runtime --------------------------------------------------------------
-FROM public.ecr.aws/docker/library/python:3.12-slim
+FROM public.ecr.aws/docker/library/python:3.15-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
